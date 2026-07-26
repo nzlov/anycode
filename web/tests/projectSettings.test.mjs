@@ -23,6 +23,11 @@ test('project list page opens settings before workflow configuration and removal
   assert.ok(settings >= 0 && settings < workflow && workflow < remove);
   assert.match(source, /openProjectSettings\(project\)/);
   assert.match(source, /fab[\s\S]*aria-label="新增项目"/);
+  assert.match(source, /class="project-list-actions__inline"/);
+  assert.match(source, /icon="settings"[\s\S]*icon="account_tree"[\s\S]*icon="playlist_remove"/);
+  assert.match(source, /container-type:\s*inline-size/);
+  assert.match(source, /@container \(min-width:\s*720px\)/);
+  assert.match(source, /\.project-list-actions__menu\s*\{[\s\S]*display:\s*none/);
 });
 
 test('project management has its own toolbar route and is absent from global settings', () => {
@@ -51,6 +56,8 @@ test('project settings dialog uses a multiline input and submits the raw value',
   assert.match(source, /:persistent="saving"/);
   assert.match(source, /aria-label="项目设置"/);
   assert.equal(source.match(/:disable="saving"/g)?.length, 2);
+  assert.match(source, /name="quick_commands"[\s\S]*label="快捷指令"/);
+  assert.match(source, /<QuickCommandManager v-if="project" :project-id="project\.id"/);
 });
 
 test('updating project settings preserves client-only project state', () => {

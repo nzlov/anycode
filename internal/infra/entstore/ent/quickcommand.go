@@ -17,6 +17,8 @@ type QuickCommand struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
+	// ProjectID holds the value of the "project_id" field.
+	ProjectID *string `json:"project_id,omitempty"`
 	// Content holds the value of the "content" field.
 	Content string `json:"content,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -29,7 +31,7 @@ func (*QuickCommand) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case quickcommand.FieldID, quickcommand.FieldContent:
+		case quickcommand.FieldID, quickcommand.FieldProjectID, quickcommand.FieldContent:
 			values[i] = new(sql.NullString)
 		case quickcommand.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -53,6 +55,13 @@ func (_m *QuickCommand) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
 				_m.ID = value.String
+			}
+		case quickcommand.FieldProjectID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field project_id", values[i])
+			} else if value.Valid {
+				_m.ProjectID = new(string)
+				*_m.ProjectID = value.String
 			}
 		case quickcommand.FieldContent:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -102,6 +111,11 @@ func (_m *QuickCommand) String() string {
 	var builder strings.Builder
 	builder.WriteString("QuickCommand(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	if v := _m.ProjectID; v != nil {
+		builder.WriteString("project_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
 	builder.WriteString("content=")
 	builder.WriteString(_m.Content)
 	builder.WriteString(", ")

@@ -193,6 +193,7 @@ input UpdateAppearanceSettingsInput {
 
 type QuickCommand {
   id: ID!
+  projectId: ID
   content: String!
   createdAt: Time!
 }
@@ -203,11 +204,14 @@ type QuickCommandPage {
 }
 
 input ListQuickCommandsInput {
+  projectId: ID
+  includeGlobal: Boolean = false
   page: Int
   pageSize: Int
 }
 
 input CreateQuickCommandInput {
+  projectId: ID
   content: String!
 }
 

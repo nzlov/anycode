@@ -202,18 +202,25 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 
 	pageValue := 2
 	pageSize := 20
-	listed, err := resolver.Query().QuickCommands(context.Background(), &model.ListQuickCommandsInput{Page: &pageValue, PageSize: &pageSize})
+	projectID := "project-1"
+	includeGlobal := true
+	listed, err := resolver.Query().QuickCommands(context.Background(), &model.ListQuickCommandsInput{
+		ProjectID:     &projectID,
+		IncludeGlobal: &includeGlobal,
+		Page:          &pageValue,
+		PageSize:      &pageSize,
+	})
 	if err != nil {
 		t.Fatalf("QuickCommands() error = %v", err)
 	}
-	if settings.listInput.Page != 2 || settings.listInput.PageSize != 20 || len(listed.Items) != 2 || listed.Items[0].ID != "command-1" || listed.PageInfo.Total != 22 {
+	if settings.listInput.ProjectID == nil || *settings.listInput.ProjectID != "project-1" || !settings.listInput.IncludeGlobal || settings.listInput.Page != 2 || settings.listInput.PageSize != 20 || len(listed.Items) != 2 || listed.Items[0].ID != "command-1" || listed.PageInfo.Total != 22 {
 		t.Fatalf("QuickCommands() = %#v", listed)
 	}
-	created, err := resolver.Mutation().CreateQuickCommand(context.Background(), model.CreateQuickCommandInput{Content: "总结变更"})
+	created, err := resolver.Mutation().CreateQuickCommand(context.Background(), model.CreateQuickCommandInput{ProjectID: &projectID, Content: "总结变更"})
 	if err != nil {
 		t.Fatalf("CreateQuickCommand() error = %v", err)
 	}
-	if settings.createInput.Content != "总结变更" || created.ID != "command-3" {
+	if settings.createInput.ProjectID == nil || *settings.createInput.ProjectID != "project-1" || settings.createInput.Content != "总结变更" || created.ID != "command-3" {
 		t.Fatalf("create input=%#v result=%#v", settings.createInput, created)
 	}
 	updated, err := resolver.Mutation().UpdateQuickCommand(context.Background(), model.UpdateQuickCommandInput{ID: "command-1", Content: "更新指令"})

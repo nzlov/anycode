@@ -21,6 +21,9 @@ func (r *SettingRepository) Create(ctx context.Context, command setting.QuickCom
 	create := r.client.QuickCommand.Create().
 		SetID(string(command.ID)).
 		SetContent(command.Content)
+	if command.ProjectID != nil {
+		create.SetProjectID(string(*command.ProjectID))
+	}
 	if !command.CreatedAt.IsZero() {
 		create.SetCreatedAt(command.CreatedAt)
 	}
@@ -40,6 +43,7 @@ func (r *SettingRepository) Update(ctx context.Context, id setting.QuickCommandI
 	}
 	return setting.QuickCommand{
 		ID:        setting.QuickCommandID(row.ID),
+		ProjectID: quickCommandProjectID(row.ProjectID),
 		Content:   row.Content,
 		CreatedAt: row.CreatedAt,
 	}, nil
@@ -47,7 +51,18 @@ func (r *SettingRepository) Update(ctx context.Context, id setting.QuickCommandI
 
 func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommandQuery) (setting.QuickCommandPage, error) {
 	query = normalizeQuickCommandQuery(query)
-	total, err := r.client.QuickCommand.Query().Count(ctx)
+	commandsQuery := r.client.QuickCommand.Query()
+	if query.ProjectID == nil {
+		commandsQuery.Where(entquickcommand.ProjectIDIsNil())
+	} else if query.IncludeGlobal {
+		commandsQuery.Where(entquickcommand.Or(
+			entquickcommand.ProjectIDIsNil(),
+			entquickcommand.ProjectIDEQ(string(*query.ProjectID)),
+		))
+	} else {
+		commandsQuery.Where(entquickcommand.ProjectIDEQ(string(*query.ProjectID)))
+	}
+	total, err := commandsQuery.Clone().Count(ctx)
 	if err != nil {
 		return setting.QuickCommandPage{}, fmt.Errorf("count quick commands: %w", err)
 	}
@@ -58,7 +73,7 @@ func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommand
 	if query.Page > maxPage {
 		query.Page = maxPage
 	}
-	rows, err := r.client.QuickCommand.Query().
+	rows, err := commandsQuery.
 		Order(ent.Desc(entquickcommand.FieldCreatedAt), ent.Desc(entquickcommand.FieldID)).
 		Offset((query.Page - 1) * query.PageSize).
 		Limit(query.PageSize).
@@ -70,6 +85,7 @@ func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommand
 	for _, row := range rows {
 		commands = append(commands, setting.QuickCommand{
 			ID:        setting.QuickCommandID(row.ID),
+			ProjectID: quickCommandProjectID(row.ProjectID),
 			Content:   row.Content,
 			CreatedAt: row.CreatedAt,
 		})
@@ -80,6 +96,14 @@ func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommand
 		PageSize: query.PageSize,
 		Total:    total,
 	}, nil
+}
+
+func quickCommandProjectID(value *string) *setting.QuickCommandProjectID {
+	if value == nil {
+		return nil
+	}
+	projectID := setting.QuickCommandProjectID(*value)
+	return &projectID
 }
 
 func normalizeQuickCommandQuery(query setting.QuickCommandQuery) setting.QuickCommandQuery {

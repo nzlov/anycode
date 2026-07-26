@@ -345,11 +345,11 @@ func init() {
 	quickcommandFields := schema.QuickCommand{}.Fields()
 	_ = quickcommandFields
 	// quickcommandDescContent is the schema descriptor for content field.
-	quickcommandDescContent := quickcommandFields[1].Descriptor()
+	quickcommandDescContent := quickcommandFields[2].Descriptor()
 	// quickcommand.ContentValidator is a validator for the "content" field. It is called by the builders before save.
 	quickcommand.ContentValidator = quickcommandDescContent.Validators[0].(func(string) error)
 	// quickcommandDescCreatedAt is the schema descriptor for created_at field.
-	quickcommandDescCreatedAt := quickcommandFields[2].Descriptor()
+	quickcommandDescCreatedAt := quickcommandFields[3].Descriptor()
 	// quickcommand.DefaultCreatedAt holds the default value on creation for the created_at field.
 	quickcommand.DefaultCreatedAt = quickcommandDescCreatedAt.Default.(func() time.Time)
 	entsessionFields := schema.Session{}.Fields()

@@ -39,6 +39,27 @@ func TestCreateQuickCommandAllowsDuplicateContent(t *testing.T) {
 	}
 }
 
+func TestQuickCommandUseCasePreservesProjectScope(t *testing.T) {
+	projectID := domain.QuickCommandProjectID("project-1")
+	repo := &fakeRepository{}
+	service := New(repo)
+
+	created, err := service.CreateQuickCommand(context.Background(), CreateQuickCommandInput{
+		ProjectID: &projectID,
+		Content:   "项目指令",
+	})
+	if err != nil || created.ProjectID == nil || *created.ProjectID != projectID {
+		t.Fatalf("CreateQuickCommand() = %#v, %v", created, err)
+	}
+	_, err = service.ListQuickCommands(context.Background(), ListQuickCommandsInput{
+		ProjectID:     &projectID,
+		IncludeGlobal: true,
+	})
+	if err != nil || repo.listQuery.ProjectID == nil || *repo.listQuery.ProjectID != projectID || !repo.listQuery.IncludeGlobal {
+		t.Fatalf("ListQuickCommands() query = %#v, %v", repo.listQuery, err)
+	}
+}
+
 func TestUpdateQuickCommandTrimsContentAndPreservesIdentity(t *testing.T) {
 	createdAt := time.Unix(10, 0).UTC()
 	repo := &fakeRepository{commands: []domain.QuickCommand{{ID: "command-1", Content: "检查测试", CreatedAt: createdAt}}}
@@ -208,8 +229,13 @@ func TestListQuickCommandsNormalizesPagination(t *testing.T) {
 
 func TestQuickCommandValidationErrorsAreStructured(t *testing.T) {
 	service := New(&fakeRepository{})
+	emptyProjectID := domain.QuickCommandProjectID(" ")
 
 	_, err := service.CreateQuickCommand(context.Background(), CreateQuickCommandInput{Content: "   "})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.CreateQuickCommand(context.Background(), CreateQuickCommandInput{ProjectID: &emptyProjectID, Content: "检查测试"})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.ListQuickCommands(context.Background(), ListQuickCommandsInput{ProjectID: &emptyProjectID})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 	_, err = service.UpdateQuickCommand(context.Background(), UpdateQuickCommandInput{Content: "检查测试"})
 	assertAppError(t, err, apperror.CodeValidationFailed)

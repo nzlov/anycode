@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, toValue, type MaybeRefOrGetter } from 'vue';
 
 import {
   prependQuickCommand,
@@ -13,7 +13,9 @@ import {
   updateQuickCommand,
 } from '@/services/quickCommands';
 
-export function useQuickCommands() {
+export function useQuickCommands(
+  options: { projectId?: MaybeRefOrGetter<string | undefined>; includeGlobal?: boolean } = {},
+) {
   const quickCommands = ref<QuickCommand[]>([]);
   const quickCommandsLoading = ref(false);
   const quickCommandsMutating = ref(0);
@@ -22,6 +24,7 @@ export function useQuickCommands() {
   let loaded = false;
   let loadedPage = 0;
   let loadedPageSize = 0;
+  let loadedScope = '';
   let latestRequestId = 0;
   let mutationVersion = 0;
   let refreshNeeded = false;
@@ -32,15 +35,29 @@ export function useQuickCommands() {
   ) {
     const page = Math.max(1, options.page ?? quickCommandsPageInfo.value.page);
     const pageSize = Math.max(1, options.pageSize ?? quickCommandsPageInfo.value.pageSize);
+    const scope = quickCommandScope();
     if (quickCommandsMutating.value > 0) return;
-    if (loaded && !options.force && loadedPage === page && loadedPageSize === pageSize) return;
+    if (
+      loaded &&
+      !options.force &&
+      loadedScope === scope.key &&
+      loadedPage === page &&
+      loadedPageSize === pageSize
+    ) {
+      return;
+    }
     const requestId = latestRequestId + 1;
     latestRequestId = requestId;
     const loadMutationVersion = mutationVersion;
     quickCommandsLoading.value = true;
     quickCommandsError.value = '';
     try {
-      const result = await listQuickCommands({ page, pageSize });
+      const result = await listQuickCommands({
+        ...(scope.projectId ? { projectId: scope.projectId } : {}),
+        ...(scope.includeGlobal ? { includeGlobal: true } : {}),
+        page,
+        pageSize,
+      });
       if (
         !shouldApplyQuickCommandSnapshot(
           requestId,
@@ -54,6 +71,7 @@ export function useQuickCommands() {
       quickCommands.value = result.items;
       quickCommandsPageInfo.value = result.pageInfo;
       loaded = true;
+      loadedScope = scope.key;
       loadedPage = result.pageInfo.page;
       loadedPageSize = result.pageInfo.pageSize;
     } catch (error) {
@@ -73,7 +91,7 @@ export function useQuickCommands() {
     beginMutation();
     let command: QuickCommand;
     try {
-      command = await createQuickCommand(content);
+      command = await createQuickCommand(content, quickCommandScope().projectId);
     } catch (error) {
       const message = errorMessage(error, '新增快捷指令失败');
       await finishMutation(message);
@@ -138,6 +156,12 @@ export function useQuickCommands() {
   function beginMutation() {
     mutationVersion += 1;
     quickCommandsMutating.value += 1;
+  }
+
+  function quickCommandScope() {
+    const projectId = toValue(options.projectId)?.trim() ?? '';
+    const includeGlobal = Boolean(projectId && options.includeGlobal);
+    return { projectId, includeGlobal, key: `${projectId}:${includeGlobal}` };
   }
 
   function markRefreshNeeded(page: number) {

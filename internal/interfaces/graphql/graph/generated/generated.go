@@ -315,6 +315,7 @@ type ComplexityRoot struct {
 		Content   func(childComplexity int) int
 		CreatedAt func(childComplexity int) int
 		ID        func(childComplexity int) int
+		ProjectID func(childComplexity int) int
 	}
 
 	QuickCommandPage struct {
@@ -2206,6 +2207,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QuickCommand.ID(childComplexity), true
+	case "QuickCommand.projectId":
+		if e.ComplexityRoot.QuickCommand.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommand.ProjectID(childComplexity), true
 
 	case "QuickCommandPage.items":
 		if e.ComplexityRoot.QuickCommandPage.Items == nil {
@@ -4150,6 +4157,7 @@ input UpdateAppearanceSettingsInput {
 
 type QuickCommand {
   id: ID!
+  projectId: ID
   content: String!
   createdAt: Time!
 }
@@ -4160,11 +4168,14 @@ type QuickCommandPage {
 }
 
 input ListQuickCommandsInput {
+  projectId: ID
+  includeGlobal: Boolean = false
   page: Int
   pageSize: Int
 }
 
 input CreateQuickCommandInput {
+  projectId: ID
   content: String!
 }
 
@@ -7986,6 +7997,8 @@ func (ec *executionContext) fieldContext_Mutation_createQuickCommand(ctx context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_QuickCommand_projectId(ctx, field)
 			case "content":
 				return ec.fieldContext_QuickCommand_content(ctx, field)
 			case "createdAt":
@@ -8035,6 +8048,8 @@ func (ec *executionContext) fieldContext_Mutation_updateQuickCommand(ctx context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_QuickCommand_projectId(ctx, field)
 			case "content":
 				return ec.fieldContext_QuickCommand_content(ctx, field)
 			case "createdAt":
@@ -12782,6 +12797,35 @@ func (ec *executionContext) fieldContext_QuickCommand_id(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _QuickCommand_projectId(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommand_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommand_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _QuickCommand_content(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommand) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12866,6 +12910,8 @@ func (ec *executionContext) fieldContext_QuickCommandPage_items(_ context.Contex
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_QuickCommand_projectId(ctx, field)
 			case "content":
 				return ec.fieldContext_QuickCommand_content(ctx, field)
 			case "createdAt":
@@ -22891,13 +22937,20 @@ func (ec *executionContext) unmarshalInputCreateQuickCommandInput(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"content"}
+	fieldsInOrder := [...]string{"projectId", "content"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
 		case "content":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
 			data, err := ec.unmarshalNString2string(ctx, v)
@@ -23000,13 +23053,31 @@ func (ec *executionContext) unmarshalInputListQuickCommandsInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"page", "pageSize"}
+	if _, present := asMap["includeGlobal"]; !present {
+		asMap["includeGlobal"] = false
+	}
+
+	fieldsInOrder := [...]string{"projectId", "includeGlobal", "page", "pageSize"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "includeGlobal":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("includeGlobal"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IncludeGlobal = data
 		case "page":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -26988,6 +27059,8 @@ func (ec *executionContext) _QuickCommand(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "projectId":
+			out.Values[i] = ec._QuickCommand_projectId(ctx, field, obj)
 		case "content":
 			out.Values[i] = ec._QuickCommand_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

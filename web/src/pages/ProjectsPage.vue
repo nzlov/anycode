@@ -35,12 +35,48 @@
             <q-item-section v-if="project.isGit" side class="global-project-list__git">
               <q-badge outline color="positive" label="Git" />
             </q-item-section>
-            <q-item-section side>
+            <q-item-section side class="project-list-actions">
+              <div class="project-list-actions__inline">
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  icon="settings"
+                  :aria-label="`${project.name} 设置`"
+                  @click.stop="openProjectSettings(project)"
+                >
+                  <q-tooltip>设置</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  icon="account_tree"
+                  :aria-label="`${project.name} 流程配置`"
+                  @click.stop="openWorkflowConfig(project.id)"
+                >
+                  <q-tooltip>流程配置</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  color="negative"
+                  icon="playlist_remove"
+                  :aria-label="`${project.name} 移除项目`"
+                  @click.stop="confirmRemoveProject(project.id, project.name)"
+                >
+                  <q-tooltip>移除项目</q-tooltip>
+                </q-btn>
+              </div>
               <q-btn
                 flat
                 round
                 dense
-                class="app-icon-btn"
+                class="project-list-actions__menu app-icon-btn"
                 icon="more_vert"
                 :aria-label="`${project.name} 项目操作`"
                 @click.stop
@@ -197,5 +233,24 @@ async function removeSelectedProject() {
   display: flex;
   min-height: calc(100dvh - 100px);
   flex-direction: column;
+}
+
+.global-project-list {
+  container-type: inline-size;
+}
+
+.project-list-actions__inline {
+  display: none;
+  gap: 4px;
+}
+
+@container (min-width: 720px) {
+  .project-list-actions__inline {
+    display: flex;
+  }
+
+  .project-list-actions__menu {
+    display: none;
+  }
 }
 </style>

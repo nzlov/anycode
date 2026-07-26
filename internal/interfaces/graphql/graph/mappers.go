@@ -47,11 +47,16 @@ func mapCodexModelOptions(items []processdomain.CodexModel) []*model.CodexModelO
 }
 
 func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
-	return &model.QuickCommand{
+	command := &model.QuickCommand{
 		ID:        string(dto.ID),
 		Content:   dto.Content,
 		CreatedAt: dto.CreatedAt,
 	}
+	if dto.ProjectID != nil {
+		projectID := string(*dto.ProjectID)
+		command.ProjectID = &projectID
+	}
+	return command
 }
 
 func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {

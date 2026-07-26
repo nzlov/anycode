@@ -109,6 +109,44 @@ func TestQuickCommandRepositoryNormalizesPagination(t *testing.T) {
 	}
 }
 
+func TestQuickCommandRepositoryFiltersGlobalAndProjectScopes(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	projectOne := setting.QuickCommandProjectID("project-1")
+	projectTwo := setting.QuickCommandProjectID("project-2")
+	commands := []setting.QuickCommand{
+		{ID: "global", Content: "全局"},
+		{ID: "project-1", ProjectID: &projectOne, Content: "项目一"},
+		{ID: "project-2", ProjectID: &projectTwo, Content: "项目二"},
+	}
+	for _, command := range commands {
+		if err := store.Settings().Create(ctx, command); err != nil {
+			t.Fatalf("create command: %v", err)
+		}
+	}
+
+	global, err := store.Settings().List(ctx, setting.QuickCommandQuery{})
+	if err != nil || global.Total != 1 || global.Items[0].ID != "global" {
+		t.Fatalf("global commands = %#v, %v", global, err)
+	}
+	projectOnly, err := store.Settings().List(ctx, setting.QuickCommandQuery{ProjectID: &projectOne})
+	if err != nil || projectOnly.Total != 1 || projectOnly.Items[0].ID != "project-1" {
+		t.Fatalf("project commands = %#v, %v", projectOnly, err)
+	}
+	effective, err := store.Settings().List(ctx, setting.QuickCommandQuery{ProjectID: &projectOne, IncludeGlobal: true})
+	if err != nil || effective.Total != 2 {
+		t.Fatalf("effective commands = %#v, %v", effective, err)
+	}
+}
+
 func TestQuickCommandMigrationPreservesExistingTables(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
@@ -122,6 +160,16 @@ func TestQuickCommandMigrationPreservesExistingTables(t *testing.T) {
 	if _, err := store.db.ExecContext(ctx, "INSERT INTO legacy_marker (id) VALUES ('kept')"); err != nil {
 		t.Fatalf("insert legacy marker: %v", err)
 	}
+	if _, err := store.db.ExecContext(ctx, `CREATE TABLE quick_commands (
+		id TEXT PRIMARY KEY,
+		content TEXT NOT NULL,
+		created_at DATETIME NOT NULL
+	)`); err != nil {
+		t.Fatalf("create legacy quick commands: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "INSERT INTO quick_commands (id, content, created_at) VALUES ('legacy-command', '保留指令', CURRENT_TIMESTAMP)"); err != nil {
+		t.Fatalf("insert legacy quick command: %v", err)
+	}
 	if err := store.Migrate(ctx); err != nil {
 		t.Fatalf("migrate store: %v", err)
 	}
@@ -131,6 +179,10 @@ func TestQuickCommandMigrationPreservesExistingTables(t *testing.T) {
 	}
 	if marker != "kept" {
 		t.Fatalf("legacy marker = %q", marker)
+	}
+	page, err := store.Settings().List(ctx, setting.QuickCommandQuery{})
+	if err != nil || page.Total != 1 || page.Items[0].ID != "legacy-command" || page.Items[0].ProjectID != nil {
+		t.Fatalf("legacy global commands = %#v, %v", page, err)
 	}
 	if err := store.Settings().Create(ctx, setting.QuickCommand{ID: "command-1", Content: "检查测试"}); err != nil {
 		t.Fatalf("create command after migration: %v", err)

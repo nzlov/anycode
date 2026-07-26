@@ -125,7 +125,12 @@ func (r *mutationResolver) CreateQuickCommand(ctx context.Context, input model.C
 	if r.UseCases.Settings == nil {
 		return nil, missingUseCase("settings")
 	}
-	dto, err := r.UseCases.Settings.CreateQuickCommand(ctx, settingapp.CreateQuickCommandInput{Content: input.Content})
+	createInput := settingapp.CreateQuickCommandInput{Content: input.Content}
+	if input.ProjectID != nil {
+		projectID := settingdomain.QuickCommandProjectID(*input.ProjectID)
+		createInput.ProjectID = &projectID
+	}
+	dto, err := r.UseCases.Settings.CreateQuickCommand(ctx, createInput)
 	if err != nil {
 		return nil, err
 	}
@@ -635,6 +640,11 @@ func (r *queryResolver) QuickCommands(ctx context.Context, input *model.ListQuic
 	}
 	listInput := settingapp.ListQuickCommandsInput{}
 	if input != nil {
+		if input.ProjectID != nil {
+			projectID := settingdomain.QuickCommandProjectID(*input.ProjectID)
+			listInput.ProjectID = &projectID
+		}
+		listInput.IncludeGlobal = boolValue(input.IncludeGlobal)
 		listInput.Page = intValue(input.Page, 0)
 		listInput.PageSize = intValue(input.PageSize, 0)
 	}

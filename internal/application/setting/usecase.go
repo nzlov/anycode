@@ -73,12 +73,15 @@ type WallpaperStream struct {
 }
 
 type ListQuickCommandsInput struct {
-	Page     int
-	PageSize int
+	ProjectID     *domain.QuickCommandProjectID
+	IncludeGlobal bool
+	Page          int
+	PageSize      int
 }
 
 type CreateQuickCommandInput struct {
-	Content string
+	ProjectID *domain.QuickCommandProjectID
+	Content   string
 }
 
 type UpdateQuickCommandInput struct {
@@ -92,6 +95,7 @@ type DeleteQuickCommandInput struct {
 
 type QuickCommandDTO struct {
 	ID        domain.QuickCommandID
+	ProjectID *domain.QuickCommandProjectID
 	Content   string
 	CreatedAt time.Time
 }
@@ -350,8 +354,16 @@ func (s *Service) ListQuickCommands(ctx context.Context, input ListQuickCommands
 	if s == nil || s.repo == nil {
 		return port.Page[QuickCommandDTO]{}, errors.New("setting usecase: nil service")
 	}
+	if input.ProjectID != nil && strings.TrimSpace(string(*input.ProjectID)) == "" {
+		return port.Page[QuickCommandDTO]{}, validationError("projectId", "project id is required")
+	}
 	page, pageSize := normalizePage(input.Page, input.PageSize)
-	result, err := s.repo.List(ctx, domain.QuickCommandQuery{Page: page, PageSize: pageSize})
+	result, err := s.repo.List(ctx, domain.QuickCommandQuery{
+		ProjectID:     input.ProjectID,
+		IncludeGlobal: input.IncludeGlobal,
+		Page:          page,
+		PageSize:      pageSize,
+	})
 	if err != nil {
 		return port.Page[QuickCommandDTO]{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "list quick commands failed").WithRetryable(true)
 	}
@@ -371,6 +383,9 @@ func (s *Service) CreateQuickCommand(ctx context.Context, input CreateQuickComma
 	if s == nil || s.repo == nil {
 		return QuickCommandDTO{}, errors.New("setting usecase: nil service")
 	}
+	if input.ProjectID != nil && strings.TrimSpace(string(*input.ProjectID)) == "" {
+		return QuickCommandDTO{}, validationError("projectId", "project id is required")
+	}
 	content := strings.TrimSpace(input.Content)
 	if content == "" {
 		return QuickCommandDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "quick command content is required").
@@ -382,6 +397,7 @@ func (s *Service) CreateQuickCommand(ctx context.Context, input CreateQuickComma
 	}
 	command := domain.QuickCommand{
 		ID:        id,
+		ProjectID: input.ProjectID,
 		Content:   content,
 		CreatedAt: s.now(),
 	}
@@ -447,6 +463,7 @@ func normalizePage(page, pageSize int) (int, int) {
 func toDTO(command domain.QuickCommand) QuickCommandDTO {
 	return QuickCommandDTO{
 		ID:        command.ID,
+		ProjectID: command.ProjectID,
 		Content:   command.Content,
 		CreatedAt: command.CreatedAt,
 	}

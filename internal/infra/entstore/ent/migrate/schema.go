@@ -320,6 +320,7 @@ var (
 	// QuickCommandsColumns holds the columns for the "quick_commands" table.
 	QuickCommandsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "content", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
 	}
@@ -328,6 +329,13 @@ var (
 		Name:       "quick_commands",
 		Columns:    QuickCommandsColumns,
 		PrimaryKey: []*schema.Column{QuickCommandsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "quickcommand_project_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{QuickCommandsColumns[1], QuickCommandsColumns[3]},
+			},
+		},
 	}
 	// SessionsColumns holds the columns for the "sessions" table.
 	SessionsColumns = []*schema.Column{

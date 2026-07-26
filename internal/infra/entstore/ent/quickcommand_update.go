@@ -95,6 +95,9 @@ func (_u *QuickCommandUpdate) sqlSave(ctx context.Context) (_node int, err error
 			}
 		}
 	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(quickcommand.FieldProjectID, field.TypeString)
+	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(quickcommand.FieldContent, field.TypeString, value)
 	}
@@ -215,6 +218,9 @@ func (_u *QuickCommandUpdateOne) sqlSave(ctx context.Context) (_node *QuickComma
 				ps[i](selector)
 			}
 		}
+	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(quickcommand.FieldProjectID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(quickcommand.FieldContent, field.TypeString, value)

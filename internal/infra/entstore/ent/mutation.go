@@ -8246,6 +8246,7 @@ type QuickCommandMutation struct {
 	op            Op
 	typ           string
 	id            *string
+	project_id    *string
 	content       *string
 	created_at    *time.Time
 	clearedFields map[string]struct{}
@@ -8358,6 +8359,55 @@ func (m *QuickCommandMutation) IDs(ctx context.Context) ([]string, error) {
 	}
 }
 
+// SetProjectID sets the "project_id" field.
+func (m *QuickCommandMutation) SetProjectID(s string) {
+	m.project_id = &s
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *QuickCommandMutation) ProjectID() (r string, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the QuickCommand entity.
+// If the QuickCommand object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QuickCommandMutation) OldProjectID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (m *QuickCommandMutation) ClearProjectID() {
+	m.project_id = nil
+	m.clearedFields[quickcommand.FieldProjectID] = struct{}{}
+}
+
+// ProjectIDCleared returns if the "project_id" field was cleared in this mutation.
+func (m *QuickCommandMutation) ProjectIDCleared() bool {
+	_, ok := m.clearedFields[quickcommand.FieldProjectID]
+	return ok
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *QuickCommandMutation) ResetProjectID() {
+	m.project_id = nil
+	delete(m.clearedFields, quickcommand.FieldProjectID)
+}
+
 // SetContent sets the "content" field.
 func (m *QuickCommandMutation) SetContent(s string) {
 	m.content = &s
@@ -8464,7 +8514,10 @@ func (m *QuickCommandMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *QuickCommandMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 3)
+	if m.project_id != nil {
+		fields = append(fields, quickcommand.FieldProjectID)
+	}
 	if m.content != nil {
 		fields = append(fields, quickcommand.FieldContent)
 	}
@@ -8479,6 +8532,8 @@ func (m *QuickCommandMutation) Fields() []string {
 // schema.
 func (m *QuickCommandMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case quickcommand.FieldProjectID:
+		return m.ProjectID()
 	case quickcommand.FieldContent:
 		return m.Content()
 	case quickcommand.FieldCreatedAt:
@@ -8492,6 +8547,8 @@ func (m *QuickCommandMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *QuickCommandMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case quickcommand.FieldProjectID:
+		return m.OldProjectID(ctx)
 	case quickcommand.FieldContent:
 		return m.OldContent(ctx)
 	case quickcommand.FieldCreatedAt:
@@ -8505,6 +8562,13 @@ func (m *QuickCommandMutation) OldField(ctx context.Context, name string) (ent.V
 // type.
 func (m *QuickCommandMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case quickcommand.FieldProjectID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
 	case quickcommand.FieldContent:
 		v, ok := value.(string)
 		if !ok {
@@ -8548,7 +8612,11 @@ func (m *QuickCommandMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *QuickCommandMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(quickcommand.FieldProjectID) {
+		fields = append(fields, quickcommand.FieldProjectID)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -8561,6 +8629,11 @@ func (m *QuickCommandMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *QuickCommandMutation) ClearField(name string) error {
+	switch name {
+	case quickcommand.FieldProjectID:
+		m.ClearProjectID()
+		return nil
+	}
 	return fmt.Errorf("unknown QuickCommand nullable field %s", name)
 }
 
@@ -8568,6 +8641,9 @@ func (m *QuickCommandMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *QuickCommandMutation) ResetField(name string) error {
 	switch name {
+	case quickcommand.FieldProjectID:
+		m.ResetProjectID()
+		return nil
 	case quickcommand.FieldContent:
 		m.ResetContent()
 		return nil

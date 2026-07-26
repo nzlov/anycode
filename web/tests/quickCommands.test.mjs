@@ -35,7 +35,7 @@ test('stale page snapshots cannot overwrite a completed mutation', () => {
 
 test('each quick command consumer owns its pagination and blocks loads during mutations', () => {
   const composableSource = readSource('../src/composables/useQuickCommands.ts');
-  const functionStart = composableSource.indexOf('export function useQuickCommands()');
+  const functionStart = composableSource.indexOf('export function useQuickCommands(');
   const stateStart = composableSource.indexOf('const quickCommands = ref<QuickCommand[]>([])');
 
   assert.ok(functionStart >= 0 && stateStart > functionStart);
@@ -45,35 +45,54 @@ test('each quick command consumer owns its pagination and blocks loads during mu
 
 test('quick reply always opens on the newest first page and disables stale loading items', () => {
   const composerSource = readSource('../src/components/CodexPromptComposer.vue');
-  const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+  const managerSource = readSource('../src/components/QuickCommandManager.vue');
 
   assert.match(composerSource, /loadQuickCommands\(\{ force: true, page: 1 \}\)/);
   assert.doesNotMatch(composerSource, /onMounted\([\s\S]*?loadQuickCommands/);
   assert.match(composerSource, /:disable="quickCommandsLoading"/);
-  assert.match(settingsSource, /quickCommandsMutating > 0/);
+  assert.match(managerSource, /quickCommandsMutating > 0/);
 });
 
 test('global settings load quick commands only while the quick command section is visible', () => {
   const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+  const managerSource = readSource('../src/components/QuickCommandManager.vue');
 
-  assert.doesNotMatch(settingsSource, /onMounted\([\s\S]*?loadQuickCommands/);
-  assert.match(settingsSource, /watch\(activeSection/);
-  assert.match(settingsSource, /section !== 'quick_commands' \|\| !props\.modelValue/);
-  assert.match(settingsSource, /activeSection\.value === 'quick_commands'/);
+  assert.match(settingsSource, /<QuickCommandManager v-if="modelValue"/);
+  assert.match(settingsSource, /<section v-else class="global-settings-panel">/);
+  assert.match(managerSource, /onMounted\(refreshQuickCommands\)/);
 });
 
 test('global settings expose quick command navigation, add FAB, item editing, and deletion', () => {
   const layoutSource = readSource('../src/layouts/MainLayout.vue');
   const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+  const managerSource = readSource('../src/components/QuickCommandManager.vue');
 
   assert.match(layoutSource, /name="settings"/);
   assert.match(layoutSource, /<GlobalSettingsDialog/);
   assert.match(settingsSource, /class="global-settings-grid"/);
   assert.match(settingsSource, /快捷指令/);
-  assert.match(settingsSource, /\bfab\b/);
-  assert.match(settingsSource, /icon="edit_outline"/);
-  assert.match(settingsSource, /startEdit\(command\)/);
-  assert.match(settingsSource, /icon="delete_outline"/);
+  assert.match(settingsSource, /<QuickCommandManager/);
+  assert.match(managerSource, /\bfab\b/);
+  assert.match(managerSource, /icon="edit_outline"/);
+  assert.match(managerSource, /startEdit\(command\)/);
+  assert.match(managerSource, /icon="delete_outline"/);
+});
+
+test('project settings manage project-only commands while prompt menus include global commands', () => {
+  const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
+  const composerSource = readSource('../src/components/CodexPromptComposer.vue');
+  const composableSource = readSource('../src/composables/useQuickCommands.ts');
+  const serviceSource = readSource('../src/services/quickCommands.ts');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
+
+  assert.match(projectSettingsSource, /name="quick_commands"[\s\S]*<QuickCommandManager/);
+  assert.match(projectSettingsSource, /:project-id="project\.id"/);
+  assert.match(composerSource, /includeGlobal:\s*true/);
+  assert.match(composerSource, /props\.quickCommandProjectId \|\| props\.completionProjectId/);
+  assert.match(detailSource, /:quick-command-project-id="session\?\.projectId \?\? ''"/);
+  assert.match(composableSource, /scope\.includeGlobal[\s\S]*includeGlobal:\s*true/);
+  assert.match(serviceSource, /projectId\?: string;[\s\S]*includeGlobal\?: boolean/);
+  assert.match(serviceSource, /createQuickCommand\(content: string, projectId\?: string\)/);
 });
 
 test('shared Codex prompt composer owns the quick reply menu for both prompt surfaces', () => {

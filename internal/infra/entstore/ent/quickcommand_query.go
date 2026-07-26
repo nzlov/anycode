@@ -262,12 +262,12 @@ func (_q *QuickCommandQuery) Clone() *QuickCommandQuery {
 // Example:
 //
 //	var v []struct {
-//		Content string `json:"content,omitempty"`
+//		ProjectID string `json:"project_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.QuickCommand.Query().
-//		GroupBy(quickcommand.FieldContent).
+//		GroupBy(quickcommand.FieldProjectID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *QuickCommandQuery) GroupBy(field string, fields ...string) *QuickCommandGroupBy {
@@ -285,11 +285,11 @@ func (_q *QuickCommandQuery) GroupBy(field string, fields ...string) *QuickComma
 // Example:
 //
 //	var v []struct {
-//		Content string `json:"content,omitempty"`
+//		ProjectID string `json:"project_id,omitempty"`
 //	}
 //
 //	client.QuickCommand.Query().
-//		Select(quickcommand.FieldContent).
+//		Select(quickcommand.FieldProjectID).
 //		Scan(ctx, &v)
 func (_q *QuickCommandQuery) Select(fields ...string) *QuickCommandSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

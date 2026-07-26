@@ -8,16 +8,20 @@ import (
 )
 
 type QuickCommandID string
+type QuickCommandProjectID string
 
 type QuickCommand struct {
 	ID        QuickCommandID
+	ProjectID *QuickCommandProjectID
 	Content   string
 	CreatedAt time.Time
 }
 
 type QuickCommandQuery struct {
-	Page     int
-	PageSize int
+	ProjectID     *QuickCommandProjectID
+	IncludeGlobal bool
+	Page          int
+	PageSize      int
 }
 
 type QuickCommandPage struct {

@@ -2,6 +2,7 @@ import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface QuickCommand {
   id: string;
+  projectId?: string | null;
   content: string;
   createdAt: string;
 }
@@ -18,14 +19,27 @@ export interface QuickCommandPage {
 
 const quickCommandFields = `
   id
+  projectId
   content
   createdAt
 `;
 
-export async function listQuickCommands(input: { page: number; pageSize: number }) {
+export async function listQuickCommands(input: {
+  projectId?: string;
+  includeGlobal?: boolean;
+  page: number;
+  pageSize: number;
+}) {
   const data = await graphqlFetch<
     { quickCommands: QuickCommandPage },
-    { input: { page: number; pageSize: number } }
+    {
+      input: {
+        projectId?: string;
+        includeGlobal?: boolean;
+        page: number;
+        pageSize: number;
+      };
+    }
   >({
     query: `
       query QuickCommands($input: ListQuickCommandsInput!) {
@@ -47,10 +61,10 @@ export async function listQuickCommands(input: { page: number; pageSize: number 
   return data.quickCommands;
 }
 
-export async function createQuickCommand(content: string) {
+export async function createQuickCommand(content: string, projectId?: string) {
   const data = await graphqlFetch<
     { createQuickCommand: QuickCommand },
-    { input: { content: string } }
+    { input: { projectId?: string; content: string } }
   >({
     query: `
       mutation CreateQuickCommand($input: CreateQuickCommandInput!) {
@@ -59,7 +73,7 @@ export async function createQuickCommand(content: string) {
         }
       }
     `,
-    variables: { input: { content } },
+    variables: { input: { ...(projectId ? { projectId } : {}), content } },
   });
   return data.createQuickCommand;
 }

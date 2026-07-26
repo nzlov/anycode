@@ -26,7 +26,12 @@
 
       <q-separator />
 
-      <q-card-section class="project-settings-dialog__body">
+      <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs">
+        <q-tab name="general" icon="tune" label="常规" />
+        <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
+      </q-tabs>
+
+      <q-card-section v-if="activeSection === 'general'" class="project-settings-dialog__body">
         <q-input
           v-model="worktreeInitCommand"
           outlined
@@ -35,10 +40,17 @@
           :rows="10"
         />
       </q-card-section>
+      <q-card-section
+        v-else
+        class="project-settings-dialog__body project-settings-dialog__commands"
+      >
+        <QuickCommandManager v-if="project" :project-id="project.id" />
+        <q-inner-loading v-else showing color="primary" />
+      </q-card-section>
 
-      <q-separator />
+      <q-separator v-if="activeSection === 'general'" />
 
-      <q-card-actions align="right">
+      <q-card-actions v-if="activeSection === 'general'" align="right">
         <q-btn
           flat
           round
@@ -71,6 +83,7 @@
 import { ref, watch } from 'vue';
 import { QDialog, useQuasar } from 'quasar';
 
+import QuickCommandManager from '@/components/QuickCommandManager.vue';
 import { useProjects } from '@/composables/useProjects';
 import type { ProjectSummary } from '@/services/projects';
 
@@ -86,6 +99,7 @@ const emit = defineEmits<{
 
 const $q = useQuasar();
 const { updateProjectSettingsById } = useProjects();
+const activeSection = ref<'general' | 'quick_commands'>('general');
 const worktreeInitCommand = ref('');
 const saving = ref(false);
 
@@ -93,6 +107,7 @@ watch(
   () => [props.modelValue, props.project?.id] as const,
   ([open]) => {
     if (open) {
+      activeSection.value = 'general';
       worktreeInitCommand.value = props.project?.worktreeInitCommand ?? '';
     }
   },

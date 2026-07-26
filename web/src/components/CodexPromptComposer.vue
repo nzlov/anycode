@@ -134,6 +134,7 @@ const props = withDefaults(
     collapsible?: boolean;
     collapsed?: boolean;
     completionProjectId?: string;
+    quickCommandProjectId?: string;
     completionSessionId?: string;
     completionHasThread?: boolean;
   }>(),
@@ -148,6 +149,7 @@ const props = withDefaults(
     collapsible: false,
     collapsed: false,
     completionProjectId: '',
+    quickCommandProjectId: '',
     completionSessionId: '',
     completionHasThread: false,
     artifacts: () => [],
@@ -174,7 +176,10 @@ const {
   quickCommandsError,
   quickCommandsPageInfo,
   loadQuickCommands,
-} = useQuickCommands();
+} = useQuickCommands({
+  projectId: () => props.quickCommandProjectId || props.completionProjectId,
+  includeGlobal: true,
+});
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
 );

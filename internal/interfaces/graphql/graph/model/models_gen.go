@@ -114,7 +114,8 @@ type CreateProjectInput struct {
 }
 
 type CreateQuickCommandInput struct {
-	Content string `json:"content"`
+	ProjectID *string `json:"projectId,omitempty"`
+	Content   string  `json:"content"`
 }
 
 type CreateSessionInput struct {
@@ -193,8 +194,10 @@ type GitState struct {
 }
 
 type ListQuickCommandsInput struct {
-	Page     *int `json:"page,omitempty"`
-	PageSize *int `json:"pageSize,omitempty"`
+	ProjectID     *string `json:"projectId,omitempty"`
+	IncludeGlobal *bool   `json:"includeGlobal,omitempty"`
+	Page          *int    `json:"page,omitempty"`
+	PageSize      *int    `json:"pageSize,omitempty"`
 }
 
 type ListSessionFilesInput struct {
@@ -340,6 +343,7 @@ type QuestionRequest struct {
 
 type QuickCommand struct {
 	ID        string    `json:"id"`
+	ProjectID *string   `json:"projectId,omitempty"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"createdAt"`
 }

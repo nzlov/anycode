@@ -20,6 +20,20 @@ type QuickCommandCreate struct {
 	hooks    []Hook
 }
 
+// SetProjectID sets the "project_id" field.
+func (_c *QuickCommandCreate) SetProjectID(v string) *QuickCommandCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_c *QuickCommandCreate) SetNillableProjectID(v *string) *QuickCommandCreate {
+	if v != nil {
+		_c.SetProjectID(*v)
+	}
+	return _c
+}
+
 // SetContent sets the "content" field.
 func (_c *QuickCommandCreate) SetContent(v string) *QuickCommandCreate {
 	_c.mutation.SetContent(v)
@@ -134,6 +148,10 @@ func (_c *QuickCommandCreate) createSpec() (*QuickCommand, *sqlgraph.CreateSpec)
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
+	}
+	if value, ok := _c.mutation.ProjectID(); ok {
+		_spec.SetField(quickcommand.FieldProjectID, field.TypeString, value)
+		_node.ProjectID = &value
 	}
 	if value, ok := _c.mutation.Content(); ok {
 		_spec.SetField(quickcommand.FieldContent, field.TypeString, value)
