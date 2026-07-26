@@ -75,10 +75,10 @@ test('authenticated previews revoke blob URLs and keep bounded text fully scroll
   assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
   assert.match(service, /URL\.revokeObjectURL\(url\)/);
   assert.match(preview, /URL\.revokeObjectURL\(objectURL\.value\)/);
-  assert.match(event, /URL\.revokeObjectURL\(objectUrl\.value\)/);
   assert.match(preview, /file\.size > 1 << 20/);
   assert.match(preview, /\.session-file-preview__text \{[\s\S]*?align-self: start;/);
-  assert.match(event, /\.artifact-event-preview__body pre \{[\s\S]*?align-self: start;/);
+  assert.match(event, /<SessionFilePreview/);
+  assert.doesNotMatch(event, /fetchSessionFile|objectUrl|previewController/);
   assert.match(preview, /file\?\.previewKind === 'image'/);
   assert.match(preview, /file\?\.previewKind === 'pdf'/);
   assert.match(preview, /file\?\.previewKind === 'video'/);
@@ -95,6 +95,14 @@ test('mobile artifact previews are titleless full-screen dialogs with pinch-zoom
     panel,
     /\.artifact-preview-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
   );
+  assert.match(event, /:maximized="\$q\.screen\.lt\.md"/);
+  assert.match(event, /v-if="!\$q\.screen\.lt\.md" class="artifact-event-preview__header"/);
+  assert.match(
+    event,
+    /<SessionFilePreview :file="selectedPreview" :zoomable="\$q\.screen\.lt\.md"/,
+  );
+  assert.match(event, /artifact-event-preview__close/);
+  assert.doesNotMatch(event, /useRouter|name: 'session-artifact'/);
   assert.match(preview, /zoomable\?: boolean/);
   assert.match(preview, /@pointerdown="startZoom"/);
   assert.match(preview, /Math\.min\(4, Math\.max\(1,/);
@@ -141,7 +149,8 @@ test('artifact requests ignore stale responses and follow live artifact events',
   assert.match(panel, /const request = \+\+loadRequest/);
   assert.match(panel, /request !== loadRequest/);
   assert.match(preview, /controller\?\.abort\(\)/);
-  assert.match(event, /previewController\?\.abort\(\)/);
+  assert.match(event, /@hide="clearPreview"/);
+  assert.match(event, /selectedPreview\.value = null/);
   assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
   assert.match(
     sessionDetailComposable,

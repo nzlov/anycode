@@ -512,9 +512,20 @@
       />
     </q-dialog>
 
-    <q-dialog v-model="eventResourceDialogOpen" @hide="clearEventResource">
-      <q-card class="event-resource-dialog app-content-dialog" aria-label="事件文件">
-        <q-card-section class="event-resource-dialog__header">
+    <q-dialog
+      v-model="eventResourceDialogOpen"
+      :maximized="isMobileLayout"
+      @hide="clearEventResource"
+    >
+      <q-card
+        class="event-resource-dialog"
+        :class="{
+          'app-content-dialog': !isMobileLayout,
+          'event-resource-dialog--mobile': isMobileLayout,
+        }"
+        aria-label="事件文件"
+      >
+        <q-card-section v-if="!isMobileLayout" class="event-resource-dialog__header">
           <div class="event-resource-dialog__title">
             <q-icon
               :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)"
@@ -549,7 +560,7 @@
             </q-btn>
           </div>
         </q-card-section>
-        <q-separator />
+        <q-separator v-if="!isMobileLayout" />
         <q-card-section
           class="event-resource-dialog__body"
           :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
@@ -562,8 +573,21 @@
             :show-file-headers="false"
             :show-refresh="false"
           />
-          <SessionFilePreview v-else :file="eventResourceFile" />
+          <SessionFilePreview
+            v-else
+            :file="eventResourceFile"
+            :zoomable="isMobileLayout"
+          />
         </q-card-section>
+        <q-btn
+          v-if="isMobileLayout"
+          v-close-popup
+          round
+          dense
+          class="event-resource-dialog__close"
+          icon="close"
+          aria-label="关闭"
+        />
       </q-card>
     </q-dialog>
   </component>
@@ -831,13 +855,6 @@ async function resolveSessionEventResource(
 }
 
 function openEventDiff(file: DiffFile) {
-  if (isMobileLayout.value) {
-    void router.push({
-      path: '/diff',
-      query: { sessionId, mode: 'single', filePath: file.path },
-    });
-    return;
-  }
   eventDiffState.value = { mode: 'single', filePath: file.path };
   eventDiffFile.value = file;
   eventResourceFile.value = null;
@@ -846,13 +863,6 @@ function openEventDiff(file: DiffFile) {
 }
 
 function focusEventArtifact(file: SessionFile) {
-  if (isMobileLayout.value) {
-    void router.push({
-      name: 'session-artifact',
-      params: { id: sessionId, fileId: file.id },
-    });
-    return;
-  }
   eventDiffFile.value = null;
   eventResourceFile.value = file;
   eventResourceKind.value = 'file';
@@ -1522,9 +1532,41 @@ async function scrollEventsToBottom() {
 }
 
 .event-resource-dialog {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.event-resource-dialog--mobile {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.event-resource-dialog--mobile .event-resource-dialog__body {
+  padding: 0;
+}
+
+.event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview) {
+  min-height: 0;
+}
+
+.event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview__image),
+.event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview__media) {
+  max-height: 100%;
+}
+
+.event-resource-dialog__close {
+  position: absolute;
+  z-index: 1;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  color: var(--ac-text);
+  background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
+  box-shadow: var(--ac-shadow-card);
 }
 
 .event-resource-dialog__header,

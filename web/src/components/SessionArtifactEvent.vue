@@ -34,64 +34,68 @@
       </q-btn>
     </div>
 
-    <q-dialog v-model="previewOpen" @hide="clearPreview">
-      <q-card class="artifact-event-preview app-content-dialog">
-        <q-card-section class="artifact-event-preview__header">
+    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.md" @hide="clearPreview">
+      <q-card
+        class="artifact-event-preview"
+        :class="{
+          'app-content-dialog': !$q.screen.lt.md,
+          'artifact-event-preview--mobile': $q.screen.lt.md,
+        }"
+      >
+        <q-card-section v-if="!$q.screen.lt.md" class="artifact-event-preview__header">
           <span>{{ filename }}</span>
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
         </q-card-section>
-        <q-separator />
-        <q-card-section class="artifact-event-preview__body">
-          <q-spinner v-if="previewLoading" color="primary" size="32px" />
-          <q-banner v-else-if="previewError" dense class="text-negative">{{
-            previewError
-          }}</q-banner>
-          <img v-else-if="previewKind === 'image' && objectUrl" :src="objectUrl" :alt="filename" />
-          <iframe
-            v-else-if="previewKind === 'pdf' && objectUrl"
-            :src="objectUrl"
-            title="PDF 预览"
-          />
-          <video v-else-if="previewKind === 'video' && objectUrl" :src="objectUrl" controls />
-          <audio v-else-if="previewKind === 'audio' && objectUrl" :src="objectUrl" controls />
-          <pre v-else-if="previewKind === 'text'">{{ text }}</pre>
-        </q-card-section>
+        <q-separator v-if="!$q.screen.lt.md" />
+        <SessionFilePreview :file="selectedPreview" :zoomable="$q.screen.lt.md" />
+        <q-btn
+          v-if="$q.screen.lt.md"
+          v-close-popup
+          round
+          dense
+          class="artifact-event-preview__close"
+          icon="close"
+          aria-label="关闭"
+        />
       </q-card>
     </q-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Notify, useQuasar } from 'quasar';
-import { useRoute, useRouter } from 'vue-router';
 
-import { downloadSessionFile, fetchSessionFile } from '@/services/sessionFiles';
+import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import {
+  downloadSessionFile,
+  type SessionFilePreviewData,
+  type SessionFilePreviewKind,
+} from '@/services/sessionFiles';
 import type { TranscriptItem, TranscriptUnknownContent } from '@/services/sessionTimeline';
 
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptUnknownContent };
 }>();
 const $q = useQuasar();
-const route = useRoute();
-const router = useRouter();
 const payload = computed(() => props.event.content.payload);
 const filename = computed(
   () => payloadString('filename') || payloadString('logicalPath') || '临时文件',
 );
 const artifactKind = computed(() => payloadString('artifactKind', 'file'));
-const previewKind = computed(() => payloadString('previewKind', 'none'));
+const previewKind = computed<SessionFilePreviewKind>(() => {
+  const kind = payloadString('previewKind', 'none');
+  return ['image', 'pdf', 'video', 'audio', 'text'].includes(kind)
+    ? (kind as SessionFilePreviewKind)
+    : 'none';
+});
 const previewUrl = computed(() => payloadString('previewUrl'));
 const downloadUrl = computed(() => payloadString('downloadUrl'));
 const size = computed(() => Number(payload.value.size || 0));
 const deleted = computed(() => payload.value.status === 'deleted');
 const downloading = ref(false);
 const previewOpen = ref(false);
-const previewLoading = ref(false);
-const previewError = ref('');
-const objectUrl = ref('');
-const text = ref('');
-let previewController: AbortController | null = null;
+const selectedPreview = ref<SessionFilePreviewData | null>(null);
 const icon = computed(() => {
   const icons: Record<string, string> = {
     image: 'image',
@@ -109,6 +113,12 @@ const access = computed(() => ({
   previewUrl: previewUrl.value || null,
   downloadUrl: downloadUrl.value,
 }));
+const previewFile = computed<SessionFilePreviewData>(() => ({
+  id: payloadString('id') || props.event.id,
+  ...access.value,
+  size: size.value,
+  previewKind: previewKind.value,
+}));
 
 async function download() {
   downloading.value = true;
@@ -121,51 +131,13 @@ async function download() {
   }
 }
 
-async function openPreview() {
-  const fileId = payloadString('id');
-  const sessionId = String(route.params.id ?? '');
-  if ($q.screen.lt.md && fileId && sessionId) {
-    await router.push({ name: 'session-artifact', params: { id: sessionId, fileId } });
-    return;
-  }
-  clearPreview();
+function openPreview() {
+  selectedPreview.value = previewFile.value;
   previewOpen.value = true;
-  previewLoading.value = true;
-  previewError.value = '';
-  const controller = new AbortController();
-  previewController = controller;
-  try {
-    if (previewKind.value === 'text' && size.value > 1 << 20) {
-      throw new Error('文本超过 1 MiB，请下载查看');
-    }
-    const blob = await fetchSessionFile(access.value, 'preview', controller.signal);
-    if (previewController !== controller) return;
-    if (previewKind.value === 'text') {
-      const content = await blob.text();
-      if (previewController === controller) text.value = content;
-    } else {
-      objectUrl.value = URL.createObjectURL(blob);
-    }
-  } catch (err) {
-    if (!isAbortError(err) && previewController === controller) {
-      previewError.value = errorMessage(err, '预览临时文件失败');
-    }
-  } finally {
-    if (previewController === controller) {
-      previewController = null;
-      previewLoading.value = false;
-    }
-  }
 }
 
 function clearPreview() {
-  previewController?.abort();
-  previewController = null;
-  previewLoading.value = false;
-  if (objectUrl.value) URL.revokeObjectURL(objectUrl.value);
-  objectUrl.value = '';
-  text.value = '';
-  previewError.value = '';
+  selectedPreview.value = null;
 }
 
 function formatBytes(value: number) {
@@ -178,16 +150,10 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-function isAbortError(err: unknown) {
-  return err instanceof DOMException && err.name === 'AbortError';
-}
-
 function payloadString(key: string, fallback = '') {
   const value = payload.value[key];
   return typeof value === 'string' ? value : fallback;
 }
-
-onBeforeUnmount(clearPreview);
 </script>
 
 <style scoped>
@@ -218,47 +184,42 @@ onBeforeUnmount(clearPreview);
 }
 
 .artifact-event-preview {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+.artifact-event-preview--mobile {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.artifact-event-preview--mobile :deep(.session-file-preview) {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.artifact-event-preview--mobile :deep(.session-file-preview__image),
+.artifact-event-preview--mobile :deep(.session-file-preview__media) {
+  max-height: 100%;
+}
+
+.artifact-event-preview__close {
+  position: absolute;
+  z-index: 1;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  color: var(--ac-text);
+  background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
+  box-shadow: var(--ac-shadow-card);
+}
+
 .artifact-event-preview__header {
   justify-content: space-between;
   font-weight: 600;
-}
-
-.artifact-event-preview__body {
-  display: grid;
-  min-height: 260px;
-  flex: 1 1 auto;
-  place-items: center;
-  overflow: auto;
-  background: var(--ac-surface-muted);
-}
-
-.artifact-event-preview__body img,
-.artifact-event-preview__body video {
-  max-width: 100%;
-  max-height: 72vh;
-  object-fit: contain;
-}
-
-.artifact-event-preview__body iframe {
-  width: 100%;
-  min-height: 68vh;
-  border: 0;
-}
-
-.artifact-event-preview__body audio {
-  width: min(100%, 520px);
-}
-
-.artifact-event-preview__body pre {
-  width: 100%;
-  margin: 0;
-  align-self: start;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 </style>

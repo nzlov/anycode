@@ -50,19 +50,23 @@ test('one shared class keeps fallback content dialogs compact at the 600px break
   assert.doesNotMatch(stylesSource, /\.app-content-dialog\s*{[^}]*max-width:\s*\d+px/s);
 });
 
-test('content dialogs keep shared cards while mobile entries use route pages', () => {
-  for (const [source, semanticClass] of contentDialogs) {
+test('content dialogs keep shared cards while full-screen mobile previews opt out', () => {
+  for (const [source, semanticClass] of contentDialogs.filter(
+    ([, semanticClass]) => semanticClass !== 'event-resource-dialog',
+  )) {
     assert.match(
       source,
       new RegExp(`class="[^"]*\\b${semanticClass}\\b[^"]*\\bapp-content-dialog\\b[^"]*"`),
       `${semanticClass} must use app-content-dialog`,
     );
   }
+  assert.match(detailSource, /'app-content-dialog': !isMobileLayout/);
 
   assert.doesNotMatch(
-    [newSessionSource, globalSettingsSource, projectSettingsSource, directorySource, questionsSource, indexSource, composerSource, detailSource].join('\n'),
+    [newSessionSource, globalSettingsSource, projectSettingsSource, directorySource, questionsSource, indexSource, composerSource].join('\n'),
     /:maximized=/,
   );
+  assert.match(detailSource, /:maximized="isMobileLayout"/);
   assert.match(routesSource, /name: 'new-session'/);
   assert.match(routesSource, /name: 'settings'/);
   assert.match(newSessionPageSource, /<NewSessionDialog[\s\S]*page/);

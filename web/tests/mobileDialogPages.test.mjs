@@ -75,5 +75,6 @@ test('prompt edit page and desktop dialog share one content component', () => {
   assert.match(promptPage, /<PromptAppendEditPanel/);
   assert.match(detail, /<PromptAppendEditPanel/);
   assert.match(promptPanel, /class="prompt-edit-dialog app-content-dialog"/);
-  assert.doesNotMatch([layout, overview, detail, settings].join('\n'), /:maximized=/);
+  assert.doesNotMatch([layout, overview, settings].join('\n'), /:maximized=/);
+  assert.match(detail, /:maximized="isMobileLayout"/);
 });

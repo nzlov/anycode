@@ -78,8 +78,45 @@ test('event stream routes local markdown and authenticated images through modal 
     /function openEventDiff\(file: DiffFile\)[\s\S]*eventDiffState\.value = \{ mode: 'single', filePath: file\.path \}/,
   );
   assert.match(detail, /resolveSessionArtifacts/);
-  assert.match(detail, /<SessionFilePreview v-else :file="eventResourceFile"/);
-  assert.match(detail, /class="event-resource-dialog app-content-dialog"/);
+  assert.match(detail, /<SessionFilePreview[\s\S]*?v-else[\s\S]*?:file="eventResourceFile"/);
+  assert.match(detail, /'app-content-dialog': !isMobileLayout/);
+});
+
+test('mobile event file and diff previews reuse the titleless full-screen temporary-file viewer', () => {
+  const detail = readFileSync(
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
+    'utf8',
+  );
+  const focusEventArtifact = detail.match(
+    /function focusEventArtifact\(file: SessionFile\) \{([\s\S]*?)\n\}/,
+  )?.[1];
+  const openEventDiff = detail.match(
+    /function openEventDiff\(file: DiffFile\) \{([\s\S]*?)\n\}/,
+  )?.[1];
+
+  assert.ok(focusEventArtifact);
+  assert.ok(openEventDiff);
+  assert.doesNotMatch(focusEventArtifact, /router\.push/);
+  assert.doesNotMatch(openEventDiff, /router\.push/);
+  assert.match(focusEventArtifact, /eventResourceDialogOpen\.value = true/);
+  assert.match(openEventDiff, /eventResourceDialogOpen\.value = true/);
+  assert.match(
+    detail,
+    /<q-dialog[\s\S]*?v-model="eventResourceDialogOpen"[\s\S]*?:maximized="isMobileLayout"/,
+  );
+  assert.match(
+    detail,
+    /v-if="!isMobileLayout"[\s\S]*?class="event-resource-dialog__header"/,
+  );
+  assert.match(
+    detail,
+    /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,
+  );
+  assert.match(detail, /event-resource-dialog__close/);
+  assert.match(
+    detail,
+    /\.event-resource-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
+  );
 });
 
 test('content-only diff workspaces preserve the requested diff mode', () => {
