@@ -56,6 +56,7 @@
         v-model:edges="flowEdges"
         :min-zoom="0.2"
         :max-zoom="2"
+        :zoom-on-pinch="true"
         :nodes-connectable="true"
         :elements-selectable="true"
         @node-click="selectNode"
@@ -68,6 +69,7 @@
             v-touch-hold.mouse="() => openNodeMenu(id)"
             class="mind-map-node-content"
             @contextmenu.prevent="openNodeMenu(id)"
+            @mouseenter="showNodeInfo(id)"
           >
             <Handle
               v-for="side in handleSides"
@@ -84,6 +86,33 @@
               :position="handlePosition(side)"
             />
             <span>{{ data.label }}</span>
+            <q-menu
+              no-parent-event
+              anchor="top right"
+              self="top left"
+              :offset="[8, 0]"
+              :model-value="infoNodeId === id"
+              @update:model-value="syncNodeInfo(id, $event)"
+            >
+              <q-card class="mind-map-node-info" @click.stop>
+                <q-card-section class="row items-start no-wrap q-pb-sm">
+                  <div class="mind-map-node-info__title">{{ data.label }}</div>
+                  <q-space />
+                  <q-btn
+                    v-close-popup
+                    flat
+                    round
+                    dense
+                    icon="close"
+                    aria-label="关闭节点信息"
+                    @click="closeNodeInfo"
+                  />
+                </q-card-section>
+                <q-card-section class="mind-map-node-info__content q-pt-none">
+                  {{ data.content || '暂无节点内容' }}
+                </q-card-section>
+              </q-card>
+            </q-menu>
             <q-menu
               no-parent-event
               :model-value="menuNodeId === id"
@@ -169,6 +198,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -198,6 +228,7 @@ import {
 } from '@/services/mindMaps';
 
 const rootNodeId = 'project-root';
+const $q = useQuasar();
 const route = useRoute();
 const { projects, loadProjects } = useProjects();
 const { fitView } = useVueFlow('project-mind-map-flow');
@@ -209,6 +240,7 @@ const graph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt
 const cards = ref<MindMapCard[]>([]);
 const scopeSessionId = ref('');
 const selectedNodeId = ref('');
+const infoNodeId = ref('');
 const menuNodeId = ref('');
 const editingNodeId = ref('');
 const deletingNodeId = ref('');
@@ -266,7 +298,7 @@ const flowNodes = computed({
       id: node.id,
       type: 'radial',
       label: node.title,
-      data: { label: node.title },
+      data: { label: node.title, content: node.content },
       position: radialLayout.value[node.id] ?? { x: 0, y: 0 },
       draggable: false,
       class: {
@@ -339,6 +371,23 @@ function fitGraph() {
 
 function selectNode({ node }: NodeMouseEvent) {
   selectedNodeId.value = node.id;
+  if ($q.platform.is.mobile) showNodeInfo(node.id);
+}
+
+function showNodeInfo(nodeId: string) {
+  infoNodeId.value = nodeId;
+}
+
+function syncNodeInfo(nodeId: string, open: boolean) {
+  if (open) {
+    infoNodeId.value = nodeId;
+  } else if (infoNodeId.value === nodeId) {
+    closeNodeInfo();
+  }
+}
+
+function closeNodeInfo() {
+  infoNodeId.value = '';
 }
 
 function openNodeMenu(nodeId: string) {
@@ -441,6 +490,7 @@ async function retryTask(taskId: string) {
 
 function clearSelection() {
   selectedNodeId.value = '';
+  closeNodeInfo();
 }
 
 function taskStatusLabel(status: string) {
@@ -477,6 +527,7 @@ function taskStatusLabel(status: string) {
   flex: 1 1 auto;
   overflow: hidden;
   border-radius: 0;
+  touch-action: none;
 }
 
 .mind-map-canvas :deep(.vue-flow) {
@@ -484,6 +535,10 @@ function taskStatusLabel(status: string) {
   inset: 0;
   width: auto;
   height: auto;
+}
+
+.mind-map-canvas :deep(.vue-flow__background) {
+  pointer-events: none;
 }
 
 .mind-map-node-content {
@@ -511,6 +566,28 @@ function taskStatusLabel(status: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mind-map-node-info {
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 32px));
+}
+
+.mind-map-node-info__title {
+  min-width: 0;
+  padding-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.mind-map-node-info__content {
+  overflow: auto;
+  color: var(--ac-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .mind-map-canvas :deep(.vue-flow__node) {

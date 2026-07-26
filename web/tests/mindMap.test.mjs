@@ -59,8 +59,14 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(page, /directlyRelatedEdgeIds/);
   assert.match(page, /mind-map-element--muted/);
   assert.match(page, /@nodes-initialized="fitGraph"/);
+  assert.match(page, /:zoom-on-pinch="true"/);
   assert.match(page, /<div class="mind-map-canvas">/);
   assert.match(page, /flex: 1 1 auto/);
+  assert.match(page, /\.mind-map-canvas\s*\{[^}]*touch-action:\s*none/s);
+  assert.match(
+    page,
+    /\.mind-map-canvas :deep\(\.vue-flow__background\)\s*\{[^}]*pointer-events:\s*none/s,
+  );
   assert.match(
     page,
     /\.mind-map-canvas :deep\(\.vue-flow\)[\s\S]*position: absolute;[\s\S]*inset: 0/,
@@ -87,6 +93,18 @@ test('mind map node long-press menu edits in a dialog and confirms cascading del
   assert.match(page, /确认删除/);
   assert.match(page, /\.map\(\(edge\) => \(\{ kind: 'delete_edge', id: edge\.id \}\)\)/);
   assert.match(page, /operations\.push\(\{ kind: 'delete_node', id: nodeId \}\)/);
+});
+
+test('mind map node information opens on desktop hover and mobile click with a close button', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+
+  assert.match(page, /@mouseenter="showNodeInfo\(id\)"/);
+  assert.match(page, /if \(\$q\.platform\.is\.mobile\) showNodeInfo\(node\.id\)/);
+  assert.match(page, /class="mind-map-node-info"/);
+  assert.match(page, /\{\{ data\.label \}\}/);
+  assert.match(page, /\{\{ data\.content \|\| '暂无节点内容' \}\}/);
+  assert.match(page, /aria-label="关闭节点信息"/);
+  assert.match(page, /@click="closeNodeInfo"/);
 });
 
 test('radial layout centers the root, groups connected depths into rings, and curves edges by facing handles', () => {
