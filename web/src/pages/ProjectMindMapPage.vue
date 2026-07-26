@@ -1,5 +1,5 @@
 <template>
-  <q-page class="page-shell mind-map-page">
+  <q-page class="mind-map-page">
     <PageToolbar :title="project ? `${project.name} · 思维图` : '项目思维图'" title-icon="hub">
       <q-select
         v-model="scopeSessionId"
@@ -12,10 +12,25 @@
         aria-label="思维图范围"
         class="mind-map-scope"
       />
-      <q-btn flat round dense icon="refresh" aria-label="刷新思维图" :loading="loading" @click="loadGraph">
+      <q-btn
+        flat
+        round
+        dense
+        icon="refresh"
+        aria-label="刷新思维图"
+        :loading="loading"
+        @click="loadGraph"
+      >
         <q-tooltip>刷新</q-tooltip>
       </q-btn>
-      <q-btn color="primary" icon="add" label="新增节点" no-caps :disable="loading" @click="addNode" />
+      <q-btn
+        color="primary"
+        icon="add"
+        label="新增节点"
+        no-caps
+        :disable="loading"
+        @click="openNewNodeDialog"
+      />
     </PageToolbar>
 
     <q-banner v-if="activeCard?.taskStatus" dense rounded class="mind-map-task-banner">
@@ -23,75 +38,130 @@
       异步整理：{{ taskStatusLabel(activeCard.taskStatus) }}
       <span v-if="activeCard.taskError"> · {{ activeCard.taskError }}</span>
       <template v-if="activeCard.taskStatus === 'failed' && activeCard.taskId" #action>
-        <q-btn flat dense icon="refresh" label="重试" no-caps @click="retryTask(activeCard.taskId)" />
+        <q-btn
+          flat
+          dense
+          icon="refresh"
+          label="重试"
+          no-caps
+          @click="retryTask(activeCard.taskId)"
+        />
       </template>
     </q-banner>
 
-    <div class="mind-map-layout">
-      <q-card flat bordered class="mind-map-canvas">
-        <VueFlow
-          id="project-mind-map-flow"
-          v-model:nodes="flowNodes"
-          v-model:edges="flowEdges"
-          :min-zoom="0.2"
-          :max-zoom="2"
-          :nodes-connectable="true"
-          :elements-selectable="true"
-          fit-view-on-init
-          @node-click="selectNode"
-          @edge-click="selectEdge"
-          @node-drag-stop="saveNodePosition"
-          @connect="createEdge"
-        >
-          <Background pattern-color="var(--ac-border)" :gap="24" />
-          <Controls position="top-right" />
-        </VueFlow>
-      </q-card>
-
-      <q-card flat bordered class="mind-map-editor">
-        <q-card-section class="row items-center">
-          <div class="text-subtitle1 text-weight-bold">编辑</div>
-          <q-space />
-          <q-chip v-if="scopeSessionId" dense outline color="primary">卡片隔离视图</q-chip>
-          <q-chip v-else dense outline color="positive">项目主图</q-chip>
-        </q-card-section>
-        <q-separator />
-        <q-card-section v-if="selectedNode" class="q-gutter-md">
-          <q-input v-model="nodeTitle" dense outlined label="节点标题" :disable="rootSelected" />
-          <q-input v-model="nodeContent" outlined autogrow type="textarea" label="节点内容" :disable="rootSelected" />
-          <div class="row justify-end q-gutter-sm">
-            <q-btn
-              v-if="!rootSelected"
-              flat
-              color="negative"
-              icon="delete"
-              label="删除"
-              no-caps
-              @click="deleteNode"
+    <div class="mind-map-canvas">
+      <VueFlow
+        id="project-mind-map-flow"
+        v-model:nodes="flowNodes"
+        v-model:edges="flowEdges"
+        :min-zoom="0.2"
+        :max-zoom="2"
+        :nodes-connectable="true"
+        :elements-selectable="true"
+        @node-click="selectNode"
+        @nodes-initialized="fitGraph"
+        @pane-click="clearSelection"
+        @connect="createEdge"
+      >
+        <template #node-radial="{ id, data }">
+          <div
+            v-touch-hold.mouse="() => openNodeMenu(id)"
+            class="mind-map-node-content"
+            @contextmenu.prevent="openNodeMenu(id)"
+          >
+            <Handle
+              v-for="side in handleSides"
+              :id="`target-${side}`"
+              :key="`target-${side}`"
+              type="target"
+              :position="handlePosition(side)"
             />
+            <Handle
+              v-for="side in handleSides"
+              :id="`source-${side}`"
+              :key="`source-${side}`"
+              type="source"
+              :position="handlePosition(side)"
+            />
+            <span>{{ data.label }}</span>
+            <q-menu
+              no-parent-event
+              :model-value="menuNodeId === id"
+              @update:model-value="syncNodeMenu(id, $event)"
+              @click.stop
+            >
+              <q-list dense class="app-touch-list mind-map-node-menu">
+                <q-item-label header>节点操作</q-item-label>
+                <q-item
+                  v-close-popup
+                  clickable
+                  :disable="id === rootNodeId"
+                  @click="openNodeEditor(id)"
+                >
+                  <q-item-section avatar><q-icon name="edit" /></q-item-section>
+                  <q-item-section>编辑</q-item-section>
+                </q-item>
+                <q-item
+                  v-close-popup
+                  clickable
+                  :disable="id === rootNodeId"
+                  class="text-negative"
+                  @click="openDeleteDialog(id)"
+                >
+                  <q-item-section avatar><q-icon name="delete" /></q-item-section>
+                  <q-item-section>删除</q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </div>
+        </template>
+        <Background pattern-color="var(--ac-border)" :gap="24" />
+        <Controls position="top-right" />
+      </VueFlow>
+    </div>
+
+    <q-dialog v-model="editDialog">
+      <q-card class="mind-map-dialog">
+        <q-form @submit.prevent="saveNode">
+          <q-card-section>
+            <div class="text-subtitle1 text-weight-bold">
+              {{ editingNodeId ? '编辑节点' : '新增节点' }}
+            </div>
+          </q-card-section>
+          <q-card-section class="q-gutter-md">
+            <q-input v-model="nodeTitle" dense outlined autofocus label="节点标题" />
+            <q-input v-model="nodeContent" outlined autogrow type="textarea" label="节点内容" />
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn v-close-popup flat label="取消" no-caps />
             <q-btn
               color="primary"
-              icon="save"
+              type="submit"
               label="保存"
               no-caps
-              :disable="rootSelected || !nodeTitle.trim()"
-              @click="saveNode"
+              :loading="saving"
+              :disable="!nodeTitle.trim()"
             />
-          </div>
-          <q-banner v-if="rootSelected" dense rounded>项目名根节点固定在中心，只能作为关系端点。</q-banner>
-        </q-card-section>
-        <q-card-section v-else-if="selectedEdge" class="q-gutter-md">
-          <q-input v-model="edgeLabel" dense outlined label="关系说明" />
-          <div class="row justify-end q-gutter-sm">
-            <q-btn flat color="negative" icon="delete" label="删除" no-caps @click="deleteEdge" />
-            <q-btn color="primary" icon="save" label="保存" no-caps @click="saveEdge" />
-          </div>
-        </q-card-section>
-        <q-card-section v-else>
-          <q-banner rounded class="empty-lane-banner">选择节点或关系进行编辑，也可拖动连接点创建关系。</q-banner>
-        </q-card-section>
+          </q-card-actions>
+        </q-form>
       </q-card>
-    </div>
+    </q-dialog>
+
+    <q-dialog v-model="deleteDialog">
+      <q-card class="confirm-dialog mind-map-dialog">
+        <q-card-section>
+          <div class="text-subtitle1 text-weight-bold">删除节点</div>
+        </q-card-section>
+        <q-card-section>
+          确认删除“{{ deletingNode?.title }}”吗？与该节点直接关联的
+          {{ deletingEdgeCount }} 条连线也会同步删除。
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="取消" no-caps />
+          <q-btn color="negative" label="删除" no-caps :loading="saving" @click="deleteNode" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
 
     <q-inner-loading :showing="loading"><q-spinner color="primary" size="32px" /></q-inner-loading>
   </q-page>
@@ -103,11 +173,11 @@ import { useRoute } from 'vue-router';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import {
+  Handle,
+  Position,
   useVueFlow,
   VueFlow,
   type Connection,
-  type EdgeMouseEvent,
-  type NodeDragEvent,
   type NodeMouseEvent,
 } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
@@ -116,6 +186,7 @@ import '@vue-flow/controls/dist/style.css';
 
 import PageToolbar from '@/components/PageToolbar.vue';
 import { useProjects } from '@/composables/useProjects';
+import { buildRadialLayout, radialEdgeHandles } from '@/services/mindMapFlowModel';
 import {
   getProjectMindMap,
   listProjectMindMapCards,
@@ -133,14 +204,19 @@ const { fitView } = useVueFlow('project-mind-map-flow');
 const projectId = computed(() => String(route.params.projectId ?? ''));
 const project = computed(() => projects.value.find((item) => item.id === projectId.value));
 const loading = ref(false);
+const saving = ref(false);
 const graph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt: '' });
 const cards = ref<MindMapCard[]>([]);
 const scopeSessionId = ref('');
 const selectedNodeId = ref('');
-const selectedEdgeId = ref('');
+const menuNodeId = ref('');
+const editingNodeId = ref('');
+const deletingNodeId = ref('');
+const editDialog = ref(false);
+const deleteDialog = ref(false);
 const nodeTitle = ref('');
 const nodeContent = ref('');
-const edgeLabel = ref('');
+const handleSides = ['top', 'right', 'bottom', 'left'] as const;
 
 const scopeOptions = computed(() => [
   { label: '项目主图', value: '' },
@@ -149,25 +225,62 @@ const scopeOptions = computed(() => [
     value: card.sessionId,
   })),
 ]);
-const activeCard = computed(() => cards.value.find((card) => card.sessionId === scopeSessionId.value));
-const selectedNode = computed(() => graph.value.nodes.find((node) => node.id === selectedNodeId.value));
-const selectedEdge = computed(() => graph.value.edges.find((edge) => edge.id === selectedEdgeId.value));
-const rootSelected = computed(() => selectedNodeId.value === rootNodeId);
+const activeCard = computed(() =>
+  cards.value.find((card) => card.sessionId === scopeSessionId.value),
+);
+const radialLayout = computed(() =>
+  buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
+);
+const directlyRelatedNodeIds = computed(() => {
+  const related = new Set<string>();
+  if (!selectedNodeId.value) return related;
+  related.add(selectedNodeId.value);
+  for (const edge of graph.value.edges) {
+    if (edge.sourceId === selectedNodeId.value) related.add(edge.targetId);
+    if (edge.targetId === selectedNodeId.value) related.add(edge.sourceId);
+  }
+  return related;
+});
+const directlyRelatedEdgeIds = computed(() => {
+  if (!selectedNodeId.value) return new Set<string>();
+  return new Set(
+    graph.value.edges
+      .filter(
+        (edge) => edge.sourceId === selectedNodeId.value || edge.targetId === selectedNodeId.value,
+      )
+      .map((edge) => edge.id),
+  );
+});
+const deletingNode = computed(() =>
+  graph.value.nodes.find((node) => node.id === deletingNodeId.value),
+);
+const deletingEdgeCount = computed(
+  () =>
+    graph.value.edges.filter(
+      (edge) => edge.sourceId === deletingNodeId.value || edge.targetId === deletingNodeId.value,
+    ).length,
+);
 const flowNodes = computed({
   get: () =>
     graph.value.nodes.map((node) => ({
       id: node.id,
+      type: 'radial',
       label: node.title,
       data: { label: node.title },
-      position: { x: node.x, y: node.y },
-      draggable: node.id !== rootNodeId,
+      position: radialLayout.value[node.id] ?? { x: 0, y: 0 },
+      draggable: false,
+      class: {
+        'mind-map-node--root': node.id === rootNodeId,
+        'mind-map-node--active': node.id === selectedNodeId.value,
+        'mind-map-node--related':
+          Boolean(selectedNodeId.value) &&
+          node.id !== selectedNodeId.value &&
+          directlyRelatedNodeIds.value.has(node.id),
+        'mind-map-element--muted':
+          Boolean(selectedNodeId.value) && !directlyRelatedNodeIds.value.has(node.id),
+      },
     })),
-  set: (nodes) => {
-    for (const flowNode of nodes) {
-      const node = graph.value.nodes.find((item) => item.id === flowNode.id);
-      if (node && node.id !== rootNodeId) Object.assign(node, flowNode.position);
-    }
-  },
+  set: () => undefined,
 });
 const flowEdges = computed({
   get: () =>
@@ -176,7 +289,13 @@ const flowEdges = computed({
       source: edge.sourceId,
       target: edge.targetId,
       label: edge.label,
-      type: 'smoothstep',
+      type: 'default',
+      ...radialEdgeHandles(edge, radialLayout.value),
+      class: {
+        'mind-map-edge--active': directlyRelatedEdgeIds.value.has(edge.id),
+        'mind-map-element--muted':
+          Boolean(selectedNodeId.value) && !directlyRelatedEdgeIds.value.has(edge.id),
+      },
     })),
   set: () => undefined,
 });
@@ -198,7 +317,7 @@ async function loadGraph() {
   try {
     graph.value = await getProjectMindMap(projectId.value, scopeSessionId.value);
     clearSelection();
-    requestAnimationFrame(() => void fitView({ padding: 0.2 }));
+    fitGraph();
   } finally {
     loading.value = false;
   }
@@ -210,58 +329,90 @@ async function applyOperations(operations: MindMapOperation[]) {
     ...(scopeSessionId.value ? { sessionId: scopeSessionId.value } : {}),
     operations,
   });
+  fitGraph();
   await loadCards();
 }
 
-async function addNode() {
-  const id = crypto.randomUUID();
-  await applyOperations([
-    { kind: 'upsert_node', id, title: '新节点', content: '', x: 220, y: graph.value.nodes.length * 72 },
-  ]);
-  selectedNodeId.value = id;
-  syncNodeDraft();
+function fitGraph() {
+  requestAnimationFrame(() => void fitView({ padding: 0.2 }));
 }
 
 function selectNode({ node }: NodeMouseEvent) {
   selectedNodeId.value = node.id;
-  selectedEdgeId.value = '';
-  syncNodeDraft();
 }
 
-function selectEdge({ edge }: EdgeMouseEvent) {
-  selectedEdgeId.value = edge.id;
-  selectedNodeId.value = '';
-  edgeLabel.value = graph.value.edges.find((item) => item.id === edge.id)?.label ?? '';
+function openNodeMenu(nodeId: string) {
+  selectedNodeId.value = nodeId;
+  menuNodeId.value = nodeId;
 }
 
-function syncNodeDraft() {
-  nodeTitle.value = selectedNode.value?.title ?? '';
-  nodeContent.value = selectedNode.value?.content ?? '';
+function syncNodeMenu(nodeId: string, open: boolean) {
+  if (open) {
+    openNodeMenu(nodeId);
+  } else if (menuNodeId.value === nodeId) {
+    menuNodeId.value = '';
+  }
+}
+
+function openNewNodeDialog() {
+  editingNodeId.value = '';
+  nodeTitle.value = '';
+  nodeContent.value = '';
+  editDialog.value = true;
+}
+
+function openNodeEditor(nodeId: string) {
+  const node = graph.value.nodes.find((item) => item.id === nodeId);
+  if (!node || node.id === rootNodeId) return;
+  editingNodeId.value = node.id;
+  nodeTitle.value = node.title;
+  nodeContent.value = node.content;
+  editDialog.value = true;
+}
+
+function openDeleteDialog(nodeId: string) {
+  if (nodeId === rootNodeId || !graph.value.nodes.some((node) => node.id === nodeId)) return;
+  deletingNodeId.value = nodeId;
+  deleteDialog.value = true;
 }
 
 async function saveNode() {
-  if (!selectedNode.value || rootSelected.value || !nodeTitle.value.trim()) return;
-  await applyOperations([
-    { kind: 'upsert_node', id: selectedNode.value.id, title: nodeTitle.value, content: nodeContent.value },
-  ]);
+  const title = nodeTitle.value.trim();
+  if (!title || editingNodeId.value === rootNodeId) return;
+  saving.value = true;
+  try {
+    const nodeId = editingNodeId.value || crypto.randomUUID();
+    const operation: MindMapOperation = {
+      kind: 'upsert_node',
+      id: nodeId,
+      title,
+      content: nodeContent.value,
+      ...(editingNodeId.value ? {} : { x: 0, y: 0 }),
+    };
+    await applyOperations([operation]);
+    selectedNodeId.value = nodeId;
+    editDialog.value = false;
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function deleteNode() {
-  if (!selectedNode.value || rootSelected.value) return;
-  const nodeId = selectedNode.value.id;
+  if (!deletingNode.value || deletingNode.value.id === rootNodeId) return;
+  const nodeId = deletingNode.value.id;
   const operations: MindMapOperation[] = graph.value.edges
     .filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId)
     .map((edge) => ({ kind: 'delete_edge', id: edge.id }));
   operations.push({ kind: 'delete_node', id: nodeId });
-  await applyOperations(operations);
-  clearSelection();
-}
-
-async function saveNodePosition({ node }: NodeDragEvent) {
-  if (node.id === rootNodeId) return;
-  await applyOperations([
-    { kind: 'upsert_node', id: node.id, x: node.position.x, y: node.position.y },
-  ]);
+  saving.value = true;
+  try {
+    await applyOperations(operations);
+    deleteDialog.value = false;
+    deletingNodeId.value = '';
+    clearSelection();
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function createEdge(connection: Connection) {
@@ -277,15 +428,10 @@ async function createEdge(connection: Connection) {
   ]);
 }
 
-async function saveEdge() {
-  if (!selectedEdge.value) return;
-  await applyOperations([{ kind: 'upsert_edge', id: selectedEdge.value.id, label: edgeLabel.value }]);
-}
-
-async function deleteEdge() {
-  if (!selectedEdge.value) return;
-  await applyOperations([{ kind: 'delete_edge', id: selectedEdge.value.id }]);
-  clearSelection();
+function handlePosition(side: (typeof handleSides)[number]) {
+  return { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left }[
+    side
+  ];
 }
 
 async function retryTask(taskId: string) {
@@ -295,19 +441,22 @@ async function retryTask(taskId: string) {
 
 function clearSelection() {
   selectedNodeId.value = '';
-  selectedEdgeId.value = '';
 }
 
 function taskStatusLabel(status: string) {
-  return { queued: '排队中', running: '整理中', failed: '失败', completed: '已完成' }[status] ?? status;
+  return (
+    { queued: '排队中', running: '整理中', failed: '失败', completed: '已完成' }[status] ?? status
+  );
 }
 </script>
 
 <style scoped>
 .mind-map-page {
+  position: relative;
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .mind-map-scope {
@@ -315,42 +464,120 @@ function taskStatusLabel(status: string) {
 }
 
 .mind-map-task-banner {
-  margin: 8px 16px 0;
-}
-
-.mind-map-layout {
-  display: grid;
-  min-height: 0;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
-  padding: 12px 16px 16px;
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 16px;
+  max-width: calc(100% - 96px);
 }
 
 .mind-map-canvas {
-  min-height: 560px;
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
+  border-radius: 0;
 }
 
 .mind-map-canvas :deep(.vue-flow) {
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
 }
 
-.mind-map-editor {
-  min-width: 0;
+.mind-map-node-content {
+  display: flex;
+  width: 172px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px solid var(--ac-border);
+  border-radius: 24px;
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-card);
+  color: var(--ac-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.mind-map-node-content > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mind-map-canvas :deep(.vue-flow__node) {
+  transition: opacity 160ms ease;
+}
+
+.mind-map-canvas :deep(.mind-map-node--root .mind-map-node-content) {
+  border-color: var(--q-primary);
+  background: var(--q-primary);
+  color: white;
+}
+
+.mind-map-canvas :deep(.mind-map-node--active .mind-map-node-content) {
+  border-color: var(--q-primary);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--q-primary) 24%, transparent),
+    var(--ac-shadow-card);
+}
+
+.mind-map-canvas :deep(.mind-map-node--related .mind-map-node-content) {
+  border-color: var(--q-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 14%, transparent);
+}
+
+.mind-map-canvas :deep(.mind-map-element--muted) {
+  opacity: 0.16;
+}
+
+.mind-map-canvas :deep(.vue-flow__edge-path) {
+  transition:
+    stroke 160ms ease,
+    stroke-width 160ms ease,
+    opacity 160ms ease;
+}
+
+.mind-map-canvas :deep(.mind-map-edge--active .vue-flow__edge-path) {
+  stroke: var(--q-primary);
+  stroke-width: 3;
+}
+
+.mind-map-canvas :deep(.vue-flow__handle) {
+  width: 7px;
+  height: 7px;
+  border-color: var(--ac-surface);
+  background: var(--q-primary);
+}
+
+.mind-map-canvas :deep(.vue-flow__handle.target) {
+  opacity: 0;
+}
+
+.mind-map-dialog {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.mind-map-node-menu {
+  min-width: 160px;
 }
 
 @media (max-width: 699px) {
-  .mind-map-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .mind-map-canvas {
-    min-height: 55dvh;
-  }
-
   .mind-map-scope {
     width: 180px;
+  }
+
+  .mind-map-task-banner {
+    left: 8px;
+    max-width: calc(100% - 64px);
   }
 }
 </style>
