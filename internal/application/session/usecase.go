@@ -1668,15 +1668,6 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
 		}
 	}
-	generatedID, err := s.generateID()
-	if err != nil {
-		return DTO{}, fmt.Errorf("generate session id: %w", err)
-	}
-	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
-	if err != nil {
-		return DTO{}, err
-	}
-	now := s.now()
 	baseBranch := ""
 	worktreeOwnershipToken := ""
 	if project.IsGit && mode != domain.ModeTerminal {
@@ -1689,11 +1680,33 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		if s.worktrees == nil {
 			return DTO{}, errors.New("session worktree manager is required for git project")
 		}
+		baseBranchExists, err := s.worktrees.BaseBranchExists(ctx, project.Path.Value, baseBranch)
+		if err != nil {
+			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "check base branch failed").WithDetails(map[string]any{
+				"projectId":  string(input.ProjectID),
+				"baseBranch": baseBranch,
+			}).WithRetryable(true)
+		}
+		if !baseBranchExists {
+			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "base branch does not exist").WithDetails(map[string]any{
+				"projectId":  string(input.ProjectID),
+				"baseBranch": baseBranch,
+			}).WithUserAction("select_base_branch")
+		}
 		worktreeOwnershipToken, err = generateWorktreeOwnershipToken()
 		if err != nil {
 			return DTO{}, fmt.Errorf("generate worktree ownership token: %w", err)
 		}
 	}
+	generatedID, err := s.generateID()
+	if err != nil {
+		return DTO{}, fmt.Errorf("generate session id: %w", err)
+	}
+	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
+	if err != nil {
+		return DTO{}, err
+	}
+	now := s.now()
 
 	createWithID := func(ctx context.Context, id domain.ID) (DTO, error) {
 		worktreePath := project.Path.Value

@@ -64,6 +64,59 @@ func TestHeadCommitReturnsEmptyForUnbornHead(t *testing.T) {
 	}
 }
 
+func TestBaseBranchExistsRequiresExactBranchRef(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
+	commit := gitOutput(t, dir, "rev-parse", "HEAD")
+	runGit(t, dir, "tag", "release")
+	runGit(t, dir, "update-ref", "refs/remotes/upstream/feature", commit)
+
+	client := New("")
+	tests := []struct {
+		branch string
+		want   bool
+	}{
+		{branch: "main", want: true},
+		{branch: "upstream/feature", want: true},
+		{branch: "feature", want: false},
+		{branch: "release", want: false},
+		{branch: commit, want: false},
+		{branch: "missing", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.branch, func(t *testing.T) {
+			got, err := client.BaseBranchExists(context.Background(), dir, tt.branch)
+			if err != nil {
+				t.Fatalf("BaseBranchExists() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("BaseBranchExists() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBaseBranchExistsAllowsUnbornRepository(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	exists, err := New("").BaseBranchExists(context.Background(), dir, "main")
+	if err != nil {
+		t.Fatalf("BaseBranchExists() error = %v", err)
+	}
+	if !exists {
+		t.Fatal("BaseBranchExists() rejected the orphan worktree base")
+	}
+}
+
 func TestRetainCommitKeepsClosedSessionHeadReachable(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")

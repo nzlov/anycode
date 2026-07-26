@@ -723,6 +723,7 @@ type ArtifactStore interface {
 }
 
 type WorktreeManager interface {
+	BaseBranchExists(ctx context.Context, projectPath string, branch string) (bool, error)
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, branch string, baseBranch string, ownershipToken string) (string, error)
 	InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (WorktreeOwnership, error)
 	HeadCommit(ctx context.Context, path string, ref string) (string, error)

@@ -157,6 +157,33 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
+func (c *Client) BaseBranchExists(ctx context.Context, projectPath string, branch string) (bool, error) {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return false, nil
+	}
+	hasCommits, err := c.hasCommits(ctx, projectPath)
+	if err != nil {
+		return false, err
+	}
+	if !hasCommits {
+		// Worktree creation uses an orphan branch when the repository has no commits.
+		return true, nil
+	}
+	refs := []string{"refs/heads/" + branch, "refs/remotes/" + branch}
+	out, err := c.run(ctx, projectPath, "for-each-ref", "--format=%(refname)", refs[0], refs[1])
+	if err != nil {
+		return false, err
+	}
+	for _, ref := range strings.Split(strings.TrimSpace(out), "\n") {
+		ref = strings.TrimSpace(ref)
+		if ref == refs[0] || ref == refs[1] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *Client) RetainCommit(ctx context.Context, projectPath string, sessionID session.ID, commit string) error {
 	commit = strings.TrimSpace(commit)
 	if commit == "" {

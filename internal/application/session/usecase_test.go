@@ -1113,6 +1113,40 @@ func TestCreateSessionRequiresBaseBranchForGitProject(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRejectsMissingBaseBranchBeforePersisting(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{baseBranchMissing: true}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.generateID = func() (domain.ID, error) {
+		t.Fatal("session ID should not be generated for a missing base branch")
+		return "", nil
+	}
+
+	_, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement app session",
+		BaseBranch:  "missing",
+	})
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeValidationFailed || appErr.UserAction != "select_base_branch" || appErr.Details["baseBranch"] != "missing" {
+		t.Fatalf("CreateSession() error = %#v", err)
+	}
+	if worktrees.baseBranchProjectPath != "/workspace/project-1" || worktrees.baseBranchName != "missing" {
+		t.Fatalf("BaseBranchExists() = path %q branch %q", worktrees.baseBranchProjectPath, worktrees.baseBranchName)
+	}
+	if worktrees.createCalled || len(repo.sessions) != 0 || len(repo.saved) != 0 {
+		t.Fatalf("missing branch produced side effects: create=%t sessions=%#v saved=%#v", worktrees.createCalled, repo.sessions, repo.saved)
+	}
+}
+
 func TestCreateSessionUsesProjectPathForNonGitProject(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -12455,33 +12489,36 @@ func (s *fakeAttachmentStore) Open(context.Context, string) (domain.AttachmentSt
 }
 
 type fakeWorktreeManager struct {
-	path              string
-	headCommit        string
-	createErr         error
-	headCommitErr     error
-	removeErr         error
-	deleteBranchErr   error
-	retainCommitErr   error
-	releaseOwnerErr   error
-	statErr           error
-	inspectErr        error
-	ownership         *domain.WorktreeOwnership
-	createCalled      bool
-	createProjectPath string
-	createProjectID   domain.ProjectID
-	createSessionID   domain.ID
-	createBaseBranch  string
-	headCommitPath    string
-	headCommitRef     string
-	removed           []string
-	deletedBranches   []string
-	retainedCommits   []string
-	releasedOwnership []string
-	operations        []string
-	missingPaths      map[string]bool
-	onCreate          func()
-	createStarted     chan struct{}
-	releaseCreate     <-chan struct{}
+	path                  string
+	headCommit            string
+	baseBranchMissing     bool
+	createErr             error
+	headCommitErr         error
+	removeErr             error
+	deleteBranchErr       error
+	retainCommitErr       error
+	releaseOwnerErr       error
+	statErr               error
+	inspectErr            error
+	ownership             *domain.WorktreeOwnership
+	createCalled          bool
+	baseBranchProjectPath string
+	baseBranchName        string
+	createProjectPath     string
+	createProjectID       domain.ProjectID
+	createSessionID       domain.ID
+	createBaseBranch      string
+	headCommitPath        string
+	headCommitRef         string
+	removed               []string
+	deletedBranches       []string
+	retainedCommits       []string
+	releasedOwnership     []string
+	operations            []string
+	missingPaths          map[string]bool
+	onCreate              func()
+	createStarted         chan struct{}
+	releaseCreate         <-chan struct{}
 }
 
 type fakeWorktreeInitializer struct {
@@ -12509,6 +12546,12 @@ func intPointer(value int) *int {
 
 func newFakeWorktreeManager() *fakeWorktreeManager {
 	return &fakeWorktreeManager{missingPaths: map[string]bool{}}
+}
+
+func (m *fakeWorktreeManager) BaseBranchExists(_ context.Context, projectPath string, branch string) (bool, error) {
+	m.baseBranchProjectPath = projectPath
+	m.baseBranchName = branch
+	return !m.baseBranchMissing, nil
 }
 
 func (m *fakeWorktreeManager) Create(ctx context.Context, projectPath string, projectID domain.ProjectID, sessionID domain.ID, branch string, baseBranch string, ownershipToken string) (string, error) {
