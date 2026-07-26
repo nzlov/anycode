@@ -159,7 +159,7 @@ func Materialize(graph Graph, changes []Change) Graph {
 
 func Visible(graph Graph) Graph {
 	result := graph
-	result.Nodes = result.Nodes[:0]
+	result.Nodes = make([]Node, 0, len(graph.Nodes))
 	visibleNodes := make(map[NodeID]struct{}, len(graph.Nodes))
 	for _, node := range graph.Nodes {
 		if node.DeletedAt != nil {
@@ -168,7 +168,7 @@ func Visible(graph Graph) Graph {
 		result.Nodes = append(result.Nodes, node)
 		visibleNodes[node.ID] = struct{}{}
 	}
-	result.Edges = result.Edges[:0]
+	result.Edges = make([]Edge, 0, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		if edge.DeletedAt != nil {
 			continue
@@ -249,17 +249,16 @@ func applyNode(graph *Graph, change Change) {
 }
 
 func deleteNode(graph *Graph, change Change) {
-	index := nodeIndex(graph.Nodes, NodeID(change.EntityID))
-	if index < 0 {
-		return
-	}
-	node := &graph.Nodes[index]
-	if change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt, node.PositionUpdatedAt)) {
-		return
-	}
-	if node.DeletedAt == nil || !change.OccurredAt.Before(*node.DeletedAt) {
-		deletedAt := change.OccurredAt
-		node.DeletedAt = &deletedAt
+	id := NodeID(change.EntityID)
+	for index := range graph.Nodes {
+		node := &graph.Nodes[index]
+		if node.ID != id || change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt, node.PositionUpdatedAt)) {
+			continue
+		}
+		if node.DeletedAt == nil || !change.OccurredAt.Before(*node.DeletedAt) {
+			deletedAt := change.OccurredAt
+			node.DeletedAt = &deletedAt
+		}
 	}
 }
 
@@ -289,17 +288,16 @@ func applyEdge(graph *Graph, change Change) {
 }
 
 func deleteEdge(graph *Graph, change Change) {
-	index := edgeIndex(graph.Edges, EdgeID(change.EntityID))
-	if index < 0 {
-		return
-	}
-	edge := &graph.Edges[index]
-	if change.OccurredAt.Before(latestTime(edge.SourceUpdatedAt, edge.TargetUpdatedAt, edge.LabelUpdatedAt)) {
-		return
-	}
-	if edge.DeletedAt == nil || !change.OccurredAt.Before(*edge.DeletedAt) {
-		deletedAt := change.OccurredAt
-		edge.DeletedAt = &deletedAt
+	id := EdgeID(change.EntityID)
+	for index := range graph.Edges {
+		edge := &graph.Edges[index]
+		if edge.ID != id || change.OccurredAt.Before(latestTime(edge.SourceUpdatedAt, edge.TargetUpdatedAt, edge.LabelUpdatedAt)) {
+			continue
+		}
+		if edge.DeletedAt == nil || !change.OccurredAt.Before(*edge.DeletedAt) {
+			deletedAt := change.OccurredAt
+			edge.DeletedAt = &deletedAt
+		}
 	}
 }
 

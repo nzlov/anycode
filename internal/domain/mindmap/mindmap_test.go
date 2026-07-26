@@ -67,6 +67,70 @@ func TestMergeOverlayPreservesHistoryAndHidesDanglingEdges(t *testing.T) {
 	}
 }
 
+func TestVisibleDoesNotMutateSourceGraphWhileFilteringDeletedEntries(t *testing.T) {
+	deletedAt := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	graph := Graph{
+		Nodes: []Node{
+			{ID: RootNodeID},
+			{ID: "deleted", DeletedAt: &deletedAt},
+			{ID: "remaining"},
+		},
+		Edges: []Edge{
+			{ID: "deleted-edge", SourceID: RootNodeID, TargetID: "deleted"},
+			{ID: "remaining-edge", SourceID: RootNodeID, TargetID: "remaining"},
+		},
+	}
+
+	visible := Visible(graph)
+
+	if len(visible.Nodes) != 2 || visible.Nodes[1].ID != "remaining" {
+		t.Fatalf("visible nodes = %#v", visible.Nodes)
+	}
+	if len(visible.Edges) != 1 || visible.Edges[0].ID != "remaining-edge" {
+		t.Fatalf("visible edges = %#v", visible.Edges)
+	}
+	if len(graph.Nodes) != 3 || graph.Nodes[1].ID != "deleted" || graph.Nodes[2].ID != "remaining" {
+		t.Fatalf("source nodes mutated = %#v", graph.Nodes)
+	}
+	if len(graph.Edges) != 2 || graph.Edges[0].ID != "deleted-edge" || graph.Edges[1].ID != "remaining-edge" {
+		t.Fatalf("source edges mutated = %#v", graph.Edges)
+	}
+}
+
+func TestDeleteMarksEveryDuplicateEntityRecord(t *testing.T) {
+	base := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	deletedAt := base.Add(time.Minute)
+	graph := Graph{
+		Nodes: []Node{
+			{ID: RootNodeID},
+			{ID: "duplicate", Title: "duplicate", TitleUpdatedAt: base},
+			{ID: "duplicate", Title: "duplicate", TitleUpdatedAt: base},
+		},
+		Edges: []Edge{
+			{ID: "duplicate-edge", SourceID: RootNodeID, TargetID: "duplicate", SourceUpdatedAt: base, TargetUpdatedAt: base},
+			{ID: "duplicate-edge", SourceID: RootNodeID, TargetID: "duplicate", SourceUpdatedAt: base, TargetUpdatedAt: base},
+		},
+	}
+
+	Apply(&graph, Change{Kind: ChangeDeleteEdge, EntityID: "duplicate-edge", OccurredAt: deletedAt})
+	Apply(&graph, Change{Kind: ChangeDeleteNode, EntityID: "duplicate", OccurredAt: deletedAt})
+
+	for _, node := range graph.Nodes[1:] {
+		if node.DeletedAt == nil || !node.DeletedAt.Equal(deletedAt) {
+			t.Fatalf("duplicate node was not deleted: %#v", graph.Nodes)
+		}
+	}
+	for _, edge := range graph.Edges {
+		if edge.DeletedAt == nil || !edge.DeletedAt.Equal(deletedAt) {
+			t.Fatalf("duplicate edge was not deleted: %#v", graph.Edges)
+		}
+	}
+	visible := Visible(graph)
+	if len(visible.Nodes) != 1 || visible.Nodes[0].ID != RootNodeID || len(visible.Edges) != 0 {
+		t.Fatalf("visible graph retained duplicate entities: %#v", visible)
+	}
+}
+
 func timePointer(value time.Time) *time.Time {
 	return &value
 }
