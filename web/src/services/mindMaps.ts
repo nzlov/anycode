@@ -1,11 +1,13 @@
-import { graphqlFetch } from '@/services/graphqlClient';
+import {
+  graphqlFetch,
+  graphqlSubscribe,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
 
 export interface MindMapNode {
   id: string;
   title: string;
   content: string;
-  x: number;
-  y: number;
 }
 
 export interface MindMapEdge {
@@ -32,13 +34,17 @@ export interface MindMapCard {
   taskError: string;
 }
 
+export interface MindMapUpdate {
+  projectId: string;
+  sessionId?: string | null;
+  updatedAt: string;
+}
+
 export interface MindMapOperation {
   kind: 'upsert_node' | 'delete_node' | 'upsert_edge' | 'delete_edge';
   id: string;
   title?: string;
   content?: string;
-  x?: number;
-  y?: number;
   sourceId?: string;
   targetId?: string;
   label?: string;
@@ -47,7 +53,7 @@ export interface MindMapOperation {
 const graphFields = `
   projectId
   sessionId
-  nodes { id title content x y }
+  nodes { id title content }
   edges { id sourceId targetId label }
   updatedAt
 `;
@@ -117,4 +123,33 @@ export async function retryMindMapTask(id: string) {
     variables: { id },
   });
   return data.retryMindMapTask;
+}
+
+export function subscribeMindMapUpdates(
+  projectId: string,
+  sessionId: string,
+  handlers: {
+    onData: (update: MindMapUpdate) => void;
+    onError?: (error: Error) => void;
+    onClose?: (close: GraphQLSubscriptionClose) => void;
+  },
+) {
+  return graphqlSubscribe<
+    { mindMapUpdates: MindMapUpdate },
+    { projectId: string; sessionId?: string }
+  >({
+    query: `
+      subscription MindMapUpdates($projectId: ID!, $sessionId: ID) {
+        mindMapUpdates(projectId: $projectId, sessionId: $sessionId) {
+          projectId
+          sessionId
+          updatedAt
+        }
+      }
+    `,
+    variables: { projectId, ...(sessionId ? { sessionId } : {}) },
+    onData: (data) => handlers.onData(data.mindMapUpdates),
+    ...(handlers.onError ? { onError: handlers.onError } : {}),
+    ...(handlers.onClose ? { onClose: handlers.onClose } : {}),
+  });
 }

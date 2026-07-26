@@ -163,6 +163,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
 	}
+	if err := s.repairMindMapGraphs(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateWorkflowApprovalOutputFields(ctx); err != nil {
 		return err
 	}
@@ -203,6 +206,27 @@ func (s *Store) Migrate(ctx context.Context) error {
 		ON process_runs(session_id)
 		WHERE status IN ('starting', 'running', 'waiting_user', 'stopping')`); err != nil {
 		return fmt.Errorf("create active process run uniqueness index: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) repairMindMapGraphs(ctx context.Context) error {
+	rows, err := s.client.MindMapGraph.Query().All(ctx)
+	if err != nil {
+		return fmt.Errorf("list mind map graphs for repair: %w", err)
+	}
+	repo := s.MindMaps()
+	for _, row := range rows {
+		graph, _, err := repo.FindGraph(ctx, mindmap.ProjectID(row.ID))
+		if err != nil {
+			return err
+		}
+		if len(graph.Nodes) == len(row.Nodes) && len(graph.Edges) == len(row.Edges) {
+			continue
+		}
+		if err := repo.SaveGraph(ctx, graph); err != nil {
+			return fmt.Errorf("repair mind map graph %s: %w", row.ID, err)
+		}
 	}
 	return nil
 }

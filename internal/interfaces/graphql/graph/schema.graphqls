@@ -108,7 +108,14 @@ type Tunnel {
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
+  mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+}
+
+type MindMapUpdateEvent {
+  projectId: ID!
+  sessionId: ID
+  updatedAt: Time!
 }
 
 type TunnelCountEvent {
@@ -845,8 +852,6 @@ type MindMapNode {
   id: ID!
   title: String!
   content: String!
-  x: Float!
-  y: Float!
 }
 
 type MindMapEdge {
@@ -876,8 +881,6 @@ input MindMapOperationInput {
   id: ID!
   title: String
   content: String
-  x: Float
-  y: Float
   sourceId: ID
   targetId: ID
   label: String

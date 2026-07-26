@@ -264,23 +264,25 @@ type MindMapGraph struct {
 }
 
 type MindMapNode struct {
-	ID      string  `json:"id"`
-	Title   string  `json:"title"`
-	Content string  `json:"content"`
-	X       float64 `json:"x"`
-	Y       float64 `json:"y"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 type MindMapOperationInput struct {
-	Kind     string   `json:"kind"`
-	ID       string   `json:"id"`
-	Title    *string  `json:"title,omitempty"`
-	Content  *string  `json:"content,omitempty"`
-	X        *float64 `json:"x,omitempty"`
-	Y        *float64 `json:"y,omitempty"`
-	SourceID *string  `json:"sourceId,omitempty"`
-	TargetID *string  `json:"targetId,omitempty"`
-	Label    *string  `json:"label,omitempty"`
+	Kind     string  `json:"kind"`
+	ID       string  `json:"id"`
+	Title    *string `json:"title,omitempty"`
+	Content  *string `json:"content,omitempty"`
+	SourceID *string `json:"sourceId,omitempty"`
+	TargetID *string `json:"targetId,omitempty"`
+	Label    *string `json:"label,omitempty"`
+}
+
+type MindMapUpdateEvent struct {
+	ProjectID string    `json:"projectId"`
+	SessionID *string   `json:"sessionId,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Mutation struct {

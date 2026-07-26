@@ -185,27 +185,37 @@ func TestTunnelToolsUseCallingSessionOwnership(t *testing.T) {
 	}
 }
 
-func TestMindMapToolsForwardProcessIdentityAndFreeFormOperations(t *testing.T) {
+func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 	maps := &fakeMindMaps{graph: mindmapapp.GraphDTO{
 		ProjectID: "project-1", SessionID: "session-1",
 		Nodes: []mindmapapp.NodeDTO{{ID: mindmapdomain.RootNodeID, Title: "AnyCode"}},
+	}, searchResult: mindmapapp.SearchResultDTO{
+		ProjectID: "project-1", SessionID: "session-1", Query: "tool", TotalMatches: 1,
+		Matches:      []mindmapapp.NodeMatchDTO{{Node: mindmapapp.NodeDTO{ID: "tools", Title: "Dynamic tools", Content: "Agent tools"}, MatchedFields: []string{"title", "content"}}},
+		RelatedNodes: []mindmapapp.NodeDTO{{ID: "agent", Title: "Agent"}},
+		Edges:        []mindmapapp.EdgeDTO{{ID: "agent-tools", SourceID: "agent", TargetID: "tools", Label: "uses"}},
 	}}
 	service := New(nil, nil, WithMindMaps(maps))
 	call := processdomain.DynamicToolCall{ProcessRunID: "run-1", SessionID: "session-1"}
 
-	call.Tool = string(processdomain.DynamicToolMindMapGet)
-	result, err := service.HandleDynamicTool(context.Background(), call)
+	call.Tool = string(processdomain.DynamicToolMindMapSearch)
+	call.Arguments = json.RawMessage(`{"query":"tool","limit":5}`)
+	searchResult, err := service.HandleDynamicTool(context.Background(), call)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if maps.processRunID != "run-1" || maps.sessionID != "session-1" || !strings.Contains(result.Content[0].Text, `"projectId":"project-1"`) {
-		t.Fatalf("get = maps:%#v result:%#v", maps, result)
+	if maps.query != "tool" || maps.limit != 5 || !strings.Contains(searchResult.Content[0].Text, `"matchedFields":["title","content"]`) || !strings.Contains(searchResult.Content[0].Text, `"agent-tools"`) {
+		t.Fatalf("search = maps:%#v result:%#v", maps, searchResult)
 	}
 
 	call.Tool = string(processdomain.DynamicToolMindMapUpdate)
-	call.Arguments = json.RawMessage(`{"operations":[{"kind":"upsert_node","id":"feature","title":"Feature","content":"Details","x":10,"y":20}]}`)
-	if _, err := service.HandleDynamicTool(context.Background(), call); err != nil {
+	call.Arguments = json.RawMessage(`{"operations":[{"kind":"upsert_node","id":"feature","title":"Feature","content":"Details"}]}`)
+	updateResult, err := service.HandleDynamicTool(context.Background(), call)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if strings.Contains(updateResult.Content[0].Text, `"nodes"`) || !strings.Contains(updateResult.Content[0].Text, `"appliedOperations":1`) {
+		t.Fatalf("update result = %#v", updateResult)
 	}
 	if len(maps.operations) != 1 || maps.operations[0].ID != "feature" || maps.operations[0].Title == nil || *maps.operations[0].Title != "Feature" || maps.operations[0].Content == nil || *maps.operations[0].Content != "Details" {
 		t.Fatalf("operations = %#v", maps.operations)
@@ -260,14 +270,19 @@ type fakeTunnels struct {
 type fakeMindMaps struct {
 	processRunID string
 	sessionID    mindmapdomain.SessionID
+	query        string
+	limit        int
 	operations   []mindmapapp.OperationInput
 	graph        mindmapapp.GraphDTO
+	searchResult mindmapapp.SearchResultDTO
 }
 
-func (f *fakeMindMaps) GetForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID) (mindmapapp.GraphDTO, error) {
+func (f *fakeMindMaps) SearchForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, query string, limit int) (mindmapapp.SearchResultDTO, error) {
 	f.processRunID = processRunID
 	f.sessionID = sessionID
-	return f.graph, nil
+	f.query = query
+	f.limit = limit
+	return f.searchResult, nil
 }
 
 func (f *fakeMindMaps) UpdateForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error) {

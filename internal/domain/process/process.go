@@ -19,7 +19,7 @@ type NodeRunID string
 type DynamicToolName string
 
 const (
-	DynamicToolMindMapGet    DynamicToolName = "mind_map_get"
+	DynamicToolMindMapSearch DynamicToolName = "mind_map_search"
 	DynamicToolMindMapUpdate DynamicToolName = "mind_map_update"
 )
 

@@ -91,8 +91,8 @@ test('mind map node long-press menu edits in a dialog and confirms cascading del
   assert.match(page, /<q-dialog v-model="editDialog">/);
   assert.match(page, /<q-dialog v-model="deleteDialog">/);
   assert.match(page, /确认删除/);
-  assert.match(page, /\.map\(\(edge\) => \(\{ kind: 'delete_edge', id: edge\.id \}\)\)/);
-  assert.match(page, /operations\.push\(\{ kind: 'delete_node', id: nodeId \}\)/);
+  assert.match(page, /applyOperations\(\[\{ kind: 'delete_node', id: nodeId \}\]\)/);
+  assert.doesNotMatch(page, /\.map\(\(edge\) => \(\{ kind: 'delete_edge'/);
 });
 
 test('mind map node information opens on desktop hover and mobile click with a close button', () => {
@@ -155,6 +155,20 @@ test('GraphQL exposes project main and card graphs plus async task state', () =>
   assert.match(schema, /projectMindMapCards\(projectId: ID!\): \[MindMapCard!/);
   assert.match(schema, /updateProjectMindMap\(input: UpdateMindMapInput!\): MindMapGraph!/);
   assert.match(schema, /retryMindMapTask\(id: ID!\): MindMapCard!/);
+  assert.match(schema, /mindMapUpdates\(projectId: ID!, sessionId: ID\): MindMapUpdateEvent!/);
   assert.match(schema, /taskStatus: String!/);
   assert.match(schema, /taskError: String!/);
+});
+
+test('mind map refresh rejects stale scope responses and follows graph and task changes', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+  const service = readSource('../src/services/mindMaps.ts');
+
+  assert.match(page, /requestRevision !== graphRequestRevision/);
+  assert.match(page, /requestedSessionId !== scopeSessionId\.value/);
+  assert.match(page, /subscribeMindMapUpdates/);
+  assert.match(page, /card\.taskStatus === 'queued' \|\| card\.taskStatus === 'running'/);
+  assert.match(page, /Promise\.all\(\[loadCards\(\), loadGraph\(\)\]\)/);
+  assert.match(service, /subscription MindMapUpdates/);
+  assert.doesNotMatch(service, /nodes \{ id title content x y \}/);
 });

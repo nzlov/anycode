@@ -116,7 +116,7 @@ func mapProject(dto projectapp.DTO) *model.Project {
 func mapMindMapGraph(dto mindmapapp.GraphDTO) *model.MindMapGraph {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
-		nodes = append(nodes, &model.MindMapNode{ID: string(node.ID), Title: node.Title, Content: node.Content, X: node.X, Y: node.Y})
+		nodes = append(nodes, &model.MindMapNode{ID: string(node.ID), Title: node.Title, Content: node.Content})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
 	for _, edge := range dto.Edges {

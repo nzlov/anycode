@@ -734,24 +734,39 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if len(base) != 5 {
 		t.Fatalf("base dynamic tools = %#v", base)
 	}
-	queryOnly := anyCodeDynamicTools(process.DynamicToolMindMapGet)
-	if len(queryOnly) != 6 || queryOnly[5]["name"] != string(process.DynamicToolMindMapGet) {
+	queryOnly := anyCodeDynamicTools(process.DynamicToolMindMapSearch)
+	if len(queryOnly) != 6 || queryOnly[5]["name"] != string(process.DynamicToolMindMapSearch) {
 		t.Fatalf("query tools = %#v", queryOnly)
 	}
-	realtime := anyCodeDynamicTools(process.DynamicToolMindMapGet, process.DynamicToolMindMapUpdate)
+	searchSchema := queryOnly[5]["inputSchema"].(map[string]any)
+	if searchSchema["required"].([]string)[0] != "query" {
+		t.Fatalf("search schema = %#v", searchSchema)
+	}
+	realtime := anyCodeDynamicTools(process.DynamicToolMindMapSearch, process.DynamicToolMindMapUpdate)
 	if len(realtime) != 7 || realtime[6]["name"] != string(process.DynamicToolMindMapUpdate) {
 		t.Fatalf("realtime tools = %#v", realtime)
 	}
 	description, _ := realtime[6]["description"].(string)
-	if !strings.Contains(description, "Do not create nodes solely to record errors") {
+	if !strings.Contains(description, "Each node must express exactly one durable concept") {
 		t.Fatalf("mind map update description = %q", description)
 	}
 	updateSchema := realtime[6]["inputSchema"].(map[string]any)
 	operations := updateSchema["properties"].(map[string]any)["operations"].(map[string]any)
+	if operations["maxItems"] != 100 {
+		t.Fatalf("mind map operation limit = %#v", operations)
+	}
 	operation := operations["items"].(map[string]any)
-	properties := operation["properties"].(map[string]any)
-	if properties["title"] == nil || properties["content"] == nil || properties["sourceId"] == nil || properties["targetId"] == nil || properties["label"] == nil {
-		t.Fatalf("mind map operation schema = %#v", properties)
+	variants := operation["oneOf"].([]map[string]any)
+	if len(variants) != 4 {
+		t.Fatalf("mind map operation schema = %#v", operation)
+	}
+	if anyOf, ok := variants[0]["anyOf"].([]map[string]any); !ok || len(anyOf) != 2 {
+		t.Fatalf("node upsert must allow title or content updates: %#v", variants[0])
+	}
+	for _, variant := range variants {
+		if properties := variant["properties"].(map[string]any); properties["x"] != nil || properties["y"] != nil {
+			t.Fatalf("mind map operation retained unused coordinates = %#v", properties)
+		}
 	}
 }
 

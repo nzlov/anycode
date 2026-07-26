@@ -38,10 +38,11 @@ func (r *MindMapRepository) FindGraph(ctx context.Context, projectID mindmap.Pro
 	if err != nil {
 		return mindmap.Graph{}, false, fmt.Errorf("decode mind map history: %w", err)
 	}
-	return mindmap.Graph{ProjectID: projectID, Nodes: nodes, Edges: edges, History: history, UpdatedAt: row.UpdatedAt}, true, nil
+	return mindmap.Normalize(mindmap.Graph{ProjectID: projectID, Nodes: nodes, Edges: edges, History: history, UpdatedAt: row.UpdatedAt}), true, nil
 }
 
 func (r *MindMapRepository) SaveGraph(ctx context.Context, graph mindmap.Graph) error {
+	graph = mindmap.Normalize(graph)
 	nodes, err := encodeMindMapJSON(graph.Nodes)
 	if err != nil {
 		return fmt.Errorf("encode mind map nodes: %w", err)

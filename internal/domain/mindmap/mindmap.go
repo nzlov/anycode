@@ -45,15 +45,12 @@ type Graph struct {
 }
 
 type Node struct {
-	ID                NodeID
-	Title             string
-	Content           string
-	X                 float64
-	Y                 float64
-	TitleUpdatedAt    time.Time
-	ContentUpdatedAt  time.Time
-	PositionUpdatedAt time.Time
-	DeletedAt         *time.Time
+	ID               NodeID
+	Title            string
+	Content          string
+	TitleUpdatedAt   time.Time
+	ContentUpdatedAt time.Time
+	DeletedAt        *time.Time
 }
 
 type Edge struct {
@@ -75,8 +72,6 @@ type Change struct {
 	EntityID   string
 	Title      *string
 	Content    *string
-	X          *float64
-	Y          *float64
 	SourceID   *NodeID
 	TargetID   *NodeID
 	Label      *string
@@ -129,22 +124,30 @@ func EnsureRoot(graph *Graph, projectName string, updatedAt time.Time) {
 	index := nodeIndex(graph.Nodes, RootNodeID)
 	if index < 0 {
 		graph.Nodes = append(graph.Nodes, Node{
-			ID: RootNodeID, Title: projectName, X: 0, Y: 0,
-			TitleUpdatedAt: updatedAt, PositionUpdatedAt: updatedAt,
+			ID: RootNodeID, Title: projectName, TitleUpdatedAt: updatedAt,
 		})
 		return
 	}
 	root := &graph.Nodes[index]
 	root.Title = projectName
-	root.X = 0
-	root.Y = 0
 	root.DeletedAt = nil
 	if updatedAt.After(root.TitleUpdatedAt) {
 		root.TitleUpdatedAt = updatedAt
 	}
-	if updatedAt.After(root.PositionUpdatedAt) {
-		root.PositionUpdatedAt = updatedAt
+}
+
+func Touch(graph *Graph, updatedAt time.Time) {
+	if graph == nil {
+		return
 	}
+	graph.UpdatedAt = NextUpdatedAt(graph.UpdatedAt, updatedAt)
+}
+
+func NextUpdatedAt(current, updatedAt time.Time) time.Time {
+	if updatedAt.After(current) {
+		return updatedAt
+	}
+	return current.Add(time.Nanosecond)
 }
 
 func Materialize(graph Graph, changes []Change) Graph {
@@ -158,18 +161,20 @@ func Materialize(graph Graph, changes []Change) Graph {
 }
 
 func Visible(graph Graph) Graph {
-	result := graph
-	result.Nodes = make([]Node, 0, len(graph.Nodes))
-	visibleNodes := make(map[NodeID]struct{}, len(graph.Nodes))
-	for _, node := range graph.Nodes {
+	result := Normalize(graph)
+	normalizedNodes := result.Nodes
+	result.Nodes = make([]Node, 0, len(normalizedNodes))
+	visibleNodes := make(map[NodeID]struct{}, len(normalizedNodes))
+	for _, node := range normalizedNodes {
 		if node.DeletedAt != nil {
 			continue
 		}
 		result.Nodes = append(result.Nodes, node)
 		visibleNodes[node.ID] = struct{}{}
 	}
-	result.Edges = make([]Edge, 0, len(graph.Edges))
-	for _, edge := range graph.Edges {
+	normalizedEdges := result.Edges
+	result.Edges = make([]Edge, 0, len(normalizedEdges))
+	for _, edge := range normalizedEdges {
 		if edge.DeletedAt != nil {
 			continue
 		}
@@ -179,6 +184,38 @@ func Visible(graph Graph) Graph {
 		if _, ok := visibleNodes[edge.TargetID]; !ok {
 			continue
 		}
+		result.Edges = append(result.Edges, edge)
+	}
+	return result
+}
+
+// Normalize repairs legacy duplicate records while preserving the newest value of each field.
+func Normalize(graph Graph) Graph {
+	result := graph
+	result.Nodes = make([]Node, 0, len(graph.Nodes))
+	nodeByID := make(map[NodeID]int, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		if index, ok := nodeByID[node.ID]; ok {
+			mergeNode(&result.Nodes[index], node)
+			continue
+		}
+		nodeByID[node.ID] = len(result.Nodes)
+		result.Nodes = append(result.Nodes, node)
+	}
+	result.Edges = make([]Edge, 0, len(graph.Edges))
+	edgeByID := make(map[EdgeID]int, len(graph.Edges))
+	for _, edge := range graph.Edges {
+		if _, ok := nodeByID[edge.SourceID]; !ok {
+			continue
+		}
+		if _, ok := nodeByID[edge.TargetID]; !ok {
+			continue
+		}
+		if index, ok := edgeByID[edge.ID]; ok {
+			mergeEdge(&result.Edges[index], edge)
+			continue
+		}
+		edgeByID[edge.ID] = len(result.Edges)
 		result.Edges = append(result.Edges, edge)
 	}
 	return result
@@ -237,28 +274,26 @@ func applyNode(graph *Graph, change Change) {
 		node.Content = *change.Content
 		node.ContentUpdatedAt = change.OccurredAt
 	}
-	if (change.X != nil || change.Y != nil) && !change.OccurredAt.Before(node.PositionUpdatedAt) {
-		if change.X != nil {
-			node.X = *change.X
-		}
-		if change.Y != nil {
-			node.Y = *change.Y
-		}
-		node.PositionUpdatedAt = change.OccurredAt
-	}
 }
 
 func deleteNode(graph *Graph, change Change) {
 	id := NodeID(change.EntityID)
 	for index := range graph.Nodes {
 		node := &graph.Nodes[index]
-		if node.ID != id || change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt, node.PositionUpdatedAt)) {
+		if node.ID != id || change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt)) {
 			continue
 		}
 		if node.DeletedAt == nil || !change.OccurredAt.Before(*node.DeletedAt) {
 			deletedAt := change.OccurredAt
 			node.DeletedAt = &deletedAt
 		}
+	}
+	for index := range graph.Edges {
+		edge := &graph.Edges[index]
+		if edge.SourceID != id && edge.TargetID != id {
+			continue
+		}
+		deleteEdgeAt(edge, change.OccurredAt)
 	}
 }
 
@@ -291,14 +326,65 @@ func deleteEdge(graph *Graph, change Change) {
 	id := EdgeID(change.EntityID)
 	for index := range graph.Edges {
 		edge := &graph.Edges[index]
-		if edge.ID != id || change.OccurredAt.Before(latestTime(edge.SourceUpdatedAt, edge.TargetUpdatedAt, edge.LabelUpdatedAt)) {
+		if edge.ID != id {
 			continue
 		}
-		if edge.DeletedAt == nil || !change.OccurredAt.Before(*edge.DeletedAt) {
-			deletedAt := change.OccurredAt
-			edge.DeletedAt = &deletedAt
-		}
+		deleteEdgeAt(edge, change.OccurredAt)
 	}
+}
+
+func deleteEdgeAt(edge *Edge, occurredAt time.Time) {
+	if edge == nil || occurredAt.Before(latestTime(edge.SourceUpdatedAt, edge.TargetUpdatedAt, edge.LabelUpdatedAt)) {
+		return
+	}
+	if edge.DeletedAt == nil || !occurredAt.Before(*edge.DeletedAt) {
+		deletedAt := occurredAt
+		edge.DeletedAt = &deletedAt
+	}
+}
+
+func mergeNode(target *Node, candidate Node) {
+	if !candidate.TitleUpdatedAt.Before(target.TitleUpdatedAt) {
+		target.Title = candidate.Title
+		target.TitleUpdatedAt = candidate.TitleUpdatedAt
+	}
+	if !candidate.ContentUpdatedAt.Before(target.ContentUpdatedAt) {
+		target.Content = candidate.Content
+		target.ContentUpdatedAt = candidate.ContentUpdatedAt
+	}
+	target.DeletedAt = latestDeletion(target.DeletedAt, candidate.DeletedAt)
+	if target.DeletedAt != nil && latestTime(target.TitleUpdatedAt, target.ContentUpdatedAt).After(*target.DeletedAt) {
+		target.DeletedAt = nil
+	}
+}
+
+func mergeEdge(target *Edge, candidate Edge) {
+	if !candidate.SourceUpdatedAt.Before(target.SourceUpdatedAt) {
+		target.SourceID = candidate.SourceID
+		target.SourceUpdatedAt = candidate.SourceUpdatedAt
+	}
+	if !candidate.TargetUpdatedAt.Before(target.TargetUpdatedAt) {
+		target.TargetID = candidate.TargetID
+		target.TargetUpdatedAt = candidate.TargetUpdatedAt
+	}
+	if !candidate.LabelUpdatedAt.Before(target.LabelUpdatedAt) {
+		target.Label = candidate.Label
+		target.LabelUpdatedAt = candidate.LabelUpdatedAt
+	}
+	target.DeletedAt = latestDeletion(target.DeletedAt, candidate.DeletedAt)
+	if target.DeletedAt != nil && latestTime(target.SourceUpdatedAt, target.TargetUpdatedAt, target.LabelUpdatedAt).After(*target.DeletedAt) {
+		target.DeletedAt = nil
+	}
+}
+
+func latestDeletion(left, right *time.Time) *time.Time {
+	if left == nil {
+		return right
+	}
+	if right == nil || left.After(*right) {
+		return left
+	}
+	return right
 }
 
 func latestTime(values ...time.Time) time.Time {

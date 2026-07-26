@@ -8,7 +8,7 @@ import (
 func TestEnsureRootKeepsProjectRootAtCenter(t *testing.T) {
 	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
 	graph := Graph{ProjectID: "project-1", Nodes: []Node{{
-		ID: RootNodeID, Title: "old", X: 42, Y: -8, DeletedAt: timePointer(now.Add(-time.Hour)),
+		ID: RootNodeID, Title: "old", DeletedAt: timePointer(now.Add(-time.Hour)),
 	}}}
 
 	EnsureRoot(&graph, "AnyCode", now)
@@ -17,7 +17,7 @@ func TestEnsureRootKeepsProjectRootAtCenter(t *testing.T) {
 		t.Fatalf("nodes = %#v", graph.Nodes)
 	}
 	root := graph.Nodes[0]
-	if root.ID != RootNodeID || root.Title != "AnyCode" || root.X != 0 || root.Y != 0 || root.DeletedAt != nil {
+	if root.ID != RootNodeID || root.Title != "AnyCode" || root.DeletedAt != nil {
 		t.Fatalf("root = %#v", root)
 	}
 	if !graph.UpdatedAt.Equal(now) {
@@ -128,6 +128,57 @@ func TestDeleteMarksEveryDuplicateEntityRecord(t *testing.T) {
 	visible := Visible(graph)
 	if len(visible.Nodes) != 1 || visible.Nodes[0].ID != RootNodeID || len(visible.Edges) != 0 {
 		t.Fatalf("visible graph retained duplicate entities: %#v", visible)
+	}
+}
+
+func TestVisibleRepairsDuplicateRecordsAndDanglingEdges(t *testing.T) {
+	base := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	newer := base.Add(time.Minute)
+	graph := Graph{
+		Nodes: []Node{
+			{ID: RootNodeID, Title: "AnyCode", TitleUpdatedAt: base},
+			{ID: "duplicate", Title: "old", Content: "kept", TitleUpdatedAt: base, ContentUpdatedAt: newer},
+			{ID: "duplicate", Title: "new", TitleUpdatedAt: newer},
+		},
+		Edges: []Edge{
+			{ID: "duplicate-edge", SourceID: RootNodeID, TargetID: "duplicate", Label: "old", LabelUpdatedAt: base},
+			{ID: "duplicate-edge", SourceID: RootNodeID, TargetID: "duplicate", Label: "new", LabelUpdatedAt: newer},
+			{ID: "dangling", SourceID: RootNodeID, TargetID: "missing"},
+		},
+	}
+
+	visible := Visible(graph)
+	if len(visible.Nodes) != 2 || visible.Nodes[1].Title != "new" || visible.Nodes[1].Content != "kept" {
+		t.Fatalf("normalized nodes = %#v", visible.Nodes)
+	}
+	if len(visible.Edges) != 1 || visible.Edges[0].ID != "duplicate-edge" || visible.Edges[0].Label != "new" {
+		t.Fatalf("normalized edges = %#v", visible.Edges)
+	}
+}
+
+func TestDeleteNodeCascadesIncidentEdgesWithoutResurrection(t *testing.T) {
+	base := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	title := "node"
+	source, target := RootNodeID, NodeID("node")
+	graph := Graph{Nodes: []Node{{ID: RootNodeID, Title: "AnyCode"}}}
+	Apply(&graph, Change{Kind: ChangeUpsertNode, EntityID: "node", Title: &title, OccurredAt: base})
+	Apply(&graph, Change{Kind: ChangeUpsertEdge, EntityID: "edge", SourceID: &source, TargetID: &target, OccurredAt: base})
+	Apply(&graph, Change{Kind: ChangeDeleteNode, EntityID: "node", OccurredAt: base.Add(time.Minute)})
+	Apply(&graph, Change{Kind: ChangeUpsertNode, EntityID: "node", Title: &title, OccurredAt: base.Add(2 * time.Minute)})
+
+	visible := Visible(graph)
+	if len(visible.Nodes) != 2 || len(visible.Edges) != 0 {
+		t.Fatalf("deleted relationship resurrected = %#v", visible)
+	}
+}
+
+func TestTouchAlwaysAdvancesGraphRevision(t *testing.T) {
+	current := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	graph := Graph{UpdatedAt: current}
+
+	Touch(&graph, current.Add(-time.Hour))
+	if !graph.UpdatedAt.After(current) {
+		t.Fatalf("updated at did not advance: %s", graph.UpdatedAt)
 	}
 }
 

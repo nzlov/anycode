@@ -19,7 +19,7 @@
         icon="refresh"
         aria-label="刷新思维图"
         :loading="loading"
-        @click="loadGraph"
+        @click="refreshMindMap"
       >
         <q-tooltip>刷新</q-tooltip>
       </q-btn>
@@ -197,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Background } from '@vue-flow/background';
@@ -221,6 +221,7 @@ import {
   getProjectMindMap,
   listProjectMindMapCards,
   retryMindMapTask,
+  subscribeMindMapUpdates,
   updateProjectMindMap,
   type MindMapCard,
   type MindMapGraph,
@@ -249,6 +250,13 @@ const deleteDialog = ref(false);
 const nodeTitle = ref('');
 const nodeContent = ref('');
 const handleSides = ['top', 'right', 'bottom', 'left'] as const;
+let graphRequestRevision = 0;
+let cardRequestRevision = 0;
+let subscriptionRevision = 0;
+let mindMapSubscription: { unsubscribe: () => void } | null = null;
+let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let taskRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let disposed = false;
 
 const scopeOptions = computed(() => [
   { label: '项目主图', value: '' },
@@ -334,33 +342,113 @@ const flowEdges = computed({
 
 onMounted(async () => {
   await loadProjects();
-  await Promise.all([loadCards(), loadGraph()]);
+  await refreshMindMap();
+  startMindMapSubscription();
 });
 
-watch(scopeSessionId, () => void loadGraph());
+onBeforeUnmount(() => {
+  disposed = true;
+  graphRequestRevision += 1;
+  cardRequestRevision += 1;
+  stopMindMapSubscription();
+  if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
+});
+
+watch(scopeSessionId, () => {
+  startMindMapSubscription();
+  void refreshMindMap();
+});
 
 async function loadCards() {
-  cards.value = await listProjectMindMapCards(projectId.value);
+  const requestedProjectId = projectId.value;
+  const requestRevision = ++cardRequestRevision;
+  const result = await listProjectMindMapCards(requestedProjectId);
+  if (disposed || requestRevision !== cardRequestRevision || requestedProjectId !== projectId.value) return;
+  cards.value = result;
+  scheduleTaskRefresh();
 }
 
 async function loadGraph() {
-  if (!projectId.value || loading.value) return;
+  if (!projectId.value) return;
+  const requestedProjectId = projectId.value;
+  const requestedSessionId = scopeSessionId.value;
+  const requestRevision = ++graphRequestRevision;
   loading.value = true;
   try {
-    graph.value = await getProjectMindMap(projectId.value, scopeSessionId.value);
+    const result = await getProjectMindMap(requestedProjectId, requestedSessionId);
+    if (
+      disposed ||
+      requestRevision !== graphRequestRevision ||
+      requestedProjectId !== projectId.value ||
+      requestedSessionId !== scopeSessionId.value
+    ) {
+      return;
+    }
+    graph.value = result;
     clearSelection();
     fitGraph();
   } finally {
-    loading.value = false;
+    if (requestRevision === graphRequestRevision) loading.value = false;
   }
 }
 
+async function refreshMindMap() {
+  await Promise.all([loadCards(), loadGraph()]);
+}
+
+function scheduleTaskRefresh() {
+  if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
+  taskRefreshTimer = null;
+  if (!cards.value.some((card) => card.taskStatus === 'queued' || card.taskStatus === 'running')) return;
+  taskRefreshTimer = setTimeout(() => {
+    taskRefreshTimer = null;
+    void loadCards();
+  }, 2000);
+}
+
+function startMindMapSubscription() {
+  if (disposed || !projectId.value) return;
+  const currentRevision = ++subscriptionRevision;
+  const requestedProjectId = projectId.value;
+  const requestedSessionId = scopeSessionId.value;
+  if (subscriptionReconnectTimer) clearTimeout(subscriptionReconnectTimer);
+  subscriptionReconnectTimer = null;
+  mindMapSubscription?.unsubscribe();
+  mindMapSubscription = subscribeMindMapUpdates(requestedProjectId, requestedSessionId, {
+    onData: () => {
+      if (currentRevision === subscriptionRevision) void refreshMindMap();
+    },
+    onError: () => scheduleSubscriptionReconnect(currentRevision),
+    onClose: () => scheduleSubscriptionReconnect(currentRevision),
+  });
+}
+
+function scheduleSubscriptionReconnect(currentRevision: number) {
+  if (disposed || currentRevision !== subscriptionRevision || subscriptionReconnectTimer) return;
+  subscriptionReconnectTimer = setTimeout(() => {
+    subscriptionReconnectTimer = null;
+    if (currentRevision === subscriptionRevision) startMindMapSubscription();
+  }, 1500);
+}
+
+function stopMindMapSubscription() {
+  subscriptionRevision += 1;
+  mindMapSubscription?.unsubscribe();
+  mindMapSubscription = null;
+  if (subscriptionReconnectTimer) clearTimeout(subscriptionReconnectTimer);
+  subscriptionReconnectTimer = null;
+}
+
 async function applyOperations(operations: MindMapOperation[]) {
-  graph.value = await updateProjectMindMap({
-    projectId: projectId.value,
-    ...(scopeSessionId.value ? { sessionId: scopeSessionId.value } : {}),
+  const requestedProjectId = projectId.value;
+  const requestedSessionId = scopeSessionId.value;
+  const result = await updateProjectMindMap({
+    projectId: requestedProjectId,
+    ...(requestedSessionId ? { sessionId: requestedSessionId } : {}),
     operations,
   });
+  if (requestedProjectId !== projectId.value || requestedSessionId !== scopeSessionId.value) return;
+  graph.value = result;
   fitGraph();
   await loadCards();
 }
@@ -436,7 +524,6 @@ async function saveNode() {
       id: nodeId,
       title,
       content: nodeContent.value,
-      ...(editingNodeId.value ? {} : { x: 0, y: 0 }),
     };
     await applyOperations([operation]);
     selectedNodeId.value = nodeId;
@@ -449,13 +536,9 @@ async function saveNode() {
 async function deleteNode() {
   if (!deletingNode.value || deletingNode.value.id === rootNodeId) return;
   const nodeId = deletingNode.value.id;
-  const operations: MindMapOperation[] = graph.value.edges
-    .filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId)
-    .map((edge) => ({ kind: 'delete_edge', id: edge.id }));
-  operations.push({ kind: 'delete_node', id: nodeId });
   saving.value = true;
   try {
-    await applyOperations(operations);
+    await applyOperations([{ kind: 'delete_node', id: nodeId }]);
     deleteDialog.value = false;
     deletingNodeId.value = '';
     clearSelection();

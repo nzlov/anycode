@@ -194,8 +194,12 @@ type ComplexityRoot struct {
 		Content func(childComplexity int) int
 		ID      func(childComplexity int) int
 		Title   func(childComplexity int) int
-		X       func(childComplexity int) int
-		Y       func(childComplexity int) int
+	}
+
+	MindMapUpdateEvent struct {
+		ProjectID func(childComplexity int) int
+		SessionID func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -524,6 +528,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
+		MindMapUpdates func(childComplexity int, projectID string, sessionID *string) int
 		SessionEvents  func(childComplexity int, sessionID string) int
 		SessionUpdates func(childComplexity int) int
 		TunnelUpdates  func(childComplexity int) int
@@ -835,6 +840,7 @@ type QueryResolver interface {
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.TranscriptEvent, error)
 	SessionUpdates(ctx context.Context) (<-chan *model.SessionUpdateEvent, error)
+	MindMapUpdates(ctx context.Context, projectID string, sessionID *string) (<-chan *model.MindMapUpdateEvent, error)
 	TunnelUpdates(ctx context.Context) (<-chan *model.TunnelCountEvent, error)
 }
 
@@ -1414,18 +1420,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MindMapNode.Title(childComplexity), true
-	case "MindMapNode.x":
-		if e.ComplexityRoot.MindMapNode.X == nil {
+
+	case "MindMapUpdateEvent.projectId":
+		if e.ComplexityRoot.MindMapUpdateEvent.ProjectID == nil {
 			break
 		}
 
-		return e.ComplexityRoot.MindMapNode.X(childComplexity), true
-	case "MindMapNode.y":
-		if e.ComplexityRoot.MindMapNode.Y == nil {
+		return e.ComplexityRoot.MindMapUpdateEvent.ProjectID(childComplexity), true
+	case "MindMapUpdateEvent.sessionId":
+		if e.ComplexityRoot.MindMapUpdateEvent.SessionID == nil {
 			break
 		}
 
-		return e.ComplexityRoot.MindMapNode.Y(childComplexity), true
+		return e.ComplexityRoot.MindMapUpdateEvent.SessionID(childComplexity), true
+	case "MindMapUpdateEvent.updatedAt":
+		if e.ComplexityRoot.MindMapUpdateEvent.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapUpdateEvent.UpdatedAt(childComplexity), true
 
 	case "Mutation.activateWorkflowDefinition":
 		if e.ComplexityRoot.Mutation.ActivateWorkflowDefinition == nil {
@@ -3204,6 +3217,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionUpdateEvent.WorktreeCleanup(childComplexity), true
 
+	case "Subscription.mindMapUpdates":
+		if e.ComplexityRoot.Subscription.MindMapUpdates == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_mindMapUpdates_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.MindMapUpdates(childComplexity, args["projectId"].(string), args["sessionId"].(*string)), true
 	case "Subscription.sessionEvents":
 		if e.ComplexityRoot.Subscription.SessionEvents == nil {
 			break
@@ -4324,7 +4348,14 @@ type Tunnel {
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
+  mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+}
+
+type MindMapUpdateEvent {
+  projectId: ID!
+  sessionId: ID
+  updatedAt: Time!
 }
 
 type TunnelCountEvent {
@@ -5061,8 +5092,6 @@ type MindMapNode {
   id: ID!
   title: String!
   content: String!
-  x: Float!
-  y: Float!
 }
 
 type MindMapEdge {
@@ -5092,8 +5121,6 @@ input MindMapOperationInput {
   id: ID!
   title: String
   content: String
-  x: Float
-  y: Float
   sourceId: ID
   targetId: ID
   label: String
@@ -5954,6 +5981,22 @@ func (ec *executionContext) field_Query_workflowDefinition_args(ctx context.Cont
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_mindMapUpdates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg1
 	return args, nil
 }
 
@@ -8568,10 +8611,6 @@ func (ec *executionContext) fieldContext_MindMapGraph_nodes(_ context.Context, f
 				return ec.fieldContext_MindMapNode_title(ctx, field)
 			case "content":
 				return ec.fieldContext_MindMapNode_content(ctx, field)
-			case "x":
-				return ec.fieldContext_MindMapNode_x(ctx, field)
-			case "y":
-				return ec.fieldContext_MindMapNode_y(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MindMapNode", field.Name)
 		},
@@ -8734,59 +8773,88 @@ func (ec *executionContext) fieldContext_MindMapNode_content(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _MindMapNode_x(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+func (ec *executionContext) _MindMapUpdateEvent_projectId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapUpdateEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_MindMapNode_x,
+		ec.fieldContext_MindMapUpdateEvent_projectId,
 		func(ctx context.Context) (any, error) {
-			return obj.X, nil
+			return obj.ProjectID, nil
 		},
 		nil,
-		ec.marshalNFloat2float64,
+		ec.marshalNID2string,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_MindMapNode_x(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_MindMapUpdateEvent_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "MindMapNode",
+		Object:     "MindMapUpdateEvent",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Float does not have child fields")
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _MindMapNode_y(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+func (ec *executionContext) _MindMapUpdateEvent_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapUpdateEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_MindMapNode_y,
+		ec.fieldContext_MindMapUpdateEvent_sessionId,
 		func(ctx context.Context) (any, error) {
-			return obj.Y, nil
+			return obj.SessionID, nil
 		},
 		nil,
-		ec.marshalNFloat2float64,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapUpdateEvent_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapUpdateEvent_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.MindMapUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapUpdateEvent_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_MindMapNode_y(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_MindMapUpdateEvent_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "MindMapNode",
+		Object:     "MindMapUpdateEvent",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Float does not have child fields")
+			return nil, errors.New("field of type Time does not have child fields")
 		},
 	}
 	return fc, nil
@@ -18274,6 +18342,55 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdates(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_mindMapUpdates(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_mindMapUpdates,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().MindMapUpdates(ctx, fc.Args["projectId"].(string), fc.Args["sessionId"].(*string))
+		},
+		nil,
+		ec.marshalNMindMapUpdateEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapUpdateEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_mindMapUpdates(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_MindMapUpdateEvent_projectId(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_MindMapUpdateEvent_sessionId(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MindMapUpdateEvent_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapUpdateEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_mindMapUpdates_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_tunnelUpdates(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -24713,7 +24830,7 @@ func (ec *executionContext) unmarshalInputMindMapOperationInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"kind", "id", "title", "content", "x", "y", "sourceId", "targetId", "label"}
+	fieldsInOrder := [...]string{"kind", "id", "title", "content", "sourceId", "targetId", "label"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -24748,20 +24865,6 @@ func (ec *executionContext) unmarshalInputMindMapOperationInput(ctx context.Cont
 				return it, err
 			}
 			it.Content = data
-		case "x":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("x"))
-			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.X = data
-		case "y":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("y"))
-			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Y = data
 		case "sourceId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceId"))
 			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
@@ -27360,13 +27463,49 @@ func (ec *executionContext) _MindMapNode(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "x":
-			out.Values[i] = ec._MindMapNode_x(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mindMapUpdateEventImplementors = []string{"MindMapUpdateEvent"}
+
+func (ec *executionContext) _MindMapUpdateEvent(ctx context.Context, sel ast.SelectionSet, obj *model.MindMapUpdateEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mindMapUpdateEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MindMapUpdateEvent")
+		case "projectId":
+			out.Values[i] = ec._MindMapUpdateEvent_projectId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "y":
-			out.Values[i] = ec._MindMapNode_y(ctx, field, obj)
+		case "sessionId":
+			out.Values[i] = ec._MindMapUpdateEvent_sessionId(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._MindMapUpdateEvent_updatedAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -30000,6 +30139,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_sessionEvents(ctx, fields[0])
 	case "sessionUpdates":
 		return ec._Subscription_sessionUpdates(ctx, fields[0])
+	case "mindMapUpdates":
+		return ec._Subscription_mindMapUpdates(ctx, fields[0])
 	case "tunnelUpdates":
 		return ec._Subscription_tunnelUpdates(ctx, fields[0])
 	default:
@@ -32762,6 +32903,20 @@ func (ec *executionContext) unmarshalNMindMapOperationInput2ᚖgithubᚗcomᚋnz
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNMindMapUpdateEvent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapUpdateEvent(ctx context.Context, sel ast.SelectionSet, v model.MindMapUpdateEvent) graphql.Marshaler {
+	return ec._MindMapUpdateEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMindMapUpdateEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapUpdateEvent(ctx context.Context, sel ast.SelectionSet, v *model.MindMapUpdateEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MindMapUpdateEvent(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -34128,23 +34283,6 @@ func (ec *executionContext) marshalOFileDiff2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._FileDiff(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalOFloat2ᚖfloat64(ctx context.Context, v any) (*float64, error) {
-	if v == nil {
-		return nil, nil
-	}
-	res, err := graphql.UnmarshalFloatContext(ctx, v)
-	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel ast.SelectionSet, v *float64) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	_ = sel
-	res := graphql.MarshalFloatContext(*v)
-	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

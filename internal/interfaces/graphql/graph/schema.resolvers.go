@@ -218,7 +218,7 @@ func (r *mutationResolver) UpdateProjectMindMap(ctx context.Context, input model
 		}
 		operations = append(operations, mindmapapp.OperationInput{
 			Kind: mindmapdomain.ChangeKind(operation.Kind), ID: operation.ID, Title: operation.Title, Content: operation.Content,
-			X: operation.X, Y: operation.Y, SourceID: sourceID, TargetID: targetID, Label: operation.Label,
+			SourceID: sourceID, TargetID: targetID, Label: operation.Label,
 		})
 	}
 	dto, err := r.UseCases.MindMaps.Update(ctx, mindmapapp.UpdateInput{
@@ -1054,6 +1054,47 @@ func (r *subscriptionResolver) SessionUpdates(ctx context.Context) (<-chan *mode
 				case <-ctx.Done():
 					return
 				case out <- mapSessionUpdateEvent(event):
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
+// MindMapUpdates is the resolver for the mindMapUpdates field.
+func (r *subscriptionResolver) MindMapUpdates(ctx context.Context, projectID string, sessionID *string) (<-chan *model.MindMapUpdateEvent, error) {
+	if r.UseCases.MindMaps == nil {
+		return nil, missingUseCase("mind maps")
+	}
+	source, err := r.UseCases.MindMaps.Watch(ctx, mindmapapp.GetInput{
+		ProjectID: mindmapdomain.ProjectID(projectID), SessionID: mindmapdomain.SessionID(stringValue(sessionID, "")),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.MindMapUpdateEvent)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case change, ok := <-source:
+				if !ok {
+					return
+				}
+				var changedSessionID *string
+				if change.SessionID != "" {
+					value := string(change.SessionID)
+					changedSessionID = &value
+				}
+				update := &model.MindMapUpdateEvent{
+					ProjectID: string(change.ProjectID), SessionID: changedSessionID, UpdatedAt: change.UpdatedAt,
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case out <- update:
 				}
 			}
 		}
