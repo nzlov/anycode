@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -183,6 +185,33 @@ func TestTunnelToolsUseCallingSessionOwnership(t *testing.T) {
 	}
 }
 
+func TestMindMapToolsForwardProcessIdentityAndFreeFormOperations(t *testing.T) {
+	maps := &fakeMindMaps{graph: mindmapapp.GraphDTO{
+		ProjectID: "project-1", SessionID: "session-1",
+		Nodes: []mindmapapp.NodeDTO{{ID: mindmapdomain.RootNodeID, Title: "AnyCode"}},
+	}}
+	service := New(nil, nil, WithMindMaps(maps))
+	call := processdomain.DynamicToolCall{ProcessRunID: "run-1", SessionID: "session-1"}
+
+	call.Tool = string(processdomain.DynamicToolMindMapGet)
+	result, err := service.HandleDynamicTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if maps.processRunID != "run-1" || maps.sessionID != "session-1" || !strings.Contains(result.Content[0].Text, `"projectId":"project-1"`) {
+		t.Fatalf("get = maps:%#v result:%#v", maps, result)
+	}
+
+	call.Tool = string(processdomain.DynamicToolMindMapUpdate)
+	call.Arguments = json.RawMessage(`{"operations":[{"kind":"upsert_node","id":"feature","title":"Feature","content":"Details","x":10,"y":20}]}`)
+	if _, err := service.HandleDynamicTool(context.Background(), call); err != nil {
+		t.Fatal(err)
+	}
+	if len(maps.operations) != 1 || maps.operations[0].ID != "feature" || maps.operations[0].Title == nil || *maps.operations[0].Title != "Feature" || maps.operations[0].Content == nil || *maps.operations[0].Content != "Details" {
+		t.Fatalf("operations = %#v", maps.operations)
+	}
+}
+
 type fakeSessions struct {
 	input  sessionapp.RequestQuestionsInput
 	result questionapp.RequestDTO
@@ -226,6 +255,26 @@ type fakeTunnels struct {
 	items        []tunnelapp.DTO
 	closeSession tunneldomain.SessionID
 	closeID      tunneldomain.ID
+}
+
+type fakeMindMaps struct {
+	processRunID string
+	sessionID    mindmapdomain.SessionID
+	operations   []mindmapapp.OperationInput
+	graph        mindmapapp.GraphDTO
+}
+
+func (f *fakeMindMaps) GetForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID) (mindmapapp.GraphDTO, error) {
+	f.processRunID = processRunID
+	f.sessionID = sessionID
+	return f.graph, nil
+}
+
+func (f *fakeMindMaps) UpdateForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error) {
+	f.processRunID = processRunID
+	f.sessionID = sessionID
+	f.operations = operations
+	return f.graph, nil
 }
 
 func (f *fakeTunnels) Create(_ context.Context, input tunnelapp.CreateInput) (tunnelapp.CreateResult, error) {

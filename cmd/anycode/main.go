@@ -17,6 +17,7 @@ import (
 	codextoolapp "github.com/nzlov/anycode/internal/application/codextool"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	promptcompletionapp "github.com/nzlov/anycode/internal/application/promptcompletion"
@@ -156,6 +157,7 @@ type wiredApplication struct {
 	useCases graph.UseCases
 	codex    *codexcli.Client
 	terminal terminaldomain.Runtime
+	mindMaps *mindmapapp.Queue
 }
 
 func (a *wiredApplication) Close() {
@@ -164,6 +166,9 @@ func (a *wiredApplication) Close() {
 	}
 	if closer, ok := a.useCases.Sessions.(interface{ Close() }); ok {
 		closer.Close()
+	}
+	if a.mindMaps != nil {
+		a.mindMaps.Close()
 	}
 	if closer, ok := a.useCases.Tunnels.(interface{ CloseAll(context.Context) error }); ok {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -199,6 +204,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, timelineapp.WithHistory(events))
 	questions := store.Questions()
+	settings := store.Settings()
 	questionService := questionapp.New(questions, questionapp.WithObserver(questionMetricLogger{}))
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
@@ -210,9 +216,12 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	}
 	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)), tunnelapp.WithEventPublisher(eventService))
 	terminalRuntime := ptyruntime.New(ptyruntime.WithHistoryDir(filepath.Join(cfg.DataDir, "terminals")))
-	settings := store.Settings()
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
-	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService)))
+	mindMapQueue := mindmapapp.NewQueue(store.MindMaps(), store, store.Sessions(), store.Projects(), settings, processes, codex)
+	mindMapService := mindmapapp.New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	mindMapService.SetQueueScheduler(mindMapQueue.Schedule)
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService), codextoolapp.WithMindMaps(mindMapService)))
+	mindMapQueue.Start()
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
 	notificationService := notificationapp.New(store.Notifications(), events, store.Sessions(), store.Projects(), pushClient, pushClient, principal.KeyHash)
@@ -223,7 +232,8 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
 	useCases := graph.UseCases{
-		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
+		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New(""), projectapp.WithMindMapSettings(settings)),
+		MindMaps:         mindMapService,
 		Sessions:         sessionService,
 		Timeline:         timelineService,
 		SessionEvents:    sessionEventService,
@@ -235,12 +245,12 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
-		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain)),
+		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule)),
 		Tunnels:      tunnelService,
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,
 	}
-	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime}, nil
+	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue}, nil
 }
 
 func httpPort(addr string) int {

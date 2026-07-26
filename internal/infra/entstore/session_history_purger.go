@@ -9,6 +9,8 @@ import (
 	"github.com/nzlov/anycode/internal/domain/session"
 	enteventrecord "github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	entmergerecord "github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	entmindmapoverlay "github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
+	entmindmaptask "github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	entnoderun "github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
 	entnotificationdelivery "github.com/nzlov/anycode/internal/infra/entstore/ent/notificationdelivery"
 	entprocessrun "github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
@@ -63,6 +65,16 @@ func (s *Store) PurgeSessions(ctx context.Context, ids []session.ID) error {
 	if err == nil {
 		if _, deleteErr := client.NodeRun.Delete().Where(entnoderun.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
 			err = fmt.Errorf("delete node runs: %w", deleteErr)
+		}
+	}
+	if err == nil {
+		if _, deleteErr := client.MindMapTask.Delete().Where(entmindmaptask.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete mind map tasks: %w", deleteErr)
+		}
+	}
+	if err == nil {
+		if _, deleteErr := client.MindMapOverlay.Delete().Where(entmindmapoverlay.IDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete mind map overlays: %w", deleteErr)
 		}
 	}
 	if err == nil {

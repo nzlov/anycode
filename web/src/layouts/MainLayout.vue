@@ -200,6 +200,7 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
+import { provideGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import TunnelManagerDialog from '@/components/TunnelManagerDialog.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
@@ -211,6 +212,9 @@ import { disablePushNotifications } from '@/services/pushNotifications';
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const settingsDialogOpen = ref(false);
+// GLUE: carry only invalidation semantics so route pages re-query the canonical settings.
+// Remove this when general settings changes have a backend subscription.
+provideGeneralSettingsInvalidation();
 const tunnelDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
 const runningTunnelCount = ref(0);

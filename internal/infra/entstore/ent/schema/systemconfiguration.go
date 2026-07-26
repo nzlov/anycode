@@ -19,6 +19,11 @@ func (SystemConfiguration) Fields() []ent.Field {
 		field.JSON("agent_writable_roots", []string{}).
 			Default([]string{}).
 			Annotations(entsql.DefaultExpr("'[]'")),
+		field.Bool("mind_map_enabled").Default(false),
+		field.String("mind_map_mode").NotEmpty().Default("realtime"),
+		field.String("mind_map_model").Default(""),
+		field.String("mind_map_reasoning_effort").Default(""),
+		field.Int("mind_map_max_concurrent").Default(1),
 		field.String("wallpaper_color_scheme").NotEmpty(),
 		field.String("background_type").NotEmpty().Default("bing"),
 		field.String("solid_theme").NotEmpty().Default("vermilion"),

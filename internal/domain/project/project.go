@@ -14,6 +14,7 @@ type Project struct {
 	Path                ProjectPath
 	IsGit               bool
 	WorktreeInitCommand string
+	MindMapEnabled      bool
 	DefaultWorkflowID   *WorkflowDefinitionID
 	RemovedAt           *time.Time
 	CreatedAt           time.Time

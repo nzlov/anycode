@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -43,16 +45,26 @@ type TunnelUseCase interface {
 	CloseOwned(ctx context.Context, sessionID tunneldomain.SessionID, id tunneldomain.ID) error
 }
 
+type MindMapUseCase interface {
+	GetForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID) (mindmapapp.GraphDTO, error)
+	UpdateForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error)
+}
+
 type Service struct {
 	sessions  SessionUseCase
 	artifacts ArtifactUseCase
 	tunnels   TunnelUseCase
+	mindMaps  MindMapUseCase
 }
 
 type Option func(*Service)
 
 func WithTunnels(tunnels TunnelUseCase) Option {
 	return func(s *Service) { s.tunnels = tunnels }
+}
+
+func WithMindMaps(mindMaps MindMapUseCase) Option {
+	return func(s *Service) { s.mindMaps = mindMaps }
 }
 
 func New(sessions SessionUseCase, artifacts ArtifactUseCase, options ...Option) *Service {
@@ -75,9 +87,76 @@ func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.Dyna
 		return s.listTunnels(ctx, call)
 	case tunnelCloseTool:
 		return s.closeTunnel(ctx, call)
+	case string(processdomain.DynamicToolMindMapGet):
+		return s.getMindMap(ctx, call)
+	case string(processdomain.DynamicToolMindMapUpdate):
+		return s.updateMindMap(ctx, call)
 	default:
 		return processdomain.DynamicToolResult{}, fmt.Errorf("unknown dynamic tool %q", call.Tool)
 	}
+}
+
+func (s *Service) getMindMap(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.mindMaps == nil {
+		return processdomain.DynamicToolResult{}, errors.New("mind map service is unavailable")
+	}
+	graph, err := s.mindMaps.GetForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID))
+	if err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	return mindMapResult(graph)
+}
+
+func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.mindMaps == nil {
+		return processdomain.DynamicToolResult{}, errors.New("mind map service is unavailable")
+	}
+	var input struct {
+		Operations []struct {
+			Kind     mindmapdomain.ChangeKind `json:"kind"`
+			ID       string                   `json:"id"`
+			Title    *string                  `json:"title"`
+			Content  *string                  `json:"content"`
+			X        *float64                 `json:"x"`
+			Y        *float64                 `json:"y"`
+			SourceID *mindmapdomain.NodeID    `json:"sourceId"`
+			TargetID *mindmapdomain.NodeID    `json:"targetId"`
+			Label    *string                  `json:"label"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(call.Arguments, &input); err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("decode mind_map_update arguments: %w", err)
+	}
+	operations := make([]mindmapapp.OperationInput, 0, len(input.Operations))
+	for _, operation := range input.Operations {
+		operations = append(operations, mindmapapp.OperationInput{
+			Kind: operation.Kind, ID: operation.ID, Title: operation.Title, Content: operation.Content,
+			X: operation.X, Y: operation.Y, SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label,
+		})
+	}
+	graph, err := s.mindMaps.UpdateForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID), operations)
+	if err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	return mindMapResult(graph)
+}
+
+func mindMapResult(graph mindmapapp.GraphDTO) (processdomain.DynamicToolResult, error) {
+	nodes := make([]map[string]any, 0, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		nodes = append(nodes, map[string]any{"id": node.ID, "title": node.Title, "content": node.Content, "x": node.X, "y": node.Y})
+	}
+	edges := make([]map[string]any, 0, len(graph.Edges))
+	for _, edge := range graph.Edges {
+		edges = append(edges, map[string]any{"id": edge.ID, "sourceId": edge.SourceID, "targetId": edge.TargetID, "label": edge.Label})
+	}
+	payload, err := json.Marshal(map[string]any{
+		"projectId": graph.ProjectID, "sessionId": graph.SessionID, "nodes": nodes, "edges": edges, "updatedAt": graph.UpdatedAt,
+	})
+	if err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("encode mind map result: %w", err)
+	}
+	return textResult(payload), nil
 }
 
 func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {

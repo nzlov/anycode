@@ -69,6 +69,31 @@ func AgentMaxConcurrent(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldAgentMaxConcurrent, v))
 }
 
+// MindMapEnabled applies equality check predicate on the "mind_map_enabled" field. It's identical to MindMapEnabledEQ.
+func MindMapEnabled(v bool) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapEnabled, v))
+}
+
+// MindMapMode applies equality check predicate on the "mind_map_mode" field. It's identical to MindMapModeEQ.
+func MindMapMode(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapMode, v))
+}
+
+// MindMapModel applies equality check predicate on the "mind_map_model" field. It's identical to MindMapModelEQ.
+func MindMapModel(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapModel, v))
+}
+
+// MindMapReasoningEffort applies equality check predicate on the "mind_map_reasoning_effort" field. It's identical to MindMapReasoningEffortEQ.
+func MindMapReasoningEffort(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapMaxConcurrent applies equality check predicate on the "mind_map_max_concurrent" field. It's identical to MindMapMaxConcurrentEQ.
+func MindMapMaxConcurrent(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapMaxConcurrent, v))
+}
+
 // WallpaperColorScheme applies equality check predicate on the "wallpaper_color_scheme" field. It's identical to WallpaperColorSchemeEQ.
 func WallpaperColorScheme(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperColorScheme, v))
@@ -147,6 +172,251 @@ func AgentMaxConcurrentLT(v int) predicate.SystemConfiguration {
 // AgentMaxConcurrentLTE applies the LTE predicate on the "agent_max_concurrent" field.
 func AgentMaxConcurrentLTE(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldLTE(FieldAgentMaxConcurrent, v))
+}
+
+// MindMapEnabledEQ applies the EQ predicate on the "mind_map_enabled" field.
+func MindMapEnabledEQ(v bool) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapEnabled, v))
+}
+
+// MindMapEnabledNEQ applies the NEQ predicate on the "mind_map_enabled" field.
+func MindMapEnabledNEQ(v bool) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapEnabled, v))
+}
+
+// MindMapModeEQ applies the EQ predicate on the "mind_map_mode" field.
+func MindMapModeEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapMode, v))
+}
+
+// MindMapModeNEQ applies the NEQ predicate on the "mind_map_mode" field.
+func MindMapModeNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapMode, v))
+}
+
+// MindMapModeIn applies the In predicate on the "mind_map_mode" field.
+func MindMapModeIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldMindMapMode, vs...))
+}
+
+// MindMapModeNotIn applies the NotIn predicate on the "mind_map_mode" field.
+func MindMapModeNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldMindMapMode, vs...))
+}
+
+// MindMapModeGT applies the GT predicate on the "mind_map_mode" field.
+func MindMapModeGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldMindMapMode, v))
+}
+
+// MindMapModeGTE applies the GTE predicate on the "mind_map_mode" field.
+func MindMapModeGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldMindMapMode, v))
+}
+
+// MindMapModeLT applies the LT predicate on the "mind_map_mode" field.
+func MindMapModeLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldMindMapMode, v))
+}
+
+// MindMapModeLTE applies the LTE predicate on the "mind_map_mode" field.
+func MindMapModeLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldMindMapMode, v))
+}
+
+// MindMapModeContains applies the Contains predicate on the "mind_map_mode" field.
+func MindMapModeContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldMindMapMode, v))
+}
+
+// MindMapModeHasPrefix applies the HasPrefix predicate on the "mind_map_mode" field.
+func MindMapModeHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldMindMapMode, v))
+}
+
+// MindMapModeHasSuffix applies the HasSuffix predicate on the "mind_map_mode" field.
+func MindMapModeHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldMindMapMode, v))
+}
+
+// MindMapModeEqualFold applies the EqualFold predicate on the "mind_map_mode" field.
+func MindMapModeEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldMindMapMode, v))
+}
+
+// MindMapModeContainsFold applies the ContainsFold predicate on the "mind_map_mode" field.
+func MindMapModeContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldMindMapMode, v))
+}
+
+// MindMapModelEQ applies the EQ predicate on the "mind_map_model" field.
+func MindMapModelEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapModel, v))
+}
+
+// MindMapModelNEQ applies the NEQ predicate on the "mind_map_model" field.
+func MindMapModelNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapModel, v))
+}
+
+// MindMapModelIn applies the In predicate on the "mind_map_model" field.
+func MindMapModelIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldMindMapModel, vs...))
+}
+
+// MindMapModelNotIn applies the NotIn predicate on the "mind_map_model" field.
+func MindMapModelNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldMindMapModel, vs...))
+}
+
+// MindMapModelGT applies the GT predicate on the "mind_map_model" field.
+func MindMapModelGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldMindMapModel, v))
+}
+
+// MindMapModelGTE applies the GTE predicate on the "mind_map_model" field.
+func MindMapModelGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldMindMapModel, v))
+}
+
+// MindMapModelLT applies the LT predicate on the "mind_map_model" field.
+func MindMapModelLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldMindMapModel, v))
+}
+
+// MindMapModelLTE applies the LTE predicate on the "mind_map_model" field.
+func MindMapModelLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldMindMapModel, v))
+}
+
+// MindMapModelContains applies the Contains predicate on the "mind_map_model" field.
+func MindMapModelContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldMindMapModel, v))
+}
+
+// MindMapModelHasPrefix applies the HasPrefix predicate on the "mind_map_model" field.
+func MindMapModelHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldMindMapModel, v))
+}
+
+// MindMapModelHasSuffix applies the HasSuffix predicate on the "mind_map_model" field.
+func MindMapModelHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldMindMapModel, v))
+}
+
+// MindMapModelEqualFold applies the EqualFold predicate on the "mind_map_model" field.
+func MindMapModelEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldMindMapModel, v))
+}
+
+// MindMapModelContainsFold applies the ContainsFold predicate on the "mind_map_model" field.
+func MindMapModelContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldMindMapModel, v))
+}
+
+// MindMapReasoningEffortEQ applies the EQ predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortNEQ applies the NEQ predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortIn applies the In predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldMindMapReasoningEffort, vs...))
+}
+
+// MindMapReasoningEffortNotIn applies the NotIn predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldMindMapReasoningEffort, vs...))
+}
+
+// MindMapReasoningEffortGT applies the GT predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortGTE applies the GTE predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortLT applies the LT predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortLTE applies the LTE predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortContains applies the Contains predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortHasPrefix applies the HasPrefix predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortHasSuffix applies the HasSuffix predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortEqualFold applies the EqualFold predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapReasoningEffortContainsFold applies the ContainsFold predicate on the "mind_map_reasoning_effort" field.
+func MindMapReasoningEffortContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldMindMapReasoningEffort, v))
+}
+
+// MindMapMaxConcurrentEQ applies the EQ predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapMaxConcurrent, v))
+}
+
+// MindMapMaxConcurrentNEQ applies the NEQ predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentNEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapMaxConcurrent, v))
+}
+
+// MindMapMaxConcurrentIn applies the In predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldMindMapMaxConcurrent, vs...))
+}
+
+// MindMapMaxConcurrentNotIn applies the NotIn predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentNotIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldMindMapMaxConcurrent, vs...))
+}
+
+// MindMapMaxConcurrentGT applies the GT predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentGT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldMindMapMaxConcurrent, v))
+}
+
+// MindMapMaxConcurrentGTE applies the GTE predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentGTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldMindMapMaxConcurrent, v))
+}
+
+// MindMapMaxConcurrentLT applies the LT predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentLT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldMindMapMaxConcurrent, v))
+}
+
+// MindMapMaxConcurrentLTE applies the LTE predicate on the "mind_map_max_concurrent" field.
+func MindMapMaxConcurrentLTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldMindMapMaxConcurrent, v))
 }
 
 // WallpaperColorSchemeEQ applies the EQ predicate on the "wallpaper_color_scheme" field.

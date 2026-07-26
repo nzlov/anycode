@@ -360,15 +360,28 @@
                 />
 
                 <q-btn
+                  v-if="mindMapRealtime"
+                  class="full-width q-mt-md app-command-btn"
+                  outline
+                  color="positive"
+                  icon="merge"
+                  label="合并思维图并关闭"
+                  no-caps
+                  :loading="closing"
+                  :disable="!canClose || isClosed || loading || closing"
+                  @click="closeCurrentSession(true)"
+                />
+
+                <q-btn
                   class="full-width q-mt-md app-command-btn"
                   outline
                   color="negative"
                   icon="close"
-                  label="关闭卡片"
+                  :label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
                   no-caps
                   :loading="closing"
                   :disable="!canClose || isClosed || loading || closing"
-                  @click="closeCurrentSession"
+                  @click="closeCurrentSession(false)"
                 />
 
                 <q-separator spaced />
@@ -616,10 +629,12 @@ const props = withDefaults(
     sessionId: string;
     layout?: 'responsive' | 'mobile' | 'desktop';
     page?: boolean;
+    mindMapRealtime?: boolean;
   }>(),
   {
     layout: 'responsive',
     page: false,
+    mindMapRealtime: false,
   },
 );
 const $q = useQuasar();
@@ -1212,10 +1227,10 @@ async function saveComposerConfig() {
   await updateConfig(config);
 }
 
-async function closeCurrentSession() {
+async function closeCurrentSession(mergeMindMap = false) {
   if (!canClose.value || isClosed.value || closing.value) return;
   try {
-    await closeSessionRequest();
+    await closeSessionRequest(mergeMindMap);
   } catch (err) {
     notifyError(err, '关闭卡片失败');
   }

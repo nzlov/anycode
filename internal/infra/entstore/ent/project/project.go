@@ -21,6 +21,8 @@ const (
 	FieldIsGit = "is_git"
 	// FieldWorktreeInitCommand holds the string denoting the worktree_init_command field in the database.
 	FieldWorktreeInitCommand = "worktree_init_command"
+	// FieldMindMapEnabled holds the string denoting the mind_map_enabled field in the database.
+	FieldMindMapEnabled = "mind_map_enabled"
 	// FieldDefaultWorkflowID holds the string denoting the default_workflow_id field in the database.
 	FieldDefaultWorkflowID = "default_workflow_id"
 	// FieldRemovedAt holds the string denoting the removed_at field in the database.
@@ -40,6 +42,7 @@ var Columns = []string{
 	FieldPath,
 	FieldIsGit,
 	FieldWorktreeInitCommand,
+	FieldMindMapEnabled,
 	FieldDefaultWorkflowID,
 	FieldRemovedAt,
 	FieldCreatedAt,
@@ -65,6 +68,8 @@ var (
 	DefaultIsGit bool
 	// DefaultWorktreeInitCommand holds the default value on creation for the "worktree_init_command" field.
 	DefaultWorktreeInitCommand string
+	// DefaultMindMapEnabled holds the default value on creation for the "mind_map_enabled" field.
+	DefaultMindMapEnabled bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -99,6 +104,11 @@ func ByIsGit(opts ...sql.OrderTermOption) OrderOption {
 // ByWorktreeInitCommand orders the results by the worktree_init_command field.
 func ByWorktreeInitCommand(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreeInitCommand, opts...).ToFunc()
+}
+
+// ByMindMapEnabled orders the results by the mind_map_enabled field.
+func ByMindMapEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapEnabled, opts...).ToFunc()
 }
 
 // ByDefaultWorkflowID orders the results by the default_workflow_id field.

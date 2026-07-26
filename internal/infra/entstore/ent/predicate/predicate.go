@@ -12,6 +12,15 @@ type EventRecord func(*sql.Selector)
 // MergeRecord is the predicate function for mergerecord builders.
 type MergeRecord func(*sql.Selector)
 
+// MindMapGraph is the predicate function for mindmapgraph builders.
+type MindMapGraph func(*sql.Selector)
+
+// MindMapOverlay is the predicate function for mindmapoverlay builders.
+type MindMapOverlay func(*sql.Selector)
+
+// MindMapTask is the predicate function for mindmaptask builders.
+type MindMapTask func(*sql.Selector)
+
 // NodeRun is the predicate function for noderun builders.
 type NodeRun func(*sql.Selector)
 

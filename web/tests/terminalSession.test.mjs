@@ -106,7 +106,7 @@ test('session detail and overview render terminal-specific surfaces', async () =
   );
   assert.match(
     detailView,
-    /<SessionTerminalButton[\s\S]*full-width[\s\S]*<q-btn[\s\S]*label="关闭卡片"/,
+    /<SessionTerminalButton[\s\S]*full-width[\s\S]*<q-btn[\s\S]*:label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"/,
   );
   assert.match(terminalButton, /openSessionTerminal\(props\.sourceSessionId\)/);
   assert.match(terminalButton, /emit\('opened', terminal\.id\)/);

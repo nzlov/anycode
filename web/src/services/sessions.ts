@@ -867,10 +867,13 @@ export async function stopSession(sessionId: string) {
   });
 }
 
-export async function closeSession(sessionId: string) {
+export async function closeSession(
+  sessionId: string,
+  reason: 'user_closed' | 'merged_closed' = 'user_closed',
+) {
   return graphqlFetch<
     { closeSession: GraphQLSession },
-    { input: { sessionId: string; reason: 'user_closed' } }
+    { input: { sessionId: string; reason: 'user_closed' | 'merged_closed' } }
   >({
     query: `
       mutation CloseSession($input: CloseSessionInput!) {
@@ -879,7 +882,7 @@ export async function closeSession(sessionId: string) {
         }
       }
     `,
-    variables: { input: { sessionId, reason: 'user_closed' } },
+    variables: { input: { sessionId, reason } },
   });
 }
 

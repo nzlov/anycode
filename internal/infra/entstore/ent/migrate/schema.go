@@ -74,6 +74,77 @@ var (
 			},
 		},
 	}
+	// MindMapGraphsColumns holds the columns for the "mind_map_graphs" table.
+	MindMapGraphsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "nodes", Type: field.TypeJSON},
+		{Name: "edges", Type: field.TypeJSON},
+		{Name: "history", Type: field.TypeJSON},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// MindMapGraphsTable holds the schema information for the "mind_map_graphs" table.
+	MindMapGraphsTable = &schema.Table{
+		Name:       "mind_map_graphs",
+		Columns:    MindMapGraphsColumns,
+		PrimaryKey: []*schema.Column{MindMapGraphsColumns[0]},
+	}
+	// MindMapOverlaysColumns holds the columns for the "mind_map_overlays" table.
+	MindMapOverlaysColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "changes", Type: field.TypeJSON},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// MindMapOverlaysTable holds the schema information for the "mind_map_overlays" table.
+	MindMapOverlaysTable = &schema.Table{
+		Name:       "mind_map_overlays",
+		Columns:    MindMapOverlaysColumns,
+		PrimaryKey: []*schema.Column{MindMapOverlaysColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mindmapoverlay_project_id_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{MindMapOverlaysColumns[1], MindMapOverlaysColumns[3]},
+			},
+		},
+	}
+	// MindMapTasksColumns holds the columns for the "mind_map_tasks" table.
+	MindMapTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "process_run_id", Type: field.TypeString, Default: ""},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
+		{Name: "error", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// MindMapTasksTable holds the schema information for the "mind_map_tasks" table.
+	MindMapTasksTable = &schema.Table{
+		Name:       "mind_map_tasks",
+		Columns:    MindMapTasksColumns,
+		PrimaryKey: []*schema.Column{MindMapTasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mindmaptask_session_id",
+				Unique:  true,
+				Columns: []*schema.Column{MindMapTasksColumns[2]},
+			},
+			{
+				Name:    "mindmaptask_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{MindMapTasksColumns[3], MindMapTasksColumns[7]},
+			},
+			{
+				Name:    "mindmaptask_project_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{MindMapTasksColumns[1], MindMapTasksColumns[7]},
+			},
+		},
+	}
 	// NodeRunsColumns holds the columns for the "node_runs" table.
 	NodeRunsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -210,6 +281,7 @@ var (
 		{Name: "path", Type: field.TypeString},
 		{Name: "is_git", Type: field.TypeBool, Default: false},
 		{Name: "worktree_init_command", Type: field.TypeString, Default: ""},
+		{Name: "mind_map_enabled", Type: field.TypeBool, Default: false},
 		{Name: "default_workflow_id", Type: field.TypeString, Nullable: true},
 		{Name: "removed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -468,6 +540,11 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "agent_max_concurrent", Type: field.TypeInt, Default: 2},
 		{Name: "agent_writable_roots", Type: field.TypeJSON, Default: schema.Expr("'[]'")},
+		{Name: "mind_map_enabled", Type: field.TypeBool, Default: false},
+		{Name: "mind_map_mode", Type: field.TypeString, Default: "realtime"},
+		{Name: "mind_map_model", Type: field.TypeString, Default: ""},
+		{Name: "mind_map_reasoning_effort", Type: field.TypeString, Default: ""},
+		{Name: "mind_map_max_concurrent", Type: field.TypeInt, Default: 1},
 		{Name: "wallpaper_color_scheme", Type: field.TypeString},
 		{Name: "background_type", Type: field.TypeString, Default: "bing"},
 		{Name: "solid_theme", Type: field.TypeString, Default: "vermilion"},
@@ -511,6 +588,9 @@ var (
 	Tables = []*schema.Table{
 		EventRecordsTable,
 		MergeRecordsTable,
+		MindMapGraphsTable,
+		MindMapOverlaysTable,
+		MindMapTasksTable,
 		NodeRunsTable,
 		NotificationCheckpointsTable,
 		NotificationConfigurationsTable,

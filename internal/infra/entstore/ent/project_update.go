@@ -84,6 +84,20 @@ func (_u *ProjectUpdate) SetNillableWorktreeInitCommand(v *string) *ProjectUpdat
 	return _u
 }
 
+// SetMindMapEnabled sets the "mind_map_enabled" field.
+func (_u *ProjectUpdate) SetMindMapEnabled(v bool) *ProjectUpdate {
+	_u.mutation.SetMindMapEnabled(v)
+	return _u
+}
+
+// SetNillableMindMapEnabled sets the "mind_map_enabled" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableMindMapEnabled(v *bool) *ProjectUpdate {
+	if v != nil {
+		_u.SetMindMapEnabled(*v)
+	}
+	return _u
+}
+
 // SetDefaultWorkflowID sets the "default_workflow_id" field.
 func (_u *ProjectUpdate) SetDefaultWorkflowID(v string) *ProjectUpdate {
 	_u.mutation.SetDefaultWorkflowID(v)
@@ -210,6 +224,9 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.WorktreeInitCommand(); ok {
 		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.MindMapEnabled(); ok {
+		_spec.SetField(project.FieldMindMapEnabled, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)
 	}
@@ -297,6 +314,20 @@ func (_u *ProjectUpdateOne) SetWorktreeInitCommand(v string) *ProjectUpdateOne {
 func (_u *ProjectUpdateOne) SetNillableWorktreeInitCommand(v *string) *ProjectUpdateOne {
 	if v != nil {
 		_u.SetWorktreeInitCommand(*v)
+	}
+	return _u
+}
+
+// SetMindMapEnabled sets the "mind_map_enabled" field.
+func (_u *ProjectUpdateOne) SetMindMapEnabled(v bool) *ProjectUpdateOne {
+	_u.mutation.SetMindMapEnabled(v)
+	return _u
+}
+
+// SetNillableMindMapEnabled sets the "mind_map_enabled" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableMindMapEnabled(v *bool) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetMindMapEnabled(*v)
 	}
 	return _u
 }
@@ -456,6 +487,9 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.WorktreeInitCommand(); ok {
 		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.MindMapEnabled(); ok {
+		_spec.SetField(project.FieldMindMapEnabled, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)

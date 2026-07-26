@@ -6,6 +6,7 @@ import (
 
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -61,8 +62,9 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 
 func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {
 	return &model.GeneralSettings{
-		AgentMaxConcurrent: dto.AgentMaxConcurrent,
-		AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
+		AgentMaxConcurrent: dto.AgentMaxConcurrent, AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
+		MindMapEnabled: dto.MindMapEnabled, MindMapMode: string(dto.MindMapMode), MindMapModel: dto.MindMapModel,
+		MindMapReasoningEffort: dto.MindMapReasoningEffort, MindMapMaxConcurrent: dto.MindMapMaxConcurrent,
 	}
 }
 
@@ -103,10 +105,40 @@ func mapProject(dto projectapp.DTO) *model.Project {
 		Path:                dto.Path,
 		IsGit:               dto.IsGit,
 		WorktreeInitCommand: dto.WorktreeInitCommand,
+		MindMapEnabled:      dto.MindMapEnabled,
 		DefaultWorkflowID:   stringPtr(dto.DefaultWorkflowID),
 		GitState:            mapGitState(dto.GitState),
 		CreatedAt:           dto.CreatedAt,
 		UpdatedAt:           dto.UpdatedAt,
+	}
+}
+
+func mapMindMapGraph(dto mindmapapp.GraphDTO) *model.MindMapGraph {
+	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
+	for _, node := range dto.Nodes {
+		nodes = append(nodes, &model.MindMapNode{ID: string(node.ID), Title: node.Title, Content: node.Content, X: node.X, Y: node.Y})
+	}
+	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
+	for _, edge := range dto.Edges {
+		edges = append(edges, &model.MindMapEdge{ID: string(edge.ID), SourceID: string(edge.SourceID), TargetID: string(edge.TargetID), Label: edge.Label})
+	}
+	var sessionID *string
+	if dto.SessionID != "" {
+		value := string(dto.SessionID)
+		sessionID = &value
+	}
+	return &model.MindMapGraph{ProjectID: string(dto.ProjectID), SessionID: sessionID, Nodes: nodes, Edges: edges, UpdatedAt: dto.UpdatedAt}
+}
+
+func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
+	var taskID *string
+	if dto.TaskID != "" {
+		value := string(dto.TaskID)
+		taskID = &value
+	}
+	return &model.MindMapCard{
+		SessionID: string(dto.SessionID), Requirement: dto.Requirement, UpdatedAt: dto.UpdatedAt,
+		TaskID: taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
 	}
 }
 

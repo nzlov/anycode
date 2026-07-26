@@ -15,6 +15,8 @@ type Query {
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
+  projectMindMap(projectId: ID!, sessionId: ID): MindMapGraph!
+  projectMindMapCards(projectId: ID!): [MindMapCard!]!
   sessions(input: ListSessionsInput): SessionCardPage!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
@@ -62,6 +64,8 @@ type Mutation {
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
+  updateProjectMindMap(input: UpdateMindMapInput!): MindMapGraph!
+  retryMindMapTask(id: ID!): MindMapCard!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
@@ -152,11 +156,21 @@ enum AppearanceSolidTheme {
 type GeneralSettings {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  mindMapEnabled: Boolean!
+  mindMapMode: String!
+  mindMapModel: String!
+  mindMapReasoningEffort: String!
+  mindMapMaxConcurrent: Int!
 }
 
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  mindMapEnabled: Boolean!
+  mindMapMode: String!
+  mindMapModel: String!
+  mindMapReasoningEffort: String!
+  mindMapMaxConcurrent: Int!
 }
 
 type AppearanceSettings {
@@ -226,6 +240,7 @@ type Project {
   path: String!
   isGit: Boolean!
   worktreeInitCommand: String!
+  mindMapEnabled: Boolean!
   defaultWorkflowId: ID
   gitState: GitState!
   createdAt: Time!
@@ -815,6 +830,57 @@ input CreateProjectInput {
 input UpdateProjectSettingsInput {
   projectId: ID!
   worktreeInitCommand: String!
+  mindMapEnabled: Boolean!
+}
+
+type MindMapGraph {
+  projectId: ID!
+  sessionId: ID
+  nodes: [MindMapNode!]!
+  edges: [MindMapEdge!]!
+  updatedAt: Time!
+}
+
+type MindMapNode {
+  id: ID!
+  title: String!
+  content: String!
+  x: Float!
+  y: Float!
+}
+
+type MindMapEdge {
+  id: ID!
+  sourceId: ID!
+  targetId: ID!
+  label: String!
+}
+
+type MindMapCard {
+  sessionId: ID!
+  requirement: String!
+  updatedAt: Time!
+  taskId: ID
+  taskStatus: String!
+  taskError: String!
+}
+
+input UpdateMindMapInput {
+  projectId: ID!
+  sessionId: ID
+  operations: [MindMapOperationInput!]!
+}
+
+input MindMapOperationInput {
+  kind: String!
+  id: ID!
+  title: String
+  content: String
+  x: Float
+  y: Float
+  sourceId: ID
+  targetId: ID
+  label: String
 }
 
 input SetDefaultWorkflowInput {

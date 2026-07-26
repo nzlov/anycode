@@ -24,10 +24,12 @@ import (
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	gitdiffdomain "github.com/nzlov/anycode/internal/domain/gitdiff"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 )
@@ -325,6 +327,9 @@ type Service struct {
 	maxConcurrentAgents     int
 	concurrencyLimits       concurrencyLimitProvider
 	agentWritableRoots      agentWritableRootsProvider
+	mindMapSettings         settingdomain.MindMapConfigurationProvider
+	mindMaps                mindmapdomain.Repository
+	mindMapQueueScheduler   func()
 	initializationScheduler func(*Service, domain.ID, bool)
 	initializationWG        sync.WaitGroup
 	terminalWG              sync.WaitGroup
@@ -502,6 +507,19 @@ func WithConcurrencyLimitProvider(provider concurrencyLimitProvider) Option {
 func WithAgentWritableRootsProvider(provider agentWritableRootsProvider) Option {
 	return func(s *Service) {
 		s.agentWritableRoots = provider
+	}
+}
+
+func WithMindMapSettings(provider settingdomain.MindMapConfigurationProvider) Option {
+	return func(s *Service) {
+		s.mindMapSettings = provider
+	}
+}
+
+func WithMindMaps(repo mindmapdomain.Repository, schedule func()) Option {
+	return func(s *Service) {
+		s.mindMaps = repo
+		s.mindMapQueueScheduler = schedule
 	}
 }
 
@@ -3883,6 +3901,11 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			return processdomain.CodexHandle{}, fmt.Errorf("prepare artifact directory: %w", err)
 		}
 	}
+	mindMapTools, mindMapGuidance, err := s.mindMapCodexContext(ctx, session)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
+	developerInstructions := joinPromptParts(anyCodeDeveloperInstructions(session, artifactDir), mindMapGuidance)
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:          runID,
@@ -3893,12 +3916,13 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			Input:                 codexInput(prompt, options.promptFiles, options.promptMentions),
 			Action:                action,
 			ActionArgument:        actionArgument,
-			DeveloperInstructions: anyCodeDeveloperInstructions(session, artifactDir),
+			DeveloperInstructions: developerInstructions,
 			Model:                 strings.TrimSpace(session.Config.CodexModel),
 			ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
 			PermissionMode:        permissionMode,
 			WritableRoots:         writableRoots,
 			FastMode:              session.Config.FastMode,
+			DynamicTools:          mindMapTools,
 		})
 	}
 	files, err := s.listSessionAttachments(ctx, session.ID)
@@ -3907,7 +3931,33 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	files = appendUniqueSessionFiles(files, options.promptFiles...)
 	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
-	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots))
+	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots, developerInstructions, mindMapTools))
+}
+
+func (s *Service) mindMapCodexContext(ctx context.Context, session domain.Session) ([]processdomain.DynamicToolName, string, error) {
+	if s.mindMapSettings == nil || s.projects == nil {
+		return nil, "", nil
+	}
+	configuration, err := s.mindMapSettings.MindMapConfiguration(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("get mind map settings: %w", err)
+	}
+	if !configuration.Enabled {
+		return nil, "", nil
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return nil, "", fmt.Errorf("find project for mind map tools: %w", err)
+	}
+	if !project.MindMapEnabled {
+		return nil, "", nil
+	}
+	tools := []processdomain.DynamicToolName{processdomain.DynamicToolMindMapGet}
+	if configuration.Mode == settingdomain.MindMapModeRealtime {
+		tools = append(tools, processdomain.DynamicToolMindMapUpdate)
+		return tools, realtimeMindMapPromptGuidance, nil
+	}
+	return tools, asyncMindMapQueryPromptGuidance, nil
 }
 
 func (s *Service) agentWritableRootsFor(ctx context.Context, permissionMode string) ([]string, error) {
@@ -3921,7 +3971,7 @@ func (s *Service) agentWritableRootsFor(ctx context.Context, permissionMode stri
 	return append([]string(nil), roots...), nil
 }
 
-func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, files []domain.SessionFile, mentions []domain.PromptMention, action processdomain.CodexAction, actionArgument string, writableRoots []string) processdomain.CodexStartInput {
+func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, files []domain.SessionFile, mentions []domain.PromptMention, action processdomain.CodexAction, actionArgument string, writableRoots []string, developerInstructions string, dynamicTools []processdomain.DynamicToolName) processdomain.CodexStartInput {
 	if action != processdomain.CodexActionTurn && action != processdomain.CodexActionPlan {
 		prompt = ""
 	}
@@ -3933,12 +3983,13 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 		Input:                 codexInput(prompt, files, mentions),
 		Action:                action,
 		ActionArgument:        actionArgument,
-		DeveloperInstructions: anyCodeDeveloperInstructions(session, artifactDir),
+		DeveloperInstructions: developerInstructions,
 		Model:                 strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
 		PermissionMode:        strings.TrimSpace(session.Config.PermissionMode),
 		WritableRoots:         writableRoots,
 		FastMode:              session.Config.FastMode,
+		DynamicTools:          dynamicTools,
 	}
 }
 
@@ -4187,6 +4238,8 @@ const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工�
 const questionsWaitPromptGuidance = "调用 `questions` 时，承载调用的 `exec` 源码首行必须设置 `// @exec: {\"yield_time_ms\": 300000}`，并等待 `tools.questions(...)` 返回。五分钟内收到答案后，必须读取答案并继续本轮工作，不得重复输出“请选择”或提前发送 final。若五分钟后 `exec` 返回 `Script running with cell ID ...`，不要调用 `wait` 延长本轮，也不要重复提问；结束当前 Codex 运行，让 AnyCode 保留待回答请求，并在用户回答后通过持久化恢复继续。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
+const realtimeMindMapPromptGuidance = "本项目已开启实时思维图。开始处理前调用 `mind_map_get` 了解项目；当需求、功能、决策或关联关系发生变化时，必须及时调用 `mind_map_update` 更新本卡片的隔离思维图，无需请求用户批准。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容、布局与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。"
+const asyncMindMapQueryPromptGuidance = "本项目使用异步思维图维护。当前常规会话只可调用 `mind_map_get` 查询项目思维图以辅助理解，不得尝试修改；会话关闭后将由独立思维图分析任务整理并更新。"
 
 func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {
 	parts := []string{anyCodePromptGuidance, questionsWaitPromptGuidance}
@@ -6403,6 +6456,10 @@ func (s *Service) updateArtifactCountWithEvent(ctx context.Context, session doma
 }
 
 func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) (bool, error) {
+	return s.persistSessionWithEvents(ctx, session, inputs, nil)
+}
+
+func (s *Service) persistSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput, mindMapClose *mindMapCloseAction) (bool, error) {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return false, err
@@ -6414,6 +6471,11 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 			}
 			if err := tx.Sessions().UpdateArtifactCount(ctx, session.ID, session.ArtifactCount); err != nil {
 				return err
+			}
+			if mindMapClose != nil {
+				if err := mindMapClose.apply(ctx, tx.MindMaps()); err != nil {
+					return err
+				}
 			}
 			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
@@ -6435,6 +6497,11 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 	if err := s.repo.UpdateArtifactCount(ctx, session.ID, session.ArtifactCount); err != nil {
 		return true, err
 	}
+	if mindMapClose != nil {
+		if err := mindMapClose.apply(ctx, s.mindMaps); err != nil {
+			return true, err
+		}
+	}
 	for _, event := range events {
 		if err := s.events.Append(ctx, event); err != nil {
 			return true, err
@@ -6442,6 +6509,82 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 		s.publishSessionEvent(ctx, event)
 	}
 	return true, nil
+}
+
+type mindMapCloseAction struct {
+	project projectdomain.Project
+	session domain.Session
+	merge   bool
+	task    *mindmapdomain.Task
+}
+
+func (s *Service) prepareMindMapClose(ctx context.Context, session domain.Session, reason domain.CloseReason, now time.Time) (*mindMapCloseAction, error) {
+	if s.mindMaps == nil || s.projects == nil || s.mindMapSettings == nil {
+		return nil, nil
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return nil, fmt.Errorf("find project for mind map close: %w", err)
+	}
+	configuration, err := s.mindMapSettings.MindMapConfiguration(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get mind map settings for close: %w", err)
+	}
+	action := &mindMapCloseAction{project: project, session: session}
+	if !configuration.Enabled || !project.MindMapEnabled {
+		return action, nil
+	}
+	if configuration.Mode == settingdomain.MindMapModeRealtime {
+		action.merge = reason == domain.CloseReasonMergedClosed
+		return action, nil
+	}
+	if configuration.Mode != settingdomain.MindMapModeAsync || session.Mode == domain.ModeTerminal {
+		return action, nil
+	}
+	id, err := s.generateID()
+	if err != nil {
+		return nil, fmt.Errorf("generate mind map task id: %w", err)
+	}
+	action.task = &mindmapdomain.Task{
+		ID: mindmapdomain.TaskID(id), ProjectID: mindmapdomain.ProjectID(session.ProjectID), SessionID: mindmapdomain.SessionID(session.ID),
+		Status: mindmapdomain.TaskQueued, CreatedAt: now, UpdatedAt: now,
+	}
+	return action, nil
+}
+
+func (a *mindMapCloseAction) apply(ctx context.Context, repo mindmapdomain.Repository) error {
+	if a == nil || repo == nil {
+		return nil
+	}
+	sessionID := mindmapdomain.SessionID(a.session.ID)
+	if a.task != nil {
+		if _, found, err := repo.FindTaskBySession(ctx, sessionID); err != nil {
+			return err
+		} else if !found {
+			if err := repo.SaveTask(ctx, *a.task); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if !a.merge {
+		return repo.DeleteOverlay(ctx, sessionID)
+	}
+	overlay, found, err := repo.FindOverlay(ctx, sessionID)
+	if err != nil || !found {
+		return err
+	}
+	graph, _, err := repo.FindGraph(ctx, mindmapdomain.ProjectID(a.project.ID))
+	if err != nil {
+		return err
+	}
+	graph.ProjectID = mindmapdomain.ProjectID(a.project.ID)
+	mindmapdomain.EnsureRoot(&graph, a.project.Name, a.project.UpdatedAt)
+	mindmapdomain.MergeOverlay(&graph, overlay)
+	if err := repo.SaveGraph(ctx, graph); err != nil {
+		return err
+	}
+	return repo.DeleteOverlay(ctx, sessionID)
 }
 
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
@@ -6840,6 +6983,10 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		session.WorktreeHeadCommit = headCommit
 	}
 	now := s.now()
+	mindMapClose, err := s.prepareMindMapClose(ctx, session, reason, now)
+	if err != nil {
+		return DTO{}, releaseClose(err)
+	}
 	cleanupRequested := false
 	if strings.TrimSpace(session.BaseBranch) != "" {
 		switch session.WorktreeCleanup.Status {
@@ -6877,7 +7024,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			"worktreeBranch": session.WorktreeBranch,
 		})})
 	}
-	committed, err := s.saveSessionWithEvents(ctx, session, events)
+	committed, err := s.persistSessionWithEvents(ctx, session, events, mindMapClose)
 	if err != nil {
 		if committed {
 			if quarantinePath != "" && s.artifacts != nil {
@@ -6899,6 +7046,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	}
 	if cleanupRequested {
 		s.scheduleWorktreeCleanup()
+	}
+	if mindMapClose != nil && mindMapClose.task != nil && s.mindMapQueueScheduler != nil {
+		s.mindMapQueueScheduler()
 	}
 	return toDTO(session), nil
 }
@@ -8020,6 +8170,15 @@ func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInpu
 		}
 		if strings.TrimSpace(candidate.BaseBranch) != "" && candidate.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
 			return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session worktree cleanup must finish before history cleanup").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
+		}
+		if s.mindMaps != nil {
+			task, found, err := s.mindMaps.FindTaskBySession(ctx, mindmapdomain.SessionID(candidate.ID))
+			if err != nil {
+				return 0, fmt.Errorf("find mind map task before history cleanup: %w", err)
+			}
+			if found && (task.Status == mindmapdomain.TaskQueued || task.Status == mindmapdomain.TaskRunning) {
+				return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "mind map task must finish before history cleanup").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
+			}
 		}
 	}
 

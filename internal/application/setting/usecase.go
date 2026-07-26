@@ -17,6 +17,7 @@ import (
 
 	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	domain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
@@ -35,13 +36,23 @@ type UseCase interface {
 }
 
 type UpdateGeneralSettingsInput struct {
-	AgentMaxConcurrent int
-	AgentWritableRoots []string
+	AgentMaxConcurrent     int
+	AgentWritableRoots     []string
+	MindMapEnabled         bool
+	MindMapMode            domain.MindMapMode
+	MindMapModel           string
+	MindMapReasoningEffort string
+	MindMapMaxConcurrent   int
 }
 
 type GeneralSettingsDTO struct {
-	AgentMaxConcurrent int
-	AgentWritableRoots []string
+	AgentMaxConcurrent     int
+	AgentWritableRoots     []string
+	MindMapEnabled         bool
+	MindMapMode            domain.MindMapMode
+	MindMapModel           string
+	MindMapReasoningEffort string
+	MindMapMaxConcurrent   int
 }
 
 type UpdateAppearanceSettingsInput struct {
@@ -107,6 +118,8 @@ type Service struct {
 	now                       func() time.Time
 	generateID                func() (domain.QuickCommandID, error)
 	onConcurrencyLimitChanged func()
+	codexModels               []processdomain.CodexModel
+	onMindMapSettingsChanged  func()
 }
 
 type Option func(*Service)
@@ -135,6 +148,13 @@ func WithConcurrencyLimitChanged(callback func()) Option {
 	}
 }
 
+func WithMindMapSettings(models []processdomain.CodexModel, callback func()) Option {
+	return func(service *Service) {
+		service.codexModels = append([]processdomain.CodexModel(nil), models...)
+		service.onMindMapSettingsChanged = callback
+	}
+}
+
 func New(repo domain.Repository, options ...Option) *Service {
 	service := &Service{
 		repo:       repo,
@@ -159,8 +179,13 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
 	}
 	return GeneralSettingsDTO{
-		AgentMaxConcurrent: configuration.AgentMaxConcurrent,
-		AgentWritableRoots: append([]string{}, configuration.AgentWritableRoots...),
+		AgentMaxConcurrent:     configuration.AgentMaxConcurrent,
+		AgentWritableRoots:     append([]string{}, configuration.AgentWritableRoots...),
+		MindMapEnabled:         configuration.MindMap.Enabled,
+		MindMapMode:            configuration.MindMap.Mode,
+		MindMapModel:           configuration.MindMap.Model,
+		MindMapReasoningEffort: configuration.MindMap.ReasoningEffort,
+		MindMapMaxConcurrent:   configuration.MindMap.MaxConcurrent,
 	}, nil
 }
 
@@ -175,13 +200,72 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	if err != nil {
 		return GeneralSettingsDTO{}, err
 	}
-	if err := s.repo.UpdateGeneralSettings(ctx, input.AgentMaxConcurrent, writableRoots); err != nil {
+	mindMapMode := input.MindMapMode
+	if mindMapMode == "" {
+		mindMapMode = domain.MindMapModeRealtime
+	}
+	mindMapMaxConcurrent := input.MindMapMaxConcurrent
+	if mindMapMaxConcurrent == 0 && !input.MindMapEnabled {
+		mindMapMaxConcurrent = domain.DefaultSystemConfiguration().MindMap.MaxConcurrent
+	}
+	mindMap := domain.MindMapConfiguration{
+		Enabled:         input.MindMapEnabled,
+		Mode:            mindMapMode,
+		Model:           strings.TrimSpace(input.MindMapModel),
+		ReasoningEffort: strings.TrimSpace(input.MindMapReasoningEffort),
+		MaxConcurrent:   mindMapMaxConcurrent,
+	}
+	if err := s.validateMindMapConfiguration(mindMap); err != nil {
+		return GeneralSettingsDTO{}, err
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get general settings failed").WithRetryable(true)
+	}
+	configuration.AgentMaxConcurrent = input.AgentMaxConcurrent
+	configuration.AgentWritableRoots = writableRoots
+	configuration.MindMap = mindMap
+	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update general settings failed").WithRetryable(true)
 	}
 	if s.onConcurrencyLimitChanged != nil {
 		s.onConcurrencyLimitChanged()
 	}
-	return GeneralSettingsDTO{AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots}, nil
+	if s.onMindMapSettingsChanged != nil {
+		s.onMindMapSettingsChanged()
+	}
+	return GeneralSettingsDTO{
+		AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots,
+		MindMapEnabled: mindMap.Enabled, MindMapMode: mindMap.Mode, MindMapModel: mindMap.Model,
+		MindMapReasoningEffort: mindMap.ReasoningEffort, MindMapMaxConcurrent: mindMap.MaxConcurrent,
+	}, nil
+}
+
+func (s *Service) validateMindMapConfiguration(configuration domain.MindMapConfiguration) error {
+	if !configuration.Mode.Valid() {
+		return validationError("mindMapMode", "mind map mode is invalid")
+	}
+	if configuration.MaxConcurrent <= 0 {
+		return validationError("mindMapMaxConcurrent", "mind map concurrency limit must be positive")
+	}
+	if !configuration.Enabled || configuration.Mode != domain.MindMapModeAsync {
+		return nil
+	}
+	if configuration.Model == "" || configuration.ReasoningEffort == "" {
+		return validationError("mindMapModel", "async mind map model and reasoning effort are required")
+	}
+	for _, model := range s.codexModels {
+		if model.Slug != configuration.Model {
+			continue
+		}
+		for _, effort := range model.SupportedReasoningLevels {
+			if effort.Effort == configuration.ReasoningEffort {
+				return nil
+			}
+		}
+		break
+	}
+	return validationError("mindMapModel", "async mind map model or reasoning effort is unavailable")
 }
 
 func normalizeAgentWritableRoots(roots []string) ([]string, error) {

@@ -185,11 +185,11 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function closeSession() {
+  async function closeSession(mergeMindMap = false) {
     closing.value = true;
     error.value = '';
     try {
-      await closeSessionRequest(sessionId);
+      await closeSessionRequest(sessionId, mergeMindMap ? 'merged_closed' : 'user_closed');
       await loadSessionState();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '关闭会话失败';

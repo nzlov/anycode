@@ -9,6 +9,7 @@ import (
 	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/project"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
 func TestCreateProjectDefaultsNameAndGitState(t *testing.T) {
@@ -293,10 +294,52 @@ func TestUpdateProjectSettingsSavesBlankAndClearedCommands(t *testing.T) {
 	}
 }
 
+func TestProjectMindMapCanOnlyBeEnabledWithEffectiveGlobalSettings(t *testing.T) {
+	repo := newFakeRepository()
+	repo.projects = []domain.Project{{ID: "project-1", Name: "AnyCode", Path: domain.ProjectPath{Value: "/repo"}}}
+	repo.reindex()
+	settings := &fakeMindMapSettings{}
+	service := New(repo, nil, &fakeGitInspector{states: map[string]domain.GitState{"/repo": {}}}, WithMindMapSettings(settings))
+	input := UpdateProjectSettingsInput{ProjectID: "project-1", MindMapEnabled: true}
+
+	if _, err := service.UpdateProjectSettings(context.Background(), input); err == nil {
+		t.Fatal("enabled project mind map while global setting was disabled")
+	}
+	settings.configuration = settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeAsync, MaxConcurrent: 1,
+	}
+	if _, err := service.UpdateProjectSettings(context.Background(), input); err == nil {
+		t.Fatal("enabled project mind map with incomplete async model settings")
+	}
+	settings.configuration.Model = "gpt-mind-map"
+	settings.configuration.ReasoningEffort = "high"
+	got, err := service.UpdateProjectSettings(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.MindMapEnabled || !repo.byID["project-1"].MindMapEnabled {
+		t.Fatalf("project = %#v", got)
+	}
+
+	settings.configuration.Enabled = false
+	got, err = service.UpdateProjectSettings(context.Background(), UpdateProjectSettingsInput{ProjectID: "project-1"})
+	if err != nil || got.MindMapEnabled {
+		t.Fatalf("disable project mind map = %#v, %v", got, err)
+	}
+}
+
 type fakeRepository struct {
 	saved    []domain.Project
 	projects []domain.Project
 	byID     map[domain.ID]domain.Project
+}
+
+type fakeMindMapSettings struct {
+	configuration settingdomain.MindMapConfiguration
+}
+
+func (s *fakeMindMapSettings) MindMapConfiguration(context.Context) (settingdomain.MindMapConfiguration, error) {
+	return s.configuration, nil
 }
 
 func newFakeRepository() *fakeRepository {

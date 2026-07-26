@@ -2,6 +2,18 @@
   <q-menu context-menu @before-show="emit('before-show', $event)" @click.stop>
     <q-list dense class="overview-card-menu app-touch-list">
       <q-item
+        v-if="mindMapRealtime"
+        v-close-popup
+        clickable
+        :disable="!card.availableActions.includes('close') || closeLoading"
+        @click.stop="emit('merge-close')"
+      >
+        <q-item-section avatar>
+          <q-icon name="merge" color="positive" />
+        </q-item-section>
+        <q-item-section>合并思维图并关闭</q-item-section>
+      </q-item>
+      <q-item
         v-close-popup
         clickable
         tag="a"
@@ -42,7 +54,7 @@
         <q-item-section avatar>
           <q-icon name="close" />
         </q-item-section>
-        <q-item-section>关闭卡片</q-item-section>
+        <q-item-section>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-item-section>
       </q-item>
     </q-list>
   </q-menu>
@@ -61,12 +73,14 @@ defineProps<{
   card: SessionCard;
   priorityLoading?: boolean;
   closeLoading?: boolean;
+  mindMapRealtime?: boolean;
 }>();
 
 const emit = defineEmits<{
   'before-show': [event: Event];
   'set-priority': [priority: SessionPriority];
   close: [];
+  'merge-close': [];
 }>();
 
 const router = useRouter();

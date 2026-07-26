@@ -16,6 +16,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/nzlov/anycode/internal/application/port"
 	"github.com/nzlov/anycode/internal/domain/event"
+	"github.com/nzlov/anycode/internal/domain/mindmap"
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
@@ -468,6 +469,10 @@ func (s *Store) Projects() *ProjectRepository {
 	return NewProjectRepository(s.client)
 }
 
+func (s *Store) MindMaps() *MindMapRepository {
+	return NewMindMapRepository(s.client)
+}
+
 func (s *Store) Sessions() *SessionRepository {
 	return NewSessionRepository(s.client)
 }
@@ -526,6 +531,10 @@ type transaction struct {
 
 func (t transaction) Projects() project.Repository {
 	return NewProjectRepository(t.client)
+}
+
+func (t transaction) MindMaps() mindmap.Repository {
+	return NewMindMapRepository(t.client)
 }
 
 func (t transaction) Sessions() session.Repository {

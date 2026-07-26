@@ -60,6 +60,20 @@ func (_c *ProjectCreate) SetNillableWorktreeInitCommand(v *string) *ProjectCreat
 	return _c
 }
 
+// SetMindMapEnabled sets the "mind_map_enabled" field.
+func (_c *ProjectCreate) SetMindMapEnabled(v bool) *ProjectCreate {
+	_c.mutation.SetMindMapEnabled(v)
+	return _c
+}
+
+// SetNillableMindMapEnabled sets the "mind_map_enabled" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableMindMapEnabled(v *bool) *ProjectCreate {
+	if v != nil {
+		_c.SetMindMapEnabled(*v)
+	}
+	return _c
+}
+
 // SetDefaultWorkflowID sets the "default_workflow_id" field.
 func (_c *ProjectCreate) SetDefaultWorkflowID(v string) *ProjectCreate {
 	_c.mutation.SetDefaultWorkflowID(v)
@@ -165,6 +179,10 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultWorktreeInitCommand
 		_c.mutation.SetWorktreeInitCommand(v)
 	}
+	if _, ok := _c.mutation.MindMapEnabled(); !ok {
+		v := project.DefaultMindMapEnabled
+		_c.mutation.SetMindMapEnabled(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := project.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -198,6 +216,9 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.WorktreeInitCommand(); !ok {
 		return &ValidationError{Name: "worktree_init_command", err: errors.New(`ent: missing required field "Project.worktree_init_command"`)}
+	}
+	if _, ok := _c.mutation.MindMapEnabled(); !ok {
+		return &ValidationError{Name: "mind_map_enabled", err: errors.New(`ent: missing required field "Project.mind_map_enabled"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Project.created_at"`)}
@@ -255,6 +276,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.WorktreeInitCommand(); ok {
 		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
 		_node.WorktreeInitCommand = value
+	}
+	if value, ok := _c.mutation.MindMapEnabled(); ok {
+		_spec.SetField(project.FieldMindMapEnabled, field.TypeBool, value)
+		_node.MindMapEnabled = value
 	}
 	if value, ok := _c.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)

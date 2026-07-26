@@ -7,6 +7,9 @@ import (
 
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationcheckpoint"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationconfiguration"
@@ -108,6 +111,78 @@ func init() {
 	mergerecordDescCreatedAt := mergerecordFields[13].Descriptor()
 	// mergerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
 	mergerecord.DefaultCreatedAt = mergerecordDescCreatedAt.Default.(func() time.Time)
+	mindmapgraphFields := schema.MindMapGraph{}.Fields()
+	_ = mindmapgraphFields
+	// mindmapgraphDescNodes is the schema descriptor for nodes field.
+	mindmapgraphDescNodes := mindmapgraphFields[1].Descriptor()
+	// mindmapgraph.DefaultNodes holds the default value on creation for the nodes field.
+	mindmapgraph.DefaultNodes = mindmapgraphDescNodes.Default.([]map[string]interface{})
+	// mindmapgraphDescEdges is the schema descriptor for edges field.
+	mindmapgraphDescEdges := mindmapgraphFields[2].Descriptor()
+	// mindmapgraph.DefaultEdges holds the default value on creation for the edges field.
+	mindmapgraph.DefaultEdges = mindmapgraphDescEdges.Default.([]map[string]interface{})
+	// mindmapgraphDescHistory is the schema descriptor for history field.
+	mindmapgraphDescHistory := mindmapgraphFields[3].Descriptor()
+	// mindmapgraph.DefaultHistory holds the default value on creation for the history field.
+	mindmapgraph.DefaultHistory = mindmapgraphDescHistory.Default.([]map[string]interface{})
+	// mindmapgraphDescUpdatedAt is the schema descriptor for updated_at field.
+	mindmapgraphDescUpdatedAt := mindmapgraphFields[4].Descriptor()
+	// mindmapgraph.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	mindmapgraph.DefaultUpdatedAt = mindmapgraphDescUpdatedAt.Default.(func() time.Time)
+	// mindmapgraph.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	mindmapgraph.UpdateDefaultUpdatedAt = mindmapgraphDescUpdatedAt.UpdateDefault.(func() time.Time)
+	mindmapoverlayFields := schema.MindMapOverlay{}.Fields()
+	_ = mindmapoverlayFields
+	// mindmapoverlayDescProjectID is the schema descriptor for project_id field.
+	mindmapoverlayDescProjectID := mindmapoverlayFields[1].Descriptor()
+	// mindmapoverlay.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	mindmapoverlay.ProjectIDValidator = mindmapoverlayDescProjectID.Validators[0].(func(string) error)
+	// mindmapoverlayDescChanges is the schema descriptor for changes field.
+	mindmapoverlayDescChanges := mindmapoverlayFields[2].Descriptor()
+	// mindmapoverlay.DefaultChanges holds the default value on creation for the changes field.
+	mindmapoverlay.DefaultChanges = mindmapoverlayDescChanges.Default.([]map[string]interface{})
+	// mindmapoverlayDescUpdatedAt is the schema descriptor for updated_at field.
+	mindmapoverlayDescUpdatedAt := mindmapoverlayFields[3].Descriptor()
+	// mindmapoverlay.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	mindmapoverlay.DefaultUpdatedAt = mindmapoverlayDescUpdatedAt.Default.(func() time.Time)
+	// mindmapoverlay.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	mindmapoverlay.UpdateDefaultUpdatedAt = mindmapoverlayDescUpdatedAt.UpdateDefault.(func() time.Time)
+	mindmaptaskFields := schema.MindMapTask{}.Fields()
+	_ = mindmaptaskFields
+	// mindmaptaskDescProjectID is the schema descriptor for project_id field.
+	mindmaptaskDescProjectID := mindmaptaskFields[1].Descriptor()
+	// mindmaptask.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	mindmaptask.ProjectIDValidator = mindmaptaskDescProjectID.Validators[0].(func(string) error)
+	// mindmaptaskDescSessionID is the schema descriptor for session_id field.
+	mindmaptaskDescSessionID := mindmaptaskFields[2].Descriptor()
+	// mindmaptask.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	mindmaptask.SessionIDValidator = mindmaptaskDescSessionID.Validators[0].(func(string) error)
+	// mindmaptaskDescStatus is the schema descriptor for status field.
+	mindmaptaskDescStatus := mindmaptaskFields[3].Descriptor()
+	// mindmaptask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	mindmaptask.StatusValidator = mindmaptaskDescStatus.Validators[0].(func(string) error)
+	// mindmaptaskDescProcessRunID is the schema descriptor for process_run_id field.
+	mindmaptaskDescProcessRunID := mindmaptaskFields[4].Descriptor()
+	// mindmaptask.DefaultProcessRunID holds the default value on creation for the process_run_id field.
+	mindmaptask.DefaultProcessRunID = mindmaptaskDescProcessRunID.Default.(string)
+	// mindmaptaskDescAttempts is the schema descriptor for attempts field.
+	mindmaptaskDescAttempts := mindmaptaskFields[5].Descriptor()
+	// mindmaptask.DefaultAttempts holds the default value on creation for the attempts field.
+	mindmaptask.DefaultAttempts = mindmaptaskDescAttempts.Default.(int)
+	// mindmaptaskDescError is the schema descriptor for error field.
+	mindmaptaskDescError := mindmaptaskFields[6].Descriptor()
+	// mindmaptask.DefaultError holds the default value on creation for the error field.
+	mindmaptask.DefaultError = mindmaptaskDescError.Default.(string)
+	// mindmaptaskDescCreatedAt is the schema descriptor for created_at field.
+	mindmaptaskDescCreatedAt := mindmaptaskFields[7].Descriptor()
+	// mindmaptask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	mindmaptask.DefaultCreatedAt = mindmaptaskDescCreatedAt.Default.(func() time.Time)
+	// mindmaptaskDescUpdatedAt is the schema descriptor for updated_at field.
+	mindmaptaskDescUpdatedAt := mindmaptaskFields[10].Descriptor()
+	// mindmaptask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	mindmaptask.DefaultUpdatedAt = mindmaptaskDescUpdatedAt.Default.(func() time.Time)
+	// mindmaptask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	mindmaptask.UpdateDefaultUpdatedAt = mindmaptaskDescUpdatedAt.UpdateDefault.(func() time.Time)
 	noderunFields := schema.NodeRun{}.Fields()
 	_ = noderunFields
 	// noderunDescSessionID is the schema descriptor for session_id field.
@@ -244,12 +319,16 @@ func init() {
 	projectDescWorktreeInitCommand := projectFields[4].Descriptor()
 	// project.DefaultWorktreeInitCommand holds the default value on creation for the worktree_init_command field.
 	project.DefaultWorktreeInitCommand = projectDescWorktreeInitCommand.Default.(string)
+	// projectDescMindMapEnabled is the schema descriptor for mind_map_enabled field.
+	projectDescMindMapEnabled := projectFields[5].Descriptor()
+	// project.DefaultMindMapEnabled holds the default value on creation for the mind_map_enabled field.
+	project.DefaultMindMapEnabled = projectDescMindMapEnabled.Default.(bool)
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[7].Descriptor()
+	projectDescCreatedAt := projectFields[8].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[8].Descriptor()
+	projectDescUpdatedAt := projectFields[9].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -556,40 +635,62 @@ func init() {
 	systemconfigurationDescAgentWritableRoots := systemconfigurationFields[2].Descriptor()
 	// systemconfiguration.DefaultAgentWritableRoots holds the default value on creation for the agent_writable_roots field.
 	systemconfiguration.DefaultAgentWritableRoots = systemconfigurationDescAgentWritableRoots.Default.([]string)
+	// systemconfigurationDescMindMapEnabled is the schema descriptor for mind_map_enabled field.
+	systemconfigurationDescMindMapEnabled := systemconfigurationFields[3].Descriptor()
+	// systemconfiguration.DefaultMindMapEnabled holds the default value on creation for the mind_map_enabled field.
+	systemconfiguration.DefaultMindMapEnabled = systemconfigurationDescMindMapEnabled.Default.(bool)
+	// systemconfigurationDescMindMapMode is the schema descriptor for mind_map_mode field.
+	systemconfigurationDescMindMapMode := systemconfigurationFields[4].Descriptor()
+	// systemconfiguration.DefaultMindMapMode holds the default value on creation for the mind_map_mode field.
+	systemconfiguration.DefaultMindMapMode = systemconfigurationDescMindMapMode.Default.(string)
+	// systemconfiguration.MindMapModeValidator is a validator for the "mind_map_mode" field. It is called by the builders before save.
+	systemconfiguration.MindMapModeValidator = systemconfigurationDescMindMapMode.Validators[0].(func(string) error)
+	// systemconfigurationDescMindMapModel is the schema descriptor for mind_map_model field.
+	systemconfigurationDescMindMapModel := systemconfigurationFields[5].Descriptor()
+	// systemconfiguration.DefaultMindMapModel holds the default value on creation for the mind_map_model field.
+	systemconfiguration.DefaultMindMapModel = systemconfigurationDescMindMapModel.Default.(string)
+	// systemconfigurationDescMindMapReasoningEffort is the schema descriptor for mind_map_reasoning_effort field.
+	systemconfigurationDescMindMapReasoningEffort := systemconfigurationFields[6].Descriptor()
+	// systemconfiguration.DefaultMindMapReasoningEffort holds the default value on creation for the mind_map_reasoning_effort field.
+	systemconfiguration.DefaultMindMapReasoningEffort = systemconfigurationDescMindMapReasoningEffort.Default.(string)
+	// systemconfigurationDescMindMapMaxConcurrent is the schema descriptor for mind_map_max_concurrent field.
+	systemconfigurationDescMindMapMaxConcurrent := systemconfigurationFields[7].Descriptor()
+	// systemconfiguration.DefaultMindMapMaxConcurrent holds the default value on creation for the mind_map_max_concurrent field.
+	systemconfiguration.DefaultMindMapMaxConcurrent = systemconfigurationDescMindMapMaxConcurrent.Default.(int)
 	// systemconfigurationDescWallpaperColorScheme is the schema descriptor for wallpaper_color_scheme field.
-	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[3].Descriptor()
+	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[8].Descriptor()
 	// systemconfiguration.WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	systemconfiguration.WallpaperColorSchemeValidator = systemconfigurationDescWallpaperColorScheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundType is the schema descriptor for background_type field.
-	systemconfigurationDescBackgroundType := systemconfigurationFields[4].Descriptor()
+	systemconfigurationDescBackgroundType := systemconfigurationFields[9].Descriptor()
 	// systemconfiguration.DefaultBackgroundType holds the default value on creation for the background_type field.
 	systemconfiguration.DefaultBackgroundType = systemconfigurationDescBackgroundType.Default.(string)
 	// systemconfiguration.BackgroundTypeValidator is a validator for the "background_type" field. It is called by the builders before save.
 	systemconfiguration.BackgroundTypeValidator = systemconfigurationDescBackgroundType.Validators[0].(func(string) error)
 	// systemconfigurationDescSolidTheme is the schema descriptor for solid_theme field.
-	systemconfigurationDescSolidTheme := systemconfigurationFields[5].Descriptor()
+	systemconfigurationDescSolidTheme := systemconfigurationFields[10].Descriptor()
 	// systemconfiguration.DefaultSolidTheme holds the default value on creation for the solid_theme field.
 	systemconfiguration.DefaultSolidTheme = systemconfigurationDescSolidTheme.Default.(string)
 	// systemconfiguration.SolidThemeValidator is a validator for the "solid_theme" field. It is called by the builders before save.
 	systemconfiguration.SolidThemeValidator = systemconfigurationDescSolidTheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundMask is the schema descriptor for background_mask field.
-	systemconfigurationDescBackgroundMask := systemconfigurationFields[6].Descriptor()
+	systemconfigurationDescBackgroundMask := systemconfigurationFields[11].Descriptor()
 	// systemconfiguration.DefaultBackgroundMask holds the default value on creation for the background_mask field.
 	systemconfiguration.DefaultBackgroundMask = systemconfigurationDescBackgroundMask.Default.(int)
 	// systemconfigurationDescWallpaperID is the schema descriptor for wallpaper_id field.
-	systemconfigurationDescWallpaperID := systemconfigurationFields[7].Descriptor()
+	systemconfigurationDescWallpaperID := systemconfigurationFields[12].Descriptor()
 	// systemconfiguration.DefaultWallpaperID holds the default value on creation for the wallpaper_id field.
 	systemconfiguration.DefaultWallpaperID = systemconfigurationDescWallpaperID.Default.(string)
 	// systemconfigurationDescWallpaperFilename is the schema descriptor for wallpaper_filename field.
-	systemconfigurationDescWallpaperFilename := systemconfigurationFields[8].Descriptor()
+	systemconfigurationDescWallpaperFilename := systemconfigurationFields[13].Descriptor()
 	// systemconfiguration.DefaultWallpaperFilename holds the default value on creation for the wallpaper_filename field.
 	systemconfiguration.DefaultWallpaperFilename = systemconfigurationDescWallpaperFilename.Default.(string)
 	// systemconfigurationDescWallpaperMimeType is the schema descriptor for wallpaper_mime_type field.
-	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[9].Descriptor()
+	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[14].Descriptor()
 	// systemconfiguration.DefaultWallpaperMimeType holds the default value on creation for the wallpaper_mime_type field.
 	systemconfiguration.DefaultWallpaperMimeType = systemconfigurationDescWallpaperMimeType.Default.(string)
 	// systemconfigurationDescUpdatedAt is the schema descriptor for updated_at field.
-	systemconfigurationDescUpdatedAt := systemconfigurationFields[10].Descriptor()
+	systemconfigurationDescUpdatedAt := systemconfigurationFields[15].Descriptor()
 	// systemconfiguration.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	systemconfiguration.DefaultUpdatedAt = systemconfigurationDescUpdatedAt.Default.(func() time.Time)
 	// systemconfiguration.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

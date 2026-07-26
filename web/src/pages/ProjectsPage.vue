@@ -96,6 +96,17 @@
                       <q-item-section>流程配置</q-item-section>
                     </q-item>
                     <q-item
+                      v-if="mindMapVisible(project)"
+                      v-close-popup
+                      clickable
+                      @click.stop="openMindMap(project.id)"
+                    >
+                      <q-item-section avatar>
+                        <q-icon name="hub" />
+                      </q-item-section>
+                      <q-item-section>思维图</q-item-section>
+                    </q-item>
+                    <q-item
                       v-close-popup
                       clickable
                       class="text-negative"
@@ -172,12 +183,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
 import { useProjects } from '@/composables/useProjects';
+import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import type { ProjectSummary } from '@/services/projects';
+import { getGeneralSettings, type GeneralSettings } from '@/services/generalSettings';
 
 const router = useRouter();
 const { projects, loading, loadProjects, removeProjectById } = useProjects();
@@ -186,16 +199,26 @@ const removeDialogOpen = ref(false);
 const removingProjectId = ref('');
 const removingProjectName = ref('');
 const removing = ref(false);
+const generalSettings = ref<GeneralSettings | null>(null);
+const generalSettingsInvalidation = useGeneralSettingsInvalidation();
 
 onMounted(refreshProjects);
+if (generalSettingsInvalidation) {
+  watch(generalSettingsInvalidation.revision, refreshGeneralSettings);
+}
 
 async function refreshProjects() {
   loadError.value = '';
   try {
-    await loadProjects();
+    const [, settings] = await Promise.all([loadProjects(), getGeneralSettings().catch(() => null)]);
+    generalSettings.value = settings;
   } catch {
     loadError.value = '无法加载项目';
   }
+}
+
+async function refreshGeneralSettings() {
+  generalSettings.value = await getGeneralSettings().catch(() => null);
 }
 
 function openProjectOverview(projectId: string) {
@@ -208,6 +231,14 @@ function openProjectSettings(project: ProjectSummary) {
 
 function openWorkflowConfig(projectId: string) {
   void router.push({ name: 'workflow-config', params: { projectId } });
+}
+
+function openMindMap(projectId: string) {
+  void router.push({ name: 'project-mind-map', params: { projectId } });
+}
+
+function mindMapVisible(project: ProjectSummary) {
+  return Boolean(generalSettings.value?.mindMapEnabled && project.mindMapEnabled);
 }
 
 function confirmRemoveProject(projectId: string, projectName: string) {

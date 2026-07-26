@@ -143,6 +143,68 @@
                   />
                 </q-item-section>
               </q-item>
+              <q-item>
+                <q-item-section avatar>
+                  <q-icon name="hub" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>项目思维图</q-item-label>
+                  <q-item-label caption>允许项目启用 Agent 维护的隔离思维图</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-toggle
+                    v-model="general.mindMapEnabled"
+                    color="primary"
+                    aria-label="项目思维图"
+                    :disable="generalLoading || generalSaving"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item v-if="general.mindMapEnabled">
+                <q-item-section>
+                  <q-item-label>维护模式</q-item-label>
+                  <q-item-label caption>实时由卡片 Agent 维护；异步在会话关闭后排队整理</q-item-label>
+                </q-item-section>
+                <q-item-section side class="appearance-settings-list__control">
+                  <q-select
+                    v-model="general.mindMapMode"
+                    outlined
+                    dense
+                    emit-value
+                    map-options
+                    options-dense
+                    :options="mindMapModeOptions"
+                    aria-label="思维图维护模式"
+                    :disable="generalLoading || generalSaving"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item v-if="general.mindMapEnabled && general.mindMapMode === 'async'" class="column items-stretch">
+                <q-item-section>
+                  <q-item-label>异步整理 Agent</q-item-label>
+                  <q-item-label caption>所有项目共用此模型、思考强度与任务并发池</q-item-label>
+                </q-item-section>
+                <q-item-section class="q-mt-sm mind-map-agent-settings">
+                  <CodexModelSelector
+                    v-model:model="general.mindMapModel"
+                    v-model:effort="general.mindMapReasoningEffort"
+                    :disabled="generalLoading || generalSaving"
+                  />
+                  <q-input
+                    v-model.number="general.mindMapMaxConcurrent"
+                    outlined
+                    dense
+                    type="number"
+                    min="1"
+                    step="1"
+                    label="全局并发任务数"
+                    hide-bottom-space
+                    aria-label="思维图全局并发任务数"
+                    :disable="generalLoading || generalSaving"
+                    :error="!mindMapMaxConcurrentValid"
+                  />
+                </q-item-section>
+              </q-item>
             </q-list>
 
             <q-card flat bordered class="general-thinking-settings">
@@ -451,7 +513,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QDialog } from 'quasar';
 
+import CodexModelSelector from '@/components/CodexModelSelector.vue';
 import QuickCommandManager from '@/components/QuickCommandManager.vue';
+import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import {
   sessionThinkingPhraseStyleOptions,
   useSessionThinkingPhrases,
@@ -491,8 +555,21 @@ const emit = defineEmits<{
 }>();
 
 const { thinkingPhrasesEnabled, thinkingPhraseStyle } = useSessionThinkingPhrases();
+const generalSettingsInvalidation = useGeneralSettingsInvalidation();
 const activeSection = ref<'general' | 'appearance' | 'notifications' | 'quick_commands'>('general');
-const defaultGeneral: GeneralSettings = { agentMaxConcurrent: 2, agentWritableRoots: [] };
+const defaultGeneral: GeneralSettings = {
+  agentMaxConcurrent: 2,
+  agentWritableRoots: [],
+  mindMapEnabled: false,
+  mindMapMode: 'realtime',
+  mindMapModel: '',
+  mindMapReasoningEffort: '',
+  mindMapMaxConcurrent: 1,
+};
+const mindMapModeOptions = [
+  { label: '实时', value: 'realtime' },
+  { label: '异步', value: 'async' },
+];
 const general = ref<GeneralSettings>({ ...defaultGeneral });
 const persistedGeneral = ref<GeneralSettings>({ ...defaultGeneral });
 const agentWritableRootsText = ref('');
@@ -515,12 +592,34 @@ const agentWritableRootsValid = computed(() =>
 const agentMaxConcurrentValid = computed(
   () => Number.isInteger(general.value.agentMaxConcurrent) && general.value.agentMaxConcurrent > 0,
 );
+const mindMapMaxConcurrentValid = computed(
+  () =>
+    Number.isInteger(general.value.mindMapMaxConcurrent) &&
+    general.value.mindMapMaxConcurrent > 0,
+);
+const mindMapSettingsValid = computed(
+  () =>
+    !general.value.mindMapEnabled ||
+    (general.value.mindMapMode === 'realtime' ||
+      (general.value.mindMapMode === 'async' &&
+        !!general.value.mindMapModel &&
+        !!general.value.mindMapReasoningEffort &&
+        mindMapMaxConcurrentValid.value)),
+);
 const generalSettingsValid = computed(
-  () => agentMaxConcurrentValid.value && agentWritableRootsValid.value,
+  () =>
+    agentMaxConcurrentValid.value &&
+    agentWritableRootsValid.value &&
+    mindMapSettingsValid.value,
 );
 const generalSettingsChanged = computed(
   () =>
     general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent ||
+    general.value.mindMapEnabled !== persistedGeneral.value.mindMapEnabled ||
+    general.value.mindMapMode !== persistedGeneral.value.mindMapMode ||
+    general.value.mindMapModel !== persistedGeneral.value.mindMapModel ||
+    general.value.mindMapReasoningEffort !== persistedGeneral.value.mindMapReasoningEffort ||
+    general.value.mindMapMaxConcurrent !== persistedGeneral.value.mindMapMaxConcurrent ||
     JSON.stringify(parsedAgentWritableRoots.value) !==
       JSON.stringify(persistedGeneral.value.agentWritableRoots),
 );
@@ -594,9 +693,15 @@ async function saveGeneralSettings() {
     general.value = await updateGeneralSettings({
       agentMaxConcurrent: general.value.agentMaxConcurrent,
       agentWritableRoots: parsedAgentWritableRoots.value,
+      mindMapEnabled: general.value.mindMapEnabled,
+      mindMapMode: general.value.mindMapMode,
+      mindMapModel: general.value.mindMapModel,
+      mindMapReasoningEffort: general.value.mindMapReasoningEffort,
+      mindMapMaxConcurrent: general.value.mindMapMaxConcurrent,
     });
     persistedGeneral.value = { ...general.value };
     agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
+    generalSettingsInvalidation?.invalidate();
   } catch {
     general.value = { ...persistedGeneral.value };
     agentWritableRootsText.value = persistedGeneral.value.agentWritableRoots.join('\n');
@@ -744,15 +849,28 @@ watch(activeSection, (section) => {
 
 watch(
   [() => general.value.agentMaxConcurrent, agentWritableRootsText],
-  () => {
-    if (generalSaveTimer !== null) clearTimeout(generalSaveTimer);
-    if (generalLoading.value || !generalSettingsChanged.value || !generalSettingsValid.value) return;
-    generalSaveTimer = setTimeout(() => {
-      generalSaveTimer = null;
-      void saveGeneralSettings();
-    }, generalSaveDebounceMs);
-  },
+  scheduleGeneralSettingsSave,
 );
+
+watch(
+  [
+    () => general.value.mindMapEnabled,
+    () => general.value.mindMapMode,
+    () => general.value.mindMapModel,
+    () => general.value.mindMapReasoningEffort,
+    () => general.value.mindMapMaxConcurrent,
+  ],
+  scheduleGeneralSettingsSave,
+);
+
+function scheduleGeneralSettingsSave() {
+  if (generalSaveTimer !== null) clearTimeout(generalSaveTimer);
+  if (generalLoading.value || !generalSettingsChanged.value || !generalSettingsValid.value) return;
+  generalSaveTimer = setTimeout(() => {
+    generalSaveTimer = null;
+    void saveGeneralSettings();
+  }, generalSaveDebounceMs);
+}
 
 watch(
   () => props.modelValue,

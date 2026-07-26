@@ -21,6 +21,11 @@ const routes: RouteRecordRaw[] = [
         name: 'project-settings',
         component: () => import('@/pages/ProjectSettingsPage.vue'),
       },
+      {
+        path: 'projects/:projectId/mind-map',
+        name: 'project-mind-map',
+        component: () => import('@/pages/ProjectMindMapPage.vue'),
+      },
       { path: 'sessions', name: 'sessions', component: () => import('@/pages/SessionsPage.vue') },
       {
         path: 'sessions/:id',

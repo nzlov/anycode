@@ -17,6 +17,16 @@ const (
 	FieldAgentMaxConcurrent = "agent_max_concurrent"
 	// FieldAgentWritableRoots holds the string denoting the agent_writable_roots field in the database.
 	FieldAgentWritableRoots = "agent_writable_roots"
+	// FieldMindMapEnabled holds the string denoting the mind_map_enabled field in the database.
+	FieldMindMapEnabled = "mind_map_enabled"
+	// FieldMindMapMode holds the string denoting the mind_map_mode field in the database.
+	FieldMindMapMode = "mind_map_mode"
+	// FieldMindMapModel holds the string denoting the mind_map_model field in the database.
+	FieldMindMapModel = "mind_map_model"
+	// FieldMindMapReasoningEffort holds the string denoting the mind_map_reasoning_effort field in the database.
+	FieldMindMapReasoningEffort = "mind_map_reasoning_effort"
+	// FieldMindMapMaxConcurrent holds the string denoting the mind_map_max_concurrent field in the database.
+	FieldMindMapMaxConcurrent = "mind_map_max_concurrent"
 	// FieldWallpaperColorScheme holds the string denoting the wallpaper_color_scheme field in the database.
 	FieldWallpaperColorScheme = "wallpaper_color_scheme"
 	// FieldBackgroundType holds the string denoting the background_type field in the database.
@@ -42,6 +52,11 @@ var Columns = []string{
 	FieldID,
 	FieldAgentMaxConcurrent,
 	FieldAgentWritableRoots,
+	FieldMindMapEnabled,
+	FieldMindMapMode,
+	FieldMindMapModel,
+	FieldMindMapReasoningEffort,
+	FieldMindMapMaxConcurrent,
 	FieldWallpaperColorScheme,
 	FieldBackgroundType,
 	FieldSolidTheme,
@@ -67,6 +82,18 @@ var (
 	DefaultAgentMaxConcurrent int
 	// DefaultAgentWritableRoots holds the default value on creation for the "agent_writable_roots" field.
 	DefaultAgentWritableRoots []string
+	// DefaultMindMapEnabled holds the default value on creation for the "mind_map_enabled" field.
+	DefaultMindMapEnabled bool
+	// DefaultMindMapMode holds the default value on creation for the "mind_map_mode" field.
+	DefaultMindMapMode string
+	// MindMapModeValidator is a validator for the "mind_map_mode" field. It is called by the builders before save.
+	MindMapModeValidator func(string) error
+	// DefaultMindMapModel holds the default value on creation for the "mind_map_model" field.
+	DefaultMindMapModel string
+	// DefaultMindMapReasoningEffort holds the default value on creation for the "mind_map_reasoning_effort" field.
+	DefaultMindMapReasoningEffort string
+	// DefaultMindMapMaxConcurrent holds the default value on creation for the "mind_map_max_concurrent" field.
+	DefaultMindMapMaxConcurrent int
 	// WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	WallpaperColorSchemeValidator func(string) error
 	// DefaultBackgroundType holds the default value on creation for the "background_type" field.
@@ -102,6 +129,31 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByAgentMaxConcurrent orders the results by the agent_max_concurrent field.
 func ByAgentMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAgentMaxConcurrent, opts...).ToFunc()
+}
+
+// ByMindMapEnabled orders the results by the mind_map_enabled field.
+func ByMindMapEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapEnabled, opts...).ToFunc()
+}
+
+// ByMindMapMode orders the results by the mind_map_mode field.
+func ByMindMapMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapMode, opts...).ToFunc()
+}
+
+// ByMindMapModel orders the results by the mind_map_model field.
+func ByMindMapModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapModel, opts...).ToFunc()
+}
+
+// ByMindMapReasoningEffort orders the results by the mind_map_reasoning_effort field.
+func ByMindMapReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapReasoningEffort, opts...).ToFunc()
+}
+
+// ByMindMapMaxConcurrent orders the results by the mind_map_max_concurrent field.
+func ByMindMapMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapMaxConcurrent, opts...).ToFunc()
 }
 
 // ByWallpaperColorScheme orders the results by the wallpaper_color_scheme field.

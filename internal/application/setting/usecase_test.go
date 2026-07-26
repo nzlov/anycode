@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	domain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
@@ -134,6 +135,35 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	assertAppError(t, err, apperror.CodeValidationFailed)
 	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"/"}})
 	assertAppError(t, err, apperror.CodeValidationFailed)
+}
+
+func TestAsyncMindMapSettingsRequireAvailableModelAndReasoningEffort(t *testing.T) {
+	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
+	changed := 0
+	service := New(repo, WithMindMapSettings([]processdomain.CodexModel{{
+		Slug: "gpt-mind-map", SupportedReasoningLevels: []processdomain.CodexReasoningLevel{{Effort: "high"}},
+	}}, func() { changed++ }))
+	input := UpdateGeneralSettingsInput{
+		AgentMaxConcurrent: 2, MindMapEnabled: true, MindMapMode: domain.MindMapModeAsync,
+		MindMapModel: "gpt-mind-map", MindMapReasoningEffort: "", MindMapMaxConcurrent: 3,
+	}
+
+	_, err := service.UpdateGeneralSettings(context.Background(), input)
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	input.MindMapReasoningEffort = "unsupported"
+	_, err = service.UpdateGeneralSettings(context.Background(), input)
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	input.MindMapReasoningEffort = "high"
+	got, err := service.UpdateGeneralSettings(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MindMapMode != domain.MindMapModeAsync || got.MindMapModel != "gpt-mind-map" || got.MindMapReasoningEffort != "high" || got.MindMapMaxConcurrent != 3 {
+		t.Fatalf("settings = %#v", got)
+	}
+	if changed != 1 || repo.configuration.MindMap.MaxConcurrent != 3 {
+		t.Fatalf("callback = %d, stored = %#v", changed, repo.configuration.MindMap)
+	}
 }
 
 func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {

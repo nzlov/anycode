@@ -53,10 +53,12 @@
           :min-width="minSessionColumnWidth"
           :priority-loading="activePrioritySessionId === card.id"
           :close-loading="activeCloseSessionId === card.id"
+          :mind-map-realtime="projectMindMapRealtime(card.projectId) && card.mode !== 'terminal'"
           @update:width="setSessionColumnWidth(card.id, $event)"
           @set-priority="setCardPriority(card, $event)"
           @terminal-opened="refreshOverviewCard"
           @close="closeCard(card)"
+          @merge-close="closeCard(card, true)"
         />
       </div>
     </section>
@@ -287,9 +289,11 @@
             :card="card"
             :priority-loading="activePrioritySessionId === card.id"
             :close-loading="activeCloseSessionId === card.id"
+            :mind-map-realtime="projectMindMapRealtime(card.projectId) && card.mode !== 'terminal'"
             @before-show="handleCardContextMenuBeforeShow(card.id, $event)"
             @set-priority="setCardPriority(card, $event)"
             @close="closeCard(card)"
+            @merge-close="closeCard(card, true)"
           />
         </q-card>
       </div>
@@ -518,6 +522,8 @@ import {
 } from '@/services/sessions';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import { listTunnels, type Tunnel } from '@/services/tunnels';
+import { getGeneralSettings, type GeneralSettings } from '@/services/generalSettings';
+import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 
 const route = useRoute();
 const router = useRouter();
@@ -559,6 +565,12 @@ const {
   loadAll: true,
 });
 const { projects, loadProjects } = useProjects();
+const generalSettings = ref<GeneralSettings | null>(null);
+const generalSettingsInvalidation = useGeneralSettingsInvalidation();
+
+if (generalSettingsInvalidation) {
+  watch(generalSettingsInvalidation.revision, refreshGeneralSettings);
+}
 
 const hiddenProjectIds = ref(readHiddenProjectIds());
 const tunnels = ref<Tunnel[]>([]);
@@ -686,12 +698,18 @@ watch(questionsDialog, (open) => {
 });
 
 async function startOverview() {
+  const settings = getGeneralSettings().catch(() => null);
   await loadProjects();
+  generalSettings.value = await settings;
   pruneHiddenProjectIds();
   await loadOverviewSessions();
   if (!overviewMounted) return;
   startOverviewLiveUpdates();
   startTunnelUpdates();
+}
+
+async function refreshGeneralSettings() {
+  generalSettings.value = await getGeneralSettings().catch(() => null);
 }
 
 async function loadOverviewSessions() {
@@ -1049,15 +1067,23 @@ async function setCardPriority(card: SessionCard, priority: SessionPriority) {
   }
 }
 
-async function closeCard(card: SessionCard) {
+async function closeCard(card: SessionCard, mergeMindMap = false) {
   if (!card.availableActions.includes('close') || activeCloseSessionId.value) return;
   activeCloseSessionId.value = card.id;
   try {
-    await closeSession(card.id);
+    await closeSession(card.id, mergeMindMap ? 'merged_closed' : 'user_closed');
     latestRows.value = latestRows.value.filter((item) => item.id !== card.id);
   } finally {
     activeCloseSessionId.value = '';
   }
+}
+
+function projectMindMapRealtime(projectId: string) {
+  return Boolean(
+    generalSettings.value?.mindMapEnabled &&
+      generalSettings.value.mindMapMode === 'realtime' &&
+      projects.value.find((project) => project.id === projectId)?.mindMapEnabled,
+  );
 }
 
 async function openQuestionsDialog(sessionId: string) {

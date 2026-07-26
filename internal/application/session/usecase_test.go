@@ -20,10 +20,12 @@ import (
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	gitdiffdomain "github.com/nzlov/anycode/internal/domain/gitdiff"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore"
@@ -40,6 +42,33 @@ func TestAnyCodeDeveloperInstructionsDoNotExposeArtifactPath(t *testing.T) {
 	}
 	if strings.Contains(got, "/data/attachments/outputs/session-1") {
 		t.Fatalf("artifact guidance exposed disk path: %q", got)
+	}
+}
+
+func TestMindMapCodexContextSeparatesRealtimeAndAsyncTools(t *testing.T) {
+	projects := newFakeProjectRepository("project-1")
+	project := projects.projects["project-1"]
+	project.MindMapEnabled = true
+	projects.projects["project-1"] = project
+	settings := &fakeMindMapConfigurationProvider{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime, MaxConcurrent: 1,
+	}}
+	service := New(newFakeRepository(), projects, WithMindMapSettings(settings))
+	session := domain.Session{ID: "session-1", ProjectID: "project-1"}
+
+	tools, guidance, err := service.mindMapCodexContext(context.Background(), session)
+	if err != nil || len(tools) != 2 || tools[0] != processdomain.DynamicToolMindMapGet || tools[1] != processdomain.DynamicToolMindMapUpdate || !strings.Contains(guidance, "必须及时") || !strings.Contains(guidance, "project-root") {
+		t.Fatalf("realtime context = tools:%#v guidance:%q err:%v", tools, guidance, err)
+	}
+	settings.configuration.Mode = settingdomain.MindMapModeAsync
+	tools, guidance, err = service.mindMapCodexContext(context.Background(), session)
+	if err != nil || len(tools) != 1 || tools[0] != processdomain.DynamicToolMindMapGet || !strings.Contains(guidance, "只可") {
+		t.Fatalf("async context = tools:%#v guidance:%q err:%v", tools, guidance, err)
+	}
+	settings.configuration.Enabled = false
+	tools, guidance, err = service.mindMapCodexContext(context.Background(), session)
+	if err != nil || len(tools) != 0 || guidance != "" {
+		t.Fatalf("disabled context = tools:%#v guidance:%q err:%v", tools, guidance, err)
 	}
 }
 
@@ -4194,6 +4223,30 @@ func TestCleanupSessionsRejectsPendingWorktreeCleanup(t *testing.T) {
 	}
 }
 
+func TestCleanupSessionsRejectsActiveMindMapTask(t *testing.T) {
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	repo := newFakeRepository()
+	repo.listSessions = []domain.Session{{
+		ID: "old", ProjectID: "project-1", Status: domain.StatusClosed, UpdatedAt: now.Add(-8 * 24 * time.Hour),
+	}}
+	maps := newFakeMindMapRepository()
+	maps.tasks["task-1"] = mindmapdomain.Task{
+		ID: "task-1", ProjectID: "project-1", SessionID: "old", Status: mindmapdomain.TaskRunning,
+	}
+	purger := &fakeSessionHistoryPurger{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithMindMaps(maps, nil), WithSessionHistoryPurger(purger))
+	service.now = func() time.Time { return now }
+
+	_, err := service.CleanupSessions(context.Background(), CleanupSessionsInput{Scope: string(domain.StatusClosed), OlderThanDays: 7})
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeValidationFailed {
+		t.Fatalf("error = %#v", err)
+	}
+	if len(purger.ids) != 0 {
+		t.Fatalf("purged ids = %#v", purger.ids)
+	}
+}
+
 func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -5627,6 +5680,75 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 	if saved.ClosedAt == nil || !saved.ClosedAt.Equal(time.Unix(30, 0).UTC()) {
 		t.Fatalf("CloseSession() ClosedAt = %#v", saved.ClosedAt)
+	}
+}
+
+func TestCloseSessionEnqueuesAsyncMindMapTask(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Requirement: "整理需求关系", Mode: domain.ModeChat, Status: domain.StatusStopped,
+	}
+	projects := newFakeProjectRepository("project-1")
+	project := projects.projects["project-1"]
+	project.MindMapEnabled = true
+	projects.projects["project-1"] = project
+	maps := newFakeMindMapRepository()
+	settings := &fakeMindMapConfigurationProvider{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeAsync, Model: "gpt-mind-map", ReasoningEffort: "high", MaxConcurrent: 2,
+	}}
+	scheduled := 0
+	service := New(repo, projects, WithMindMapSettings(settings), WithMindMaps(maps, func() { scheduled++ }))
+	service.now = func() time.Time { return time.Unix(31, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "mind-map-task-1", nil }
+
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, found, err := maps.FindTaskBySession(ctx, "session-1")
+	if err != nil || !found {
+		t.Fatalf("task = %#v, found = %v, err = %v", task, found, err)
+	}
+	if got.Status != domain.StatusClosed || task.Status != mindmapdomain.TaskQueued || task.ProjectID != "project-1" || scheduled != 1 {
+		t.Fatalf("closed = %#v, task = %#v, scheduled = %d", got, task, scheduled)
+	}
+}
+
+func TestRealtimeMindMapCloseMergesOnlyWhenRequested(t *testing.T) {
+	ctx := context.Background()
+	title := "卡片需求"
+	newMaps := func(sessionID mindmapdomain.SessionID) *fakeMindMapRepository {
+		maps := newFakeMindMapRepository()
+		maps.overlays[sessionID] = mindmapdomain.Overlay{
+			ProjectID: "project-1", SessionID: sessionID,
+			Changes: []mindmapdomain.Change{{Kind: mindmapdomain.ChangeUpsertNode, EntityID: "node-1", Title: &title, OccurredAt: time.Unix(30, 0).UTC()}},
+		}
+		return maps
+	}
+	project := projectdomain.Project{ID: "project-1", Name: "AnyCode", MindMapEnabled: true, UpdatedAt: time.Unix(20, 0).UTC()}
+	session := domain.Session{ID: "session-1", ProjectID: "project-1"}
+
+	merged := newMaps("session-1")
+	if err := (&mindMapCloseAction{project: project, session: session, merge: true}).apply(ctx, merged); err != nil {
+		t.Fatal(err)
+	}
+	if len(merged.graph.Nodes) != 2 {
+		t.Fatalf("merged graph = %#v", merged.graph)
+	}
+	if _, found, _ := merged.FindOverlay(ctx, "session-1"); found {
+		t.Fatal("merged overlay was retained")
+	}
+
+	discarded := newMaps("session-1")
+	if err := (&mindMapCloseAction{project: project, session: session}).apply(ctx, discarded); err != nil {
+		t.Fatal(err)
+	}
+	if len(discarded.graph.Nodes) != 0 {
+		t.Fatalf("discard changed main graph: %#v", discarded.graph)
+	}
+	if _, found, _ := discarded.FindOverlay(ctx, "session-1"); found {
+		t.Fatal("discarded overlay was retained")
 	}
 }
 
@@ -13116,6 +13238,7 @@ func (l *fakeSessionLocker) WithSessionLock(ctx context.Context, id domain.ID, f
 
 type fakeTx struct {
 	projects  projectdomain.Repository
+	mindmaps  mindmapdomain.Repository
 	sessions  domain.Repository
 	workflows workflowdomain.Repository
 	questions questiondomain.Repository
@@ -13188,6 +13311,10 @@ func (tx fakeTx) PrepareClose(ctx context.Context, input port.ClosePreparationIn
 
 func (tx fakeTx) Projects() projectdomain.Repository {
 	return tx.projects
+}
+
+func (tx fakeTx) MindMaps() mindmapdomain.Repository {
+	return tx.mindmaps
 }
 
 func (tx fakeTx) Sessions() domain.Repository {
@@ -13525,4 +13652,112 @@ func (r *fakeProjectRepository) Remove(context.Context, projectdomain.ID, time.T
 
 func (r *fakeProjectRepository) UpdateDefaultWorkflow(context.Context, projectdomain.ID, projectdomain.WorkflowDefinitionID) error {
 	return errors.New("unexpected project UpdateDefaultWorkflow call")
+}
+
+type fakeMindMapConfigurationProvider struct {
+	configuration settingdomain.MindMapConfiguration
+}
+
+func (p *fakeMindMapConfigurationProvider) MindMapConfiguration(context.Context) (settingdomain.MindMapConfiguration, error) {
+	return p.configuration, nil
+}
+
+type fakeMindMapRepository struct {
+	graph    mindmapdomain.Graph
+	overlays map[mindmapdomain.SessionID]mindmapdomain.Overlay
+	tasks    map[mindmapdomain.TaskID]mindmapdomain.Task
+}
+
+func newFakeMindMapRepository() *fakeMindMapRepository {
+	return &fakeMindMapRepository{
+		overlays: make(map[mindmapdomain.SessionID]mindmapdomain.Overlay),
+		tasks:    make(map[mindmapdomain.TaskID]mindmapdomain.Task),
+	}
+}
+
+func (r *fakeMindMapRepository) FindGraph(context.Context, mindmapdomain.ProjectID) (mindmapdomain.Graph, bool, error) {
+	return r.graph, r.graph.ProjectID != "" || len(r.graph.Nodes) > 0, nil
+}
+
+func (r *fakeMindMapRepository) SaveGraph(_ context.Context, graph mindmapdomain.Graph) error {
+	r.graph = graph
+	return nil
+}
+
+func (r *fakeMindMapRepository) FindOverlay(_ context.Context, sessionID mindmapdomain.SessionID) (mindmapdomain.Overlay, bool, error) {
+	overlay, found := r.overlays[sessionID]
+	return overlay, found, nil
+}
+
+func (r *fakeMindMapRepository) ListOverlays(_ context.Context, projectID mindmapdomain.ProjectID) ([]mindmapdomain.Overlay, error) {
+	result := []mindmapdomain.Overlay{}
+	for _, overlay := range r.overlays {
+		if overlay.ProjectID == projectID {
+			result = append(result, overlay)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMindMapRepository) SaveOverlay(_ context.Context, overlay mindmapdomain.Overlay) error {
+	r.overlays[overlay.SessionID] = overlay
+	return nil
+}
+
+func (r *fakeMindMapRepository) DeleteOverlay(_ context.Context, sessionID mindmapdomain.SessionID) error {
+	delete(r.overlays, sessionID)
+	return nil
+}
+
+func (r *fakeMindMapRepository) SaveTask(_ context.Context, task mindmapdomain.Task) error {
+	r.tasks[task.ID] = task
+	return nil
+}
+
+func (r *fakeMindMapRepository) FindTask(_ context.Context, id mindmapdomain.TaskID) (mindmapdomain.Task, error) {
+	task, found := r.tasks[id]
+	if !found {
+		return mindmapdomain.Task{}, mindmapdomain.ErrNotFound
+	}
+	return task, nil
+}
+
+func (r *fakeMindMapRepository) FindTaskBySession(_ context.Context, sessionID mindmapdomain.SessionID) (mindmapdomain.Task, bool, error) {
+	for _, task := range r.tasks {
+		if task.SessionID == sessionID {
+			return task, true, nil
+		}
+	}
+	return mindmapdomain.Task{}, false, nil
+}
+
+func (r *fakeMindMapRepository) ListTasks(_ context.Context, projectID mindmapdomain.ProjectID) ([]mindmapdomain.Task, error) {
+	result := []mindmapdomain.Task{}
+	for _, task := range r.tasks {
+		if projectID == "" || task.ProjectID == projectID {
+			result = append(result, task)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMindMapRepository) ListQueuedTasks(ctx context.Context, limit int) ([]mindmapdomain.Task, error) {
+	tasks, _ := r.ListTasks(ctx, "")
+	result := []mindmapdomain.Task{}
+	for _, task := range tasks {
+		if task.Status == mindmapdomain.TaskQueued && len(result) < limit {
+			result = append(result, task)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMindMapRepository) CountRunningTasks(context.Context) (int, error) {
+	count := 0
+	for _, task := range r.tasks {
+		if task.Status == mindmapdomain.TaskRunning {
+			count++
+		}
+	}
+	return count, nil
 }

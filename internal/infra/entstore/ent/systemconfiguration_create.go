@@ -40,6 +40,76 @@ func (_c *SystemConfigurationCreate) SetAgentWritableRoots(v []string) *SystemCo
 	return _c
 }
 
+// SetMindMapEnabled sets the "mind_map_enabled" field.
+func (_c *SystemConfigurationCreate) SetMindMapEnabled(v bool) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapEnabled(v)
+	return _c
+}
+
+// SetNillableMindMapEnabled sets the "mind_map_enabled" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapEnabled(v *bool) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapEnabled(*v)
+	}
+	return _c
+}
+
+// SetMindMapMode sets the "mind_map_mode" field.
+func (_c *SystemConfigurationCreate) SetMindMapMode(v string) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapMode(v)
+	return _c
+}
+
+// SetNillableMindMapMode sets the "mind_map_mode" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapMode(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapMode(*v)
+	}
+	return _c
+}
+
+// SetMindMapModel sets the "mind_map_model" field.
+func (_c *SystemConfigurationCreate) SetMindMapModel(v string) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapModel(v)
+	return _c
+}
+
+// SetNillableMindMapModel sets the "mind_map_model" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapModel(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapModel(*v)
+	}
+	return _c
+}
+
+// SetMindMapReasoningEffort sets the "mind_map_reasoning_effort" field.
+func (_c *SystemConfigurationCreate) SetMindMapReasoningEffort(v string) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapReasoningEffort(v)
+	return _c
+}
+
+// SetNillableMindMapReasoningEffort sets the "mind_map_reasoning_effort" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapReasoningEffort(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapReasoningEffort(*v)
+	}
+	return _c
+}
+
+// SetMindMapMaxConcurrent sets the "mind_map_max_concurrent" field.
+func (_c *SystemConfigurationCreate) SetMindMapMaxConcurrent(v int) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapMaxConcurrent(v)
+	return _c
+}
+
+// SetNillableMindMapMaxConcurrent sets the "mind_map_max_concurrent" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapMaxConcurrent(v *int) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapMaxConcurrent(*v)
+	}
+	return _c
+}
+
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
 func (_c *SystemConfigurationCreate) SetWallpaperColorScheme(v string) *SystemConfigurationCreate {
 	_c.mutation.SetWallpaperColorScheme(v)
@@ -193,6 +263,26 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultAgentWritableRoots
 		_c.mutation.SetAgentWritableRoots(v)
 	}
+	if _, ok := _c.mutation.MindMapEnabled(); !ok {
+		v := systemconfiguration.DefaultMindMapEnabled
+		_c.mutation.SetMindMapEnabled(v)
+	}
+	if _, ok := _c.mutation.MindMapMode(); !ok {
+		v := systemconfiguration.DefaultMindMapMode
+		_c.mutation.SetMindMapMode(v)
+	}
+	if _, ok := _c.mutation.MindMapModel(); !ok {
+		v := systemconfiguration.DefaultMindMapModel
+		_c.mutation.SetMindMapModel(v)
+	}
+	if _, ok := _c.mutation.MindMapReasoningEffort(); !ok {
+		v := systemconfiguration.DefaultMindMapReasoningEffort
+		_c.mutation.SetMindMapReasoningEffort(v)
+	}
+	if _, ok := _c.mutation.MindMapMaxConcurrent(); !ok {
+		v := systemconfiguration.DefaultMindMapMaxConcurrent
+		_c.mutation.SetMindMapMaxConcurrent(v)
+	}
 	if _, ok := _c.mutation.BackgroundType(); !ok {
 		v := systemconfiguration.DefaultBackgroundType
 		_c.mutation.SetBackgroundType(v)
@@ -227,6 +317,26 @@ func (_c *SystemConfigurationCreate) defaults() {
 func (_c *SystemConfigurationCreate) check() error {
 	if _, ok := _c.mutation.AgentMaxConcurrent(); !ok {
 		return &ValidationError{Name: "agent_max_concurrent", err: errors.New(`ent: missing required field "SystemConfiguration.agent_max_concurrent"`)}
+	}
+	if _, ok := _c.mutation.MindMapEnabled(); !ok {
+		return &ValidationError{Name: "mind_map_enabled", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_enabled"`)}
+	}
+	if _, ok := _c.mutation.MindMapMode(); !ok {
+		return &ValidationError{Name: "mind_map_mode", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_mode"`)}
+	}
+	if v, ok := _c.mutation.MindMapMode(); ok {
+		if err := systemconfiguration.MindMapModeValidator(v); err != nil {
+			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.MindMapModel(); !ok {
+		return &ValidationError{Name: "mind_map_model", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_model"`)}
+	}
+	if _, ok := _c.mutation.MindMapReasoningEffort(); !ok {
+		return &ValidationError{Name: "mind_map_reasoning_effort", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_reasoning_effort"`)}
+	}
+	if _, ok := _c.mutation.MindMapMaxConcurrent(); !ok {
+		return &ValidationError{Name: "mind_map_max_concurrent", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_max_concurrent"`)}
 	}
 	if _, ok := _c.mutation.WallpaperColorScheme(); !ok {
 		return &ValidationError{Name: "wallpaper_color_scheme", err: errors.New(`ent: missing required field "SystemConfiguration.wallpaper_color_scheme"`)}
@@ -309,6 +419,26 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.AgentWritableRoots(); ok {
 		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
 		_node.AgentWritableRoots = value
+	}
+	if value, ok := _c.mutation.MindMapEnabled(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)
+		_node.MindMapEnabled = value
+	}
+	if value, ok := _c.mutation.MindMapMode(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapMode, field.TypeString, value)
+		_node.MindMapMode = value
+	}
+	if value, ok := _c.mutation.MindMapModel(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapModel, field.TypeString, value)
+		_node.MindMapModel = value
+	}
+	if value, ok := _c.mutation.MindMapReasoningEffort(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapReasoningEffort, field.TypeString, value)
+		_node.MindMapReasoningEffort = value
+	}
+	if value, ok := _c.mutation.MindMapMaxConcurrent(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapMaxConcurrent, field.TypeInt, value)
+		_node.MindMapMaxConcurrent = value
 	}
 	if value, ok := _c.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)

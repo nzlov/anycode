@@ -729,6 +729,28 @@ func TestTunnelCreateDynamicToolRequiresName(t *testing.T) {
 	}
 }
 
+func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
+	base := anyCodeDynamicTools()
+	if len(base) != 5 {
+		t.Fatalf("base dynamic tools = %#v", base)
+	}
+	queryOnly := anyCodeDynamicTools(process.DynamicToolMindMapGet)
+	if len(queryOnly) != 6 || queryOnly[5]["name"] != string(process.DynamicToolMindMapGet) {
+		t.Fatalf("query tools = %#v", queryOnly)
+	}
+	realtime := anyCodeDynamicTools(process.DynamicToolMindMapGet, process.DynamicToolMindMapUpdate)
+	if len(realtime) != 7 || realtime[6]["name"] != string(process.DynamicToolMindMapUpdate) {
+		t.Fatalf("realtime tools = %#v", realtime)
+	}
+	updateSchema := realtime[6]["inputSchema"].(map[string]any)
+	operations := updateSchema["properties"].(map[string]any)["operations"].(map[string]any)
+	operation := operations["items"].(map[string]any)
+	properties := operation["properties"].(map[string]any)
+	if properties["title"] == nil || properties["content"] == nil || properties["sourceId"] == nil || properties["targetId"] == nil || properties["label"] == nil {
+		t.Fatalf("mind map operation schema = %#v", properties)
+	}
+}
+
 func TestProbeUsesAppServerCatalog(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 IFS= read -r request

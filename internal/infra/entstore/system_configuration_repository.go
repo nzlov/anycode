@@ -19,8 +19,12 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 		return setting.SystemConfiguration{}, fmt.Errorf("get system configuration: %w", err)
 	}
 	return setting.SystemConfiguration{
-		AgentMaxConcurrent:   row.AgentMaxConcurrent,
-		AgentWritableRoots:   append([]string(nil), row.AgentWritableRoots...),
+		AgentMaxConcurrent: row.AgentMaxConcurrent,
+		AgentWritableRoots: append([]string(nil), row.AgentWritableRoots...),
+		MindMap: setting.MindMapConfiguration{
+			Enabled: row.MindMapEnabled, Mode: setting.MindMapMode(row.MindMapMode), Model: row.MindMapModel,
+			ReasoningEffort: row.MindMapReasoningEffort, MaxConcurrent: row.MindMapMaxConcurrent,
+		},
 		BackgroundType:       setting.BackgroundType(row.BackgroundType),
 		SolidTheme:           setting.SolidTheme(row.SolidTheme),
 		BackgroundMask:       row.BackgroundMask,
@@ -35,6 +39,11 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 	_, err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetAgentWritableRoots(configuration.AgentWritableRoots).
+		SetMindMapEnabled(configuration.MindMap.Enabled).
+		SetMindMapMode(string(configuration.MindMap.Mode)).
+		SetMindMapModel(configuration.MindMap.Model).
+		SetMindMapReasoningEffort(configuration.MindMap.ReasoningEffort).
+		SetMindMapMaxConcurrent(configuration.MindMap.MaxConcurrent).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -53,6 +62,11 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 		SetID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetAgentWritableRoots(configuration.AgentWritableRoots).
+		SetMindMapEnabled(configuration.MindMap.Enabled).
+		SetMindMapMode(string(configuration.MindMap.Mode)).
+		SetMindMapModel(configuration.MindMap.Model).
+		SetMindMapReasoningEffort(configuration.MindMap.ReasoningEffort).
+		SetMindMapMaxConcurrent(configuration.MindMap.MaxConcurrent).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -95,4 +109,12 @@ func (r *SettingRepository) UpdateGeneralSettings(ctx context.Context, max int, 
 	configuration.AgentMaxConcurrent = max
 	configuration.AgentWritableRoots = append([]string(nil), writableRoots...)
 	return r.SaveSystemConfiguration(ctx, configuration)
+}
+
+func (r *SettingRepository) MindMapConfiguration(ctx context.Context) (setting.MindMapConfiguration, error) {
+	configuration, err := r.GetSystemConfiguration(ctx)
+	if err != nil {
+		return setting.MindMapConfiguration{}, err
+	}
+	return configuration.MindMap, nil
 }

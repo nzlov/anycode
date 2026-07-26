@@ -25,7 +25,8 @@ func (r *ProjectRepository) Save(ctx context.Context, p project.Project) error {
 			SetName(p.Name).
 			SetPath(p.Path.Value).
 			SetIsGit(p.IsGit).
-			SetWorktreeInitCommand(p.WorktreeInitCommand)
+			SetWorktreeInitCommand(p.WorktreeInitCommand).
+			SetMindMapEnabled(p.MindMapEnabled)
 		if p.DefaultWorkflowID != nil {
 			update.SetDefaultWorkflowID(string(*p.DefaultWorkflowID))
 		} else {
@@ -52,7 +53,8 @@ func (r *ProjectRepository) Save(ctx context.Context, p project.Project) error {
 		SetName(p.Name).
 		SetPath(p.Path.Value).
 		SetIsGit(p.IsGit).
-		SetWorktreeInitCommand(p.WorktreeInitCommand)
+		SetWorktreeInitCommand(p.WorktreeInitCommand).
+		SetMindMapEnabled(p.MindMapEnabled)
 	if p.DefaultWorkflowID != nil {
 		create.SetDefaultWorkflowID(string(*p.DefaultWorkflowID))
 	}
@@ -137,6 +139,7 @@ func toDomainProject(row *ent.Project) project.Project {
 		Path:                project.ProjectPath{Value: row.Path},
 		IsGit:               row.IsGit,
 		WorktreeInitCommand: row.WorktreeInitCommand,
+		MindMapEnabled:      row.MindMapEnabled,
 		DefaultWorkflowID:   defaultWorkflowID,
 		RemovedAt:           row.RemovedAt,
 		CreatedAt:           row.CreatedAt,

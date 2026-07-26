@@ -16,6 +16,12 @@ var (
 type RunID string
 type SessionID string
 type NodeRunID string
+type DynamicToolName string
+
+const (
+	DynamicToolMindMapGet    DynamicToolName = "mind_map_get"
+	DynamicToolMindMapUpdate DynamicToolName = "mind_map_update"
+)
 
 type Status string
 
@@ -167,6 +173,7 @@ type CodexStartInput struct {
 	PermissionMode        string
 	WritableRoots         []string
 	FastMode              bool
+	DynamicTools          []DynamicToolName
 }
 
 type CodexResumeInput struct {
@@ -184,6 +191,7 @@ type CodexResumeInput struct {
 	PermissionMode        string
 	WritableRoots         []string
 	FastMode              bool
+	DynamicTools          []DynamicToolName
 }
 
 type CodexInputItem struct {

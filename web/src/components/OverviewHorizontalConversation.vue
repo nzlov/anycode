@@ -47,17 +47,30 @@
           <q-tooltip>打开会话详情</q-tooltip>
         </q-btn>
         <q-btn
+          v-if="mindMapRealtime && card.availableActions.includes('close')"
+          flat
+          dense
+          class="lane-icon-btn app-icon-btn"
+          color="positive"
+          icon="merge"
+          aria-label="合并思维图并关闭"
+          :loading="closeLoading"
+          @click="emit('merge-close')"
+        >
+          <q-tooltip>合并思维图并关闭</q-tooltip>
+        </q-btn>
+        <q-btn
           v-if="card.availableActions.includes('close')"
           flat
           dense
           class="lane-icon-btn app-icon-btn"
           color="negative"
           icon="close"
-          aria-label="关闭卡片"
+          :aria-label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
           :loading="closeLoading"
           @click="emit('close')"
         >
-          <q-tooltip>关闭卡片</q-tooltip>
+          <q-tooltip>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-tooltip>
         </q-btn>
       </div>
     </header>
@@ -65,6 +78,7 @@
       class="overview-horizontal-conversation__detail"
       :session-id="card.id"
       :layout="layout"
+      :mind-map-realtime="mindMapRealtime"
     />
   </article>
 </template>
@@ -89,12 +103,14 @@ defineProps<{
   layout: 'mobile' | 'desktop';
   priorityLoading?: boolean;
   closeLoading?: boolean;
+  mindMapRealtime?: boolean;
 }>();
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
   close: [];
+  'merge-close': [];
 }>();
 </script>
 

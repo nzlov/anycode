@@ -25,6 +25,8 @@ type Project struct {
 	IsGit bool `json:"is_git,omitempty"`
 	// WorktreeInitCommand holds the value of the "worktree_init_command" field.
 	WorktreeInitCommand string `json:"worktree_init_command,omitempty"`
+	// MindMapEnabled holds the value of the "mind_map_enabled" field.
+	MindMapEnabled bool `json:"mind_map_enabled,omitempty"`
 	// DefaultWorkflowID holds the value of the "default_workflow_id" field.
 	DefaultWorkflowID *string `json:"default_workflow_id,omitempty"`
 	// RemovedAt holds the value of the "removed_at" field.
@@ -41,7 +43,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldIsGit:
+		case project.FieldIsGit, project.FieldMindMapEnabled:
 			values[i] = new(sql.NullBool)
 		case project.FieldID, project.FieldName, project.FieldPath, project.FieldWorktreeInitCommand, project.FieldDefaultWorkflowID:
 			values[i] = new(sql.NullString)
@@ -91,6 +93,12 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field worktree_init_command", values[i])
 			} else if value.Valid {
 				_m.WorktreeInitCommand = value.String
+			}
+		case project.FieldMindMapEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_enabled", values[i])
+			} else if value.Valid {
+				_m.MindMapEnabled = value.Bool
 			}
 		case project.FieldDefaultWorkflowID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -165,6 +173,9 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("worktree_init_command=")
 	builder.WriteString(_m.WorktreeInitCommand)
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MindMapEnabled))
 	builder.WriteString(", ")
 	if v := _m.DefaultWorkflowID; v != nil {
 		builder.WriteString("default_workflow_id=")

@@ -176,8 +176,13 @@ type FileDiff struct {
 }
 
 type GeneralSettings struct {
-	AgentMaxConcurrent int      `json:"agentMaxConcurrent"`
-	AgentWritableRoots []string `json:"agentWritableRoots"`
+	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
+	AgentWritableRoots     []string `json:"agentWritableRoots"`
+	MindMapEnabled         bool     `json:"mindMapEnabled"`
+	MindMapMode            string   `json:"mindMapMode"`
+	MindMapModel           string   `json:"mindMapModel"`
+	MindMapReasoningEffort string   `json:"mindMapReasoningEffort"`
+	MindMapMaxConcurrent   int      `json:"mindMapMaxConcurrent"`
 }
 
 type GitBranch struct {
@@ -234,6 +239,50 @@ type MergeConfigInput struct {
 	Strategy string `json:"strategy"`
 }
 
+type MindMapCard struct {
+	SessionID   string    `json:"sessionId"`
+	Requirement string    `json:"requirement"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	TaskID      *string   `json:"taskId,omitempty"`
+	TaskStatus  string    `json:"taskStatus"`
+	TaskError   string    `json:"taskError"`
+}
+
+type MindMapEdge struct {
+	ID       string `json:"id"`
+	SourceID string `json:"sourceId"`
+	TargetID string `json:"targetId"`
+	Label    string `json:"label"`
+}
+
+type MindMapGraph struct {
+	ProjectID string         `json:"projectId"`
+	SessionID *string        `json:"sessionId,omitempty"`
+	Nodes     []*MindMapNode `json:"nodes"`
+	Edges     []*MindMapEdge `json:"edges"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+}
+
+type MindMapNode struct {
+	ID      string  `json:"id"`
+	Title   string  `json:"title"`
+	Content string  `json:"content"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+}
+
+type MindMapOperationInput struct {
+	Kind     string   `json:"kind"`
+	ID       string   `json:"id"`
+	Title    *string  `json:"title,omitempty"`
+	Content  *string  `json:"content,omitempty"`
+	X        *float64 `json:"x,omitempty"`
+	Y        *float64 `json:"y,omitempty"`
+	SourceID *string  `json:"sourceId,omitempty"`
+	TargetID *string  `json:"targetId,omitempty"`
+	Label    *string  `json:"label,omitempty"`
+}
+
 type Mutation struct {
 }
 
@@ -259,6 +308,7 @@ type Project struct {
 	Path                string    `json:"path"`
 	IsGit               bool      `json:"isGit"`
 	WorktreeInitCommand string    `json:"worktreeInitCommand"`
+	MindMapEnabled      bool      `json:"mindMapEnabled"`
 	DefaultWorkflowID   *string   `json:"defaultWorkflowId,omitempty"`
 	GitState            *GitState `json:"gitState"`
 	CreatedAt           time.Time `json:"createdAt"`
@@ -758,13 +808,25 @@ type UpdateAppearanceSettingsInput struct {
 }
 
 type UpdateGeneralSettingsInput struct {
-	AgentMaxConcurrent int      `json:"agentMaxConcurrent"`
-	AgentWritableRoots []string `json:"agentWritableRoots"`
+	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
+	AgentWritableRoots     []string `json:"agentWritableRoots"`
+	MindMapEnabled         bool     `json:"mindMapEnabled"`
+	MindMapMode            string   `json:"mindMapMode"`
+	MindMapModel           string   `json:"mindMapModel"`
+	MindMapReasoningEffort string   `json:"mindMapReasoningEffort"`
+	MindMapMaxConcurrent   int      `json:"mindMapMaxConcurrent"`
+}
+
+type UpdateMindMapInput struct {
+	ProjectID  string                   `json:"projectId"`
+	SessionID  *string                  `json:"sessionId,omitempty"`
+	Operations []*MindMapOperationInput `json:"operations"`
 }
 
 type UpdateProjectSettingsInput struct {
 	ProjectID           string `json:"projectId"`
 	WorktreeInitCommand string `json:"worktreeInitCommand"`
+	MindMapEnabled      bool   `json:"mindMapEnabled"`
 }
 
 type UpdatePromptAppendInput struct {

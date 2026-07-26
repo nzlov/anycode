@@ -207,18 +207,21 @@ test('horizontal headers expose live card metadata and priority controls for con
 });
 
 test('horizontal headers put terminal actions after details and close every card last', () => {
-  for (const source of [conversationSource, terminalSource]) {
-    assert.match(
-      source,
-      /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
-    );
-  }
+  assert.match(
+    conversationSource,
+    /aria-label="合并思维图并关闭"[\s\S]*:aria-label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
+  );
+  assert.match(
+    terminalSource,
+    /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
+  );
   assert.match(
     terminalSource,
     /aria-label="打开会话详情"[\s\S]*aria-label="停止 Terminal"[\s\S]*aria-label="启动 Terminal"[\s\S]*aria-label="关闭卡片"/,
   );
   assert.match(indexSource, /:close-loading="activeCloseSessionId === card\.id"/);
   assert.match(indexSource, /@close="closeCard\(card\)"/);
+  assert.match(indexSource, /@merge-close="closeCard\(card, true\)"/);
 });
 
 test('horizontal sessions omit the card context menu while retaining header priority controls', () => {

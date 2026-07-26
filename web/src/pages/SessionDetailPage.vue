@@ -8,6 +8,7 @@
     v-else-if="mode"
     :session-id="sessionId"
     layout="responsive"
+    :mind-map-realtime="mindMapRealtime"
     page
     @session-title="emit('session-title', $event)"
   />
@@ -17,11 +18,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import SessionDetailView from '@/components/SessionDetailView.vue';
 import TerminalSessionView from '@/components/TerminalSessionView.vue';
+import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
+import { getGeneralSettings } from '@/services/generalSettings';
+import { listProjects } from '@/services/projects';
 import { getSession, type SessionMode } from '@/services/sessions';
 
 const emit = defineEmits<{
@@ -30,10 +34,32 @@ const emit = defineEmits<{
 const route = useRoute();
 const sessionId = computed(() => String(route.params.id ?? ''));
 const mode = ref<SessionMode | ''>('');
+const mindMapRealtime = ref(false);
+const sessionProjectId = ref('');
+const generalSettingsInvalidation = useGeneralSettingsInvalidation();
+
+if (generalSettingsInvalidation) {
+  watch(generalSettingsInvalidation.revision, refreshMindMapMode);
+}
 
 onMounted(async () => {
   const session = await getSession(sessionId.value);
   mode.value = session.mode;
+  sessionProjectId.value = session.projectId;
   emit('session-title', session.title);
+  if (session.mode === 'terminal') return;
+  await refreshMindMapMode();
 });
+
+async function refreshMindMapMode() {
+  if (!sessionProjectId.value || mode.value === 'terminal') return;
+  const [settings, projects] = await Promise.all([
+    getGeneralSettings().catch(() => null),
+    listProjects().catch(() => []),
+  ]);
+  mindMapRealtime.value =
+    Boolean(settings?.mindMapEnabled) &&
+    settings?.mindMapMode === 'realtime' &&
+    projects.some((project) => project.id === sessionProjectId.value && project.mindMapEnabled);
+}
 </script>

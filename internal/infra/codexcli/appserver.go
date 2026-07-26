@@ -24,14 +24,14 @@ func (c *Client) SlashCommands() []process.CodexSlashCommand {
 }
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
-	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	if strings.TrimSpace(input.CodexSessionID) == "" {
 		return process.CodexHandle{}, process.ErrThreadUnavailable
 	}
-	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
 }
 
 func (c *Client) start(
@@ -50,6 +50,7 @@ func (c *Client) start(
 	permissionMode string,
 	writableRoots []string,
 	fastMode bool,
+	dynamicTools []process.DynamicToolName,
 ) (process.CodexHandle, error) {
 	if runID == "" || sessionID == "" {
 		return process.CodexHandle{}, errors.New("process run id and session id are required")
@@ -61,7 +62,7 @@ func (c *Client) start(
 	workspaceWrite := newWorkspaceWriteSettings(permissionMode, writableRoots, artifactDir)
 	resuming := threadID != ""
 	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode, workspaceWrite)
-	params["dynamicTools"] = anyCodeDynamicTools()
+	params["dynamicTools"] = anyCodeDynamicTools(dynamicTools...)
 	if threadID == "" {
 		params["ephemeral"] = false
 		params["historyMode"] = "paginated"
@@ -201,7 +202,7 @@ func appServerSandboxPolicy(permissionMode string, workspaceWrite *workspaceWrit
 	}
 }
 
-func anyCodeDynamicTools() []map[string]any {
+func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 	optionSchema := map[string]any{
 		"type": "object", "additionalProperties": false, "required": []string{"label"},
 		"properties": map[string]any{
@@ -220,7 +221,7 @@ func anyCodeDynamicTools() []map[string]any {
 			"options": map[string]any{"type": "array", "items": optionSchema},
 		},
 	}
-	return []map[string]any{
+	tools := []map[string]any{
 		{
 			"type": "function", "name": "questions",
 			"description": "Ask the user one or more questions and wait for their answers. Keep the containing exec call open for 300000 ms so answers received within five minutes continue the current Codex run; later answers resume through durable storage. Each question requires a body; options are optional.",
@@ -265,6 +266,45 @@ func anyCodeDynamicTools() []map[string]any {
 				"type": "object", "additionalProperties": false, "required": []string{"id"},
 				"properties": map[string]any{"id": map[string]any{"type": "string", "description": "Tunnel ID returned by tunnel_create or tunnel_list."}},
 			},
+		},
+	}
+	for _, name := range enabled {
+		switch name {
+		case process.DynamicToolMindMapGet:
+			tools = append(tools, mindMapGetTool())
+		case process.DynamicToolMindMapUpdate:
+			tools = append(tools, mindMapUpdateTool())
+		}
+	}
+	return tools
+}
+
+func mindMapGetTool() map[string]any {
+	return map[string]any{
+		"type": "function", "name": string(process.DynamicToolMindMapGet),
+		"description": "Read this card's current project mind map, including the card's isolated changes.",
+		"inputSchema": map[string]any{"type": "object", "additionalProperties": false},
+	}
+}
+
+func mindMapUpdateTool() map[string]any {
+	operation := map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"kind", "id"},
+		"properties": map[string]any{
+			"kind":  map[string]any{"type": "string", "enum": []string{"upsert_node", "delete_node", "upsert_edge", "delete_edge"}},
+			"id":    map[string]any{"type": "string"},
+			"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
+			"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"},
+			"sourceId": map[string]any{"type": "string"}, "targetId": map[string]any{"type": "string"},
+			"label": map[string]any{"type": "string"},
+		},
+	}
+	return map[string]any{
+		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
+		"description": "Apply node and relationship changes to this card's isolated mind map. Use project-root as the immutable project-name center node; all other nodes and relationship labels are free-form.",
+		"inputSchema": map[string]any{
+			"type": "object", "additionalProperties": false, "required": []string{"operations"},
+			"properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "items": operation}},
 		},
 	}
 }

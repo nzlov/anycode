@@ -140,8 +140,13 @@ type ComplexityRoot struct {
 	}
 
 	GeneralSettings struct {
-		AgentMaxConcurrent func(childComplexity int) int
-		AgentWritableRoots func(childComplexity int) int
+		AgentMaxConcurrent     func(childComplexity int) int
+		AgentWritableRoots     func(childComplexity int) int
+		MindMapEnabled         func(childComplexity int) int
+		MindMapMaxConcurrent   func(childComplexity int) int
+		MindMapMode            func(childComplexity int) int
+		MindMapModel           func(childComplexity int) int
+		MindMapReasoningEffort func(childComplexity int) int
 	}
 
 	GitBranch struct {
@@ -159,6 +164,38 @@ type ComplexityRoot struct {
 
 	MergeConfig struct {
 		Strategy func(childComplexity int) int
+	}
+
+	MindMapCard struct {
+		Requirement func(childComplexity int) int
+		SessionID   func(childComplexity int) int
+		TaskError   func(childComplexity int) int
+		TaskID      func(childComplexity int) int
+		TaskStatus  func(childComplexity int) int
+		UpdatedAt   func(childComplexity int) int
+	}
+
+	MindMapEdge struct {
+		ID       func(childComplexity int) int
+		Label    func(childComplexity int) int
+		SourceID func(childComplexity int) int
+		TargetID func(childComplexity int) int
+	}
+
+	MindMapGraph struct {
+		Edges     func(childComplexity int) int
+		Nodes     func(childComplexity int) int
+		ProjectID func(childComplexity int) int
+		SessionID func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
+	}
+
+	MindMapNode struct {
+		Content func(childComplexity int) int
+		ID      func(childComplexity int) int
+		Title   func(childComplexity int) int
+		X       func(childComplexity int) int
+		Y       func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -179,6 +216,7 @@ type ComplexityRoot struct {
 		RegisterPushSubscription    func(childComplexity int, input model.RegisterPushSubscriptionInput) int
 		RemoveProject               func(childComplexity int, id string) int
 		ResumeSession               func(childComplexity int, id string, force *bool) int
+		RetryMindMapTask            func(childComplexity int, id string) int
 		RetrySessionInitialization  func(childComplexity int, id string) int
 		RetrySessionWorktreeCleanup func(childComplexity int, id string) int
 		SaveWorkflowDefinition      func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
@@ -192,6 +230,7 @@ type ComplexityRoot struct {
 		UnregisterPushSubscription  func(childComplexity int, id string) int
 		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
 		UpdateGeneralSettings       func(childComplexity int, input model.UpdateGeneralSettingsInput) int
+		UpdateProjectMindMap        func(childComplexity int, input model.UpdateMindMapInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateQuickCommand          func(childComplexity int, input model.UpdateQuickCommandInput) int
@@ -222,6 +261,7 @@ type ComplexityRoot struct {
 		GitState            func(childComplexity int) int
 		ID                  func(childComplexity int) int
 		IsGit               func(childComplexity int) int
+		MindMapEnabled      func(childComplexity int) int
 		Name                func(childComplexity int) int
 		Path                func(childComplexity int) int
 		UpdatedAt           func(childComplexity int) int
@@ -256,6 +296,8 @@ type ComplexityRoot struct {
 		GeneralSettings         func(childComplexity int) int
 		PendingQuestionRequests func(childComplexity int, sessionID string) int
 		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
+		ProjectMindMap          func(childComplexity int, projectID string, sessionID *string) int
+		ProjectMindMapCards     func(childComplexity int, projectID string) int
 		Projects                func(childComplexity int) int
 		PromptFileMatches       func(childComplexity int, input model.PromptFileMatchInput) int
 		QuestionRequest         func(childComplexity int, id string) int
@@ -734,6 +776,8 @@ type MutationResolver interface {
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
 	UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error)
+	UpdateProjectMindMap(ctx context.Context, input model.UpdateMindMapInput) (*model.MindMapGraph, error)
+	RetryMindMapTask(ctx context.Context, id string) (*model.MindMapCard, error)
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
@@ -771,6 +815,8 @@ type QueryResolver interface {
 	Projects(ctx context.Context) ([]*model.Project, error)
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
+	ProjectMindMap(ctx context.Context, projectID string, sessionID *string) (*model.MindMapGraph, error)
+	ProjectMindMapCards(ctx context.Context, projectID string) ([]*model.MindMapCard, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
 	SessionCard(ctx context.Context, id string) (*model.SessionCard, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
@@ -1175,6 +1221,36 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.GeneralSettings.AgentWritableRoots(childComplexity), true
+	case "GeneralSettings.mindMapEnabled":
+		if e.ComplexityRoot.GeneralSettings.MindMapEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapEnabled(childComplexity), true
+	case "GeneralSettings.mindMapMaxConcurrent":
+		if e.ComplexityRoot.GeneralSettings.MindMapMaxConcurrent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapMaxConcurrent(childComplexity), true
+	case "GeneralSettings.mindMapMode":
+		if e.ComplexityRoot.GeneralSettings.MindMapMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapMode(childComplexity), true
+	case "GeneralSettings.mindMapModel":
+		if e.ComplexityRoot.GeneralSettings.MindMapModel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapModel(childComplexity), true
+	case "GeneralSettings.mindMapReasoningEffort":
+		if e.ComplexityRoot.GeneralSettings.MindMapReasoningEffort == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapReasoningEffort(childComplexity), true
 
 	case "GitBranch.isCurrent":
 		if e.ComplexityRoot.GitBranch.IsCurrent == nil {
@@ -1226,6 +1302,130 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MergeConfig.Strategy(childComplexity), true
+
+	case "MindMapCard.requirement":
+		if e.ComplexityRoot.MindMapCard.Requirement == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.Requirement(childComplexity), true
+	case "MindMapCard.sessionId":
+		if e.ComplexityRoot.MindMapCard.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.SessionID(childComplexity), true
+	case "MindMapCard.taskError":
+		if e.ComplexityRoot.MindMapCard.TaskError == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.TaskError(childComplexity), true
+	case "MindMapCard.taskId":
+		if e.ComplexityRoot.MindMapCard.TaskID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.TaskID(childComplexity), true
+	case "MindMapCard.taskStatus":
+		if e.ComplexityRoot.MindMapCard.TaskStatus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.TaskStatus(childComplexity), true
+	case "MindMapCard.updatedAt":
+		if e.ComplexityRoot.MindMapCard.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.UpdatedAt(childComplexity), true
+
+	case "MindMapEdge.id":
+		if e.ComplexityRoot.MindMapEdge.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapEdge.ID(childComplexity), true
+	case "MindMapEdge.label":
+		if e.ComplexityRoot.MindMapEdge.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapEdge.Label(childComplexity), true
+	case "MindMapEdge.sourceId":
+		if e.ComplexityRoot.MindMapEdge.SourceID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapEdge.SourceID(childComplexity), true
+	case "MindMapEdge.targetId":
+		if e.ComplexityRoot.MindMapEdge.TargetID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapEdge.TargetID(childComplexity), true
+
+	case "MindMapGraph.edges":
+		if e.ComplexityRoot.MindMapGraph.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapGraph.Edges(childComplexity), true
+	case "MindMapGraph.nodes":
+		if e.ComplexityRoot.MindMapGraph.Nodes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapGraph.Nodes(childComplexity), true
+	case "MindMapGraph.projectId":
+		if e.ComplexityRoot.MindMapGraph.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapGraph.ProjectID(childComplexity), true
+	case "MindMapGraph.sessionId":
+		if e.ComplexityRoot.MindMapGraph.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapGraph.SessionID(childComplexity), true
+	case "MindMapGraph.updatedAt":
+		if e.ComplexityRoot.MindMapGraph.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapGraph.UpdatedAt(childComplexity), true
+
+	case "MindMapNode.content":
+		if e.ComplexityRoot.MindMapNode.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapNode.Content(childComplexity), true
+	case "MindMapNode.id":
+		if e.ComplexityRoot.MindMapNode.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapNode.ID(childComplexity), true
+	case "MindMapNode.title":
+		if e.ComplexityRoot.MindMapNode.Title == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapNode.Title(childComplexity), true
+	case "MindMapNode.x":
+		if e.ComplexityRoot.MindMapNode.X == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapNode.X(childComplexity), true
+	case "MindMapNode.y":
+		if e.ComplexityRoot.MindMapNode.Y == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapNode.Y(childComplexity), true
 
 	case "Mutation.activateWorkflowDefinition":
 		if e.ComplexityRoot.Mutation.ActivateWorkflowDefinition == nil {
@@ -1414,6 +1614,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ResumeSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.retryMindMapTask":
+		if e.ComplexityRoot.Mutation.RetryMindMapTask == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_retryMindMapTask_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RetryMindMapTask(childComplexity, args["id"].(string)), true
 	case "Mutation.retrySessionInitialization":
 		if e.ComplexityRoot.Mutation.RetrySessionInitialization == nil {
 			break
@@ -1557,6 +1768,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateGeneralSettings(childComplexity, args["input"].(model.UpdateGeneralSettingsInput)), true
+	case "Mutation.updateProjectMindMap":
+		if e.ComplexityRoot.Mutation.UpdateProjectMindMap == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateProjectMindMap_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateProjectMindMap(childComplexity, args["input"].(model.UpdateMindMapInput)), true
 	case "Mutation.updateProjectSettings":
 		if e.ComplexityRoot.Mutation.UpdateProjectSettings == nil {
 			break
@@ -1716,6 +1938,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Project.IsGit(childComplexity), true
+	case "Project.mindMapEnabled":
+		if e.ComplexityRoot.Project.MindMapEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Project.MindMapEnabled(childComplexity), true
 	case "Project.name":
 		if e.ComplexityRoot.Project.Name == nil {
 			break
@@ -1873,6 +2101,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ProjectGitState(childComplexity, args["projectId"].(string), args["refresh"].(bool)), true
+	case "Query.projectMindMap":
+		if e.ComplexityRoot.Query.ProjectMindMap == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectMindMap_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProjectMindMap(childComplexity, args["projectId"].(string), args["sessionId"].(*string)), true
+	case "Query.projectMindMapCards":
+		if e.ComplexityRoot.Query.ProjectMindMapCards == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectMindMapCards_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProjectMindMapCards(childComplexity, args["projectId"].(string)), true
 	case "Query.projects":
 		if e.ComplexityRoot.Query.Projects == nil {
 			break
@@ -3843,6 +4093,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputListSessionsInput,
 		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
+		ec.unmarshalInputMindMapOperationInput,
 		ec.unmarshalInputPromptFileMatchInput,
 		ec.unmarshalInputPromptMentionInput,
 		ec.unmarshalInputQuestionAnswerInput,
@@ -3860,6 +4111,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
 		ec.unmarshalInputUpdateGeneralSettingsInput,
+		ec.unmarshalInputUpdateMindMapInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
 		ec.unmarshalInputUpdatePromptAppendInput,
 		ec.unmarshalInputUpdateQuickCommandInput,
@@ -3979,6 +4231,8 @@ type Query {
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
+  projectMindMap(projectId: ID!, sessionId: ID): MindMapGraph!
+  projectMindMapCards(projectId: ID!): [MindMapCard!]!
   sessions(input: ListSessionsInput): SessionCardPage!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
@@ -4026,6 +4280,8 @@ type Mutation {
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
+  updateProjectMindMap(input: UpdateMindMapInput!): MindMapGraph!
+  retryMindMapTask(id: ID!): MindMapCard!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
@@ -4116,11 +4372,21 @@ enum AppearanceSolidTheme {
 type GeneralSettings {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  mindMapEnabled: Boolean!
+  mindMapMode: String!
+  mindMapModel: String!
+  mindMapReasoningEffort: String!
+  mindMapMaxConcurrent: Int!
 }
 
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  mindMapEnabled: Boolean!
+  mindMapMode: String!
+  mindMapModel: String!
+  mindMapReasoningEffort: String!
+  mindMapMaxConcurrent: Int!
 }
 
 type AppearanceSettings {
@@ -4190,6 +4456,7 @@ type Project {
   path: String!
   isGit: Boolean!
   worktreeInitCommand: String!
+  mindMapEnabled: Boolean!
   defaultWorkflowId: ID
   gitState: GitState!
   createdAt: Time!
@@ -4779,6 +5046,57 @@ input CreateProjectInput {
 input UpdateProjectSettingsInput {
   projectId: ID!
   worktreeInitCommand: String!
+  mindMapEnabled: Boolean!
+}
+
+type MindMapGraph {
+  projectId: ID!
+  sessionId: ID
+  nodes: [MindMapNode!]!
+  edges: [MindMapEdge!]!
+  updatedAt: Time!
+}
+
+type MindMapNode {
+  id: ID!
+  title: String!
+  content: String!
+  x: Float!
+  y: Float!
+}
+
+type MindMapEdge {
+  id: ID!
+  sourceId: ID!
+  targetId: ID!
+  label: String!
+}
+
+type MindMapCard {
+  sessionId: ID!
+  requirement: String!
+  updatedAt: Time!
+  taskId: ID
+  taskStatus: String!
+  taskError: String!
+}
+
+input UpdateMindMapInput {
+  projectId: ID!
+  sessionId: ID
+  operations: [MindMapOperationInput!]!
+}
+
+input MindMapOperationInput {
+  kind: String!
+  id: ID!
+  title: String
+  content: String
+  x: Float
+  y: Float
+  sourceId: ID
+  targetId: ID
+  label: String
 }
 
 input SetDefaultWorkflowInput {
@@ -5173,6 +5491,17 @@ func (ec *executionContext) field_Mutation_resumeSession_args(ctx context.Contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_retryMindMapTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_retrySessionInitialization_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5321,6 +5650,17 @@ func (ec *executionContext) field_Mutation_updateGeneralSettings_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateProjectMindMap_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateMindMapInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateMindMapInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateProjectSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5444,6 +5784,33 @@ func (ec *executionContext) field_Query_projectGitState_args(ctx context.Context
 		return nil, err
 	}
 	args["refresh"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectMindMapCards_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectMindMap_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg1
 	return args, nil
 }
 
@@ -7440,6 +7807,151 @@ func (ec *executionContext) fieldContext_GeneralSettings_agentWritableRoots(_ co
 	return fc, nil
 }
 
+func (ec *executionContext) _GeneralSettings_mindMapEnabled(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapEnabled,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapEnabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GeneralSettings_mindMapMode(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapMode,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapMode, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GeneralSettings_mindMapModel(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapModel,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapModel, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapModel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GeneralSettings_mindMapReasoningEffort(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapReasoningEffort,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapReasoningEffort, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapReasoningEffort(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GeneralSettings_mindMapMaxConcurrent(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapMaxConcurrent,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapMaxConcurrent, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapMaxConcurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GitBranch_name(ctx context.Context, field graphql.CollectedField, obj *model.GitBranch) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7678,6 +8190,608 @@ func (ec *executionContext) fieldContext_MergeConfig_strategy(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _MindMapCard_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapCard_requirement(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_requirement,
+		func(ctx context.Context) (any, error) {
+			return obj.Requirement, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_requirement(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapCard_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapCard_taskId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_taskId,
+		func(ctx context.Context) (any, error) {
+			return obj.TaskID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_taskId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapCard_taskStatus(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_taskStatus,
+		func(ctx context.Context) (any, error) {
+			return obj.TaskStatus, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_taskStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapCard_taskError(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_taskError,
+		func(ctx context.Context) (any, error) {
+			return obj.TaskError, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_taskError(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapEdge_id(ctx context.Context, field graphql.CollectedField, obj *model.MindMapEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapEdge_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapEdge_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapEdge_sourceId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapEdge_sourceId,
+		func(ctx context.Context) (any, error) {
+			return obj.SourceID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapEdge_sourceId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapEdge_targetId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapEdge_targetId,
+		func(ctx context.Context) (any, error) {
+			return obj.TargetID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapEdge_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapEdge_label(ctx context.Context, field graphql.CollectedField, obj *model.MindMapEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapEdge_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapEdge_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapGraph_projectId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapGraph_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapGraph_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapGraph_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapGraph_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapGraph_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapGraph_nodes(ctx context.Context, field graphql.CollectedField, obj *model.MindMapGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapGraph_nodes,
+		func(ctx context.Context) (any, error) {
+			return obj.Nodes, nil
+		},
+		nil,
+		ec.marshalNMindMapNode2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapNodeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapGraph_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_MindMapNode_id(ctx, field)
+			case "title":
+				return ec.fieldContext_MindMapNode_title(ctx, field)
+			case "content":
+				return ec.fieldContext_MindMapNode_content(ctx, field)
+			case "x":
+				return ec.fieldContext_MindMapNode_x(ctx, field)
+			case "y":
+				return ec.fieldContext_MindMapNode_y(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapNode", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapGraph_edges(ctx context.Context, field graphql.CollectedField, obj *model.MindMapGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapGraph_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNMindMapEdge2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapGraph_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_MindMapEdge_id(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_MindMapEdge_sourceId(ctx, field)
+			case "targetId":
+				return ec.fieldContext_MindMapEdge_targetId(ctx, field)
+			case "label":
+				return ec.fieldContext_MindMapEdge_label(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapGraph_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.MindMapGraph) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapGraph_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapGraph_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapGraph",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapNode_id(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapNode_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapNode_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapNode_title(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapNode_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapNode_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapNode_content(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapNode_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapNode_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapNode_x(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapNode_x,
+		func(ctx context.Context) (any, error) {
+			return obj.X, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapNode_x(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MindMapNode_y(ctx context.Context, field graphql.CollectedField, obj *model.MindMapNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapNode_y,
+		func(ctx context.Context) (any, error) {
+			return obj.Y, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapNode_y(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_updateGeneralSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7707,6 +8821,16 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
+			case "mindMapMode":
+				return ec.fieldContext_GeneralSettings_mindMapMode(ctx, field)
+			case "mindMapModel":
+				return ec.fieldContext_GeneralSettings_mindMapModel(ctx, field)
+			case "mindMapReasoningEffort":
+				return ec.fieldContext_GeneralSettings_mindMapReasoningEffort(ctx, field)
+			case "mindMapMaxConcurrent":
+				return ec.fieldContext_GeneralSettings_mindMapMaxConcurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
 		},
@@ -8148,6 +9272,8 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 				return ec.fieldContext_Project_isGit(ctx, field)
 			case "worktreeInitCommand":
 				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_Project_mindMapEnabled(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -8209,6 +9335,8 @@ func (ec *executionContext) fieldContext_Mutation_updateProjectSettings(ctx cont
 				return ec.fieldContext_Project_isGit(ctx, field)
 			case "worktreeInitCommand":
 				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_Project_mindMapEnabled(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -8229,6 +9357,114 @@ func (ec *executionContext) fieldContext_Mutation_updateProjectSettings(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateProjectSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateProjectMindMap(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateProjectMindMap,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateProjectMindMap(ctx, fc.Args["input"].(model.UpdateMindMapInput))
+		},
+		nil,
+		ec.marshalNMindMapGraph2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapGraph,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateProjectMindMap(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_MindMapGraph_projectId(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_MindMapGraph_sessionId(ctx, field)
+			case "nodes":
+				return ec.fieldContext_MindMapGraph_nodes(ctx, field)
+			case "edges":
+				return ec.fieldContext_MindMapGraph_edges(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MindMapGraph_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapGraph", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateProjectMindMap_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_retryMindMapTask(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_retryMindMapTask,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RetryMindMapTask(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNMindMapCard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCard,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_retryMindMapTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "sessionId":
+				return ec.fieldContext_MindMapCard_sessionId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_MindMapCard_requirement(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MindMapCard_updatedAt(ctx, field)
+			case "taskId":
+				return ec.fieldContext_MindMapCard_taskId(ctx, field)
+			case "taskStatus":
+				return ec.fieldContext_MindMapCard_taskStatus(ctx, field)
+			case "taskError":
+				return ec.fieldContext_MindMapCard_taskError(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapCard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_retryMindMapTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8311,6 +9547,8 @@ func (ec *executionContext) fieldContext_Mutation_setDefaultWorkflow(ctx context
 				return ec.fieldContext_Project_isGit(ctx, field)
 			case "worktreeInitCommand":
 				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_Project_mindMapEnabled(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -10163,6 +11401,35 @@ func (ec *executionContext) fieldContext_Project_worktreeInitCommand(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Project_mindMapEnabled(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_mindMapEnabled,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapEnabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_mindMapEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Project_defaultWorkflowId(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10782,6 +12049,16 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
+			case "mindMapMode":
+				return ec.fieldContext_GeneralSettings_mindMapMode(ctx, field)
+			case "mindMapModel":
+				return ec.fieldContext_GeneralSettings_mindMapModel(ctx, field)
+			case "mindMapReasoningEffort":
+				return ec.fieldContext_GeneralSettings_mindMapReasoningEffort(ctx, field)
+			case "mindMapMaxConcurrent":
+				return ec.fieldContext_GeneralSettings_mindMapMaxConcurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
 		},
@@ -10950,6 +12227,8 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 				return ec.fieldContext_Project_isGit(ctx, field)
 			case "worktreeInitCommand":
 				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_Project_mindMapEnabled(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -11061,6 +12340,114 @@ func (ec *executionContext) fieldContext_Query_browseDirectory(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_browseDirectory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectMindMap(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectMindMap,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProjectMindMap(ctx, fc.Args["projectId"].(string), fc.Args["sessionId"].(*string))
+		},
+		nil,
+		ec.marshalNMindMapGraph2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapGraph,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectMindMap(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_MindMapGraph_projectId(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_MindMapGraph_sessionId(ctx, field)
+			case "nodes":
+				return ec.fieldContext_MindMapGraph_nodes(ctx, field)
+			case "edges":
+				return ec.fieldContext_MindMapGraph_edges(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MindMapGraph_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapGraph", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectMindMap_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectMindMapCards(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectMindMapCards,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProjectMindMapCards(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNMindMapCard2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCardᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectMindMapCards(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "sessionId":
+				return ec.fieldContext_MindMapCard_sessionId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_MindMapCard_requirement(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MindMapCard_updatedAt(ctx, field)
+			case "taskId":
+				return ec.fieldContext_MindMapCard_taskId(ctx, field)
+			case "taskStatus":
+				return ec.fieldContext_MindMapCard_taskStatus(ctx, field)
+			case "taskError":
+				return ec.fieldContext_MindMapCard_taskError(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MindMapCard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectMindMapCards_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -23315,6 +24702,92 @@ func (ec *executionContext) unmarshalInputMergeConfigInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputMindMapOperationInput(ctx context.Context, obj any) (model.MindMapOperationInput, error) {
+	var it model.MindMapOperationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"kind", "id", "title", "content", "x", "y", "sourceId", "targetId", "label"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "title":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("title"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Title = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		case "x":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("x"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.X = data
+		case "y":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("y"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Y = data
+		case "sourceId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceID = data
+		case "targetId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetID = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Label = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputPromptFileMatchInput(ctx context.Context, obj any) (model.PromptFileMatchInput, error) {
 	var it model.PromptFileMatchInput
 	if obj == nil {
@@ -24016,7 +25489,7 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots"}
+	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "mindMapEnabled", "mindMapMode", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -24037,6 +25510,85 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 				return it, err
 			}
 			it.AgentWritableRoots = data
+		case "mindMapEnabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapEnabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapEnabled = data
+		case "mindMapMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapMode"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapMode = data
+		case "mindMapModel":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapModel"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapModel = data
+		case "mindMapReasoningEffort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapReasoningEffort"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapReasoningEffort = data
+		case "mindMapMaxConcurrent":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapMaxConcurrent"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapMaxConcurrent = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateMindMapInput(ctx context.Context, obj any) (model.UpdateMindMapInput, error) {
+	var it model.UpdateMindMapInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "sessionId", "operations"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "operations":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("operations"))
+			data, err := ec.unmarshalNMindMapOperationInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapOperationInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Operations = data
 		}
 	}
 	return it, nil
@@ -24053,7 +25605,7 @@ func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "worktreeInitCommand"}
+	fieldsInOrder := [...]string{"projectId", "worktreeInitCommand", "mindMapEnabled"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -24074,6 +25626,13 @@ func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context
 				return it, err
 			}
 			it.WorktreeInitCommand = data
+		case "mindMapEnabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapEnabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapEnabled = data
 		}
 	}
 	return it, nil
@@ -25414,6 +26973,31 @@ func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "mindMapEnabled":
+			out.Values[i] = ec._GeneralSettings_mindMapEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapMode":
+			out.Values[i] = ec._GeneralSettings_mindMapMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapModel":
+			out.Values[i] = ec._GeneralSettings_mindMapModel(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapReasoningEffort":
+			out.Values[i] = ec._GeneralSettings_mindMapReasoningEffort(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapMaxConcurrent":
+			out.Values[i] = ec._GeneralSettings_mindMapMaxConcurrent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -25579,6 +27163,236 @@ func (ec *executionContext) _MergeConfig(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var mindMapCardImplementors = []string{"MindMapCard"}
+
+func (ec *executionContext) _MindMapCard(ctx context.Context, sel ast.SelectionSet, obj *model.MindMapCard) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mindMapCardImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MindMapCard")
+		case "sessionId":
+			out.Values[i] = ec._MindMapCard_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requirement":
+			out.Values[i] = ec._MindMapCard_requirement(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._MindMapCard_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "taskId":
+			out.Values[i] = ec._MindMapCard_taskId(ctx, field, obj)
+		case "taskStatus":
+			out.Values[i] = ec._MindMapCard_taskStatus(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "taskError":
+			out.Values[i] = ec._MindMapCard_taskError(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mindMapEdgeImplementors = []string{"MindMapEdge"}
+
+func (ec *executionContext) _MindMapEdge(ctx context.Context, sel ast.SelectionSet, obj *model.MindMapEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mindMapEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MindMapEdge")
+		case "id":
+			out.Values[i] = ec._MindMapEdge_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sourceId":
+			out.Values[i] = ec._MindMapEdge_sourceId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targetId":
+			out.Values[i] = ec._MindMapEdge_targetId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._MindMapEdge_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mindMapGraphImplementors = []string{"MindMapGraph"}
+
+func (ec *executionContext) _MindMapGraph(ctx context.Context, sel ast.SelectionSet, obj *model.MindMapGraph) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mindMapGraphImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MindMapGraph")
+		case "projectId":
+			out.Values[i] = ec._MindMapGraph_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionId":
+			out.Values[i] = ec._MindMapGraph_sessionId(ctx, field, obj)
+		case "nodes":
+			out.Values[i] = ec._MindMapGraph_nodes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "edges":
+			out.Values[i] = ec._MindMapGraph_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._MindMapGraph_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mindMapNodeImplementors = []string{"MindMapNode"}
+
+func (ec *executionContext) _MindMapNode(ctx context.Context, sel ast.SelectionSet, obj *model.MindMapNode) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mindMapNodeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MindMapNode")
+		case "id":
+			out.Values[i] = ec._MindMapNode_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "title":
+			out.Values[i] = ec._MindMapNode_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._MindMapNode_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "x":
+			out.Values[i] = ec._MindMapNode_x(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "y":
+			out.Values[i] = ec._MindMapNode_y(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -25671,6 +27485,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateProjectSettings":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateProjectSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateProjectMindMap":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateProjectMindMap(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retryMindMapTask":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_retryMindMapTask(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -26018,6 +27846,11 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "worktreeInitCommand":
 			out.Values[i] = ec._Project_worktreeInitCommand(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapEnabled":
+			out.Values[i] = ec._Project_mindMapEnabled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -26440,6 +28273,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_browseDirectory(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectMindMap":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectMindMap(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectMindMapCards":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectMindMapCards(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -30769,6 +32646,122 @@ func (ec *executionContext) unmarshalNListTranscriptEventsInput2githubᚗcomᚋn
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNMindMapCard2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCard(ctx context.Context, sel ast.SelectionSet, v model.MindMapCard) graphql.Marshaler {
+	return ec._MindMapCard(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMindMapCard2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCardᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.MindMapCard) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNMindMapCard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCard(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMindMapCard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapCard(ctx context.Context, sel ast.SelectionSet, v *model.MindMapCard) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MindMapCard(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMindMapEdge2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.MindMapEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNMindMapEdge2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMindMapEdge2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapEdge(ctx context.Context, sel ast.SelectionSet, v *model.MindMapEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MindMapEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMindMapGraph2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapGraph(ctx context.Context, sel ast.SelectionSet, v model.MindMapGraph) graphql.Marshaler {
+	return ec._MindMapGraph(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMindMapGraph2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapGraph(ctx context.Context, sel ast.SelectionSet, v *model.MindMapGraph) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MindMapGraph(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMindMapNode2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapNodeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.MindMapNode) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNMindMapNode2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapNode(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMindMapNode2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapNode(ctx context.Context, sel ast.SelectionSet, v *model.MindMapNode) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MindMapNode(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNMindMapOperationInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapOperationInputᚄ(ctx context.Context, v any) ([]*model.MindMapOperationInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.MindMapOperationInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNMindMapOperationInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapOperationInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNMindMapOperationInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐMindMapOperationInput(ctx context.Context, v any) (*model.MindMapOperationInput, error) {
+	res, err := ec.unmarshalInputMindMapOperationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -31664,6 +33657,11 @@ func (ec *executionContext) unmarshalNUpdateGeneralSettingsInput2githubᚗcomᚋ
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNUpdateMindMapInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateMindMapInput(ctx context.Context, v any) (model.UpdateMindMapInput, error) {
+	res, err := ec.unmarshalInputUpdateMindMapInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateProjectSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -32130,6 +34128,23 @@ func (ec *executionContext) marshalOFileDiff2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._FileDiff(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOFloat2ᚖfloat64(ctx context.Context, v any) (*float64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel ast.SelectionSet, v *float64) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	res := graphql.MarshalFloatContext(*v)
+	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

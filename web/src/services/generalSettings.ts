@@ -3,13 +3,28 @@ import { graphqlFetch } from '@/services/graphqlClient';
 export interface GeneralSettings {
   agentMaxConcurrent: number;
   agentWritableRoots: string[];
+  mindMapEnabled: boolean;
+  mindMapMode: 'realtime' | 'async';
+  mindMapModel: string;
+  mindMapReasoningEffort: string;
+  mindMapMaxConcurrent: number;
 }
+
+const generalSettingsFields = `
+  agentMaxConcurrent
+  agentWritableRoots
+  mindMapEnabled
+  mindMapMode
+  mindMapModel
+  mindMapReasoningEffort
+  mindMapMaxConcurrent
+`;
 
 export async function getGeneralSettings() {
   const data = await graphqlFetch<{ generalSettings: GeneralSettings }>({
     query: `
       query GeneralSettings {
-        generalSettings { agentMaxConcurrent agentWritableRoots }
+        generalSettings { ${generalSettingsFields} }
       }
     `,
     notify: false,
@@ -24,7 +39,7 @@ export async function updateGeneralSettings(settings: GeneralSettings) {
   >({
     query: `
       mutation UpdateGeneralSettings($input: UpdateGeneralSettingsInput!) {
-        updateGeneralSettings(input: $input) { agentMaxConcurrent agentWritableRoots }
+        updateGeneralSettings(input: $input) { ${generalSettingsFields} }
       }
     `,
     variables: { input: settings },

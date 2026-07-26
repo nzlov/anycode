@@ -84,6 +84,11 @@ func WorktreeInitCommand(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldWorktreeInitCommand, v))
 }
 
+// MindMapEnabled applies equality check predicate on the "mind_map_enabled" field. It's identical to MindMapEnabledEQ.
+func MindMapEnabled(v bool) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldMindMapEnabled, v))
+}
+
 // DefaultWorkflowID applies equality check predicate on the "default_workflow_id" field. It's identical to DefaultWorkflowIDEQ.
 func DefaultWorkflowID(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldDefaultWorkflowID, v))
@@ -307,6 +312,16 @@ func WorktreeInitCommandEqualFold(v string) predicate.Project {
 // WorktreeInitCommandContainsFold applies the ContainsFold predicate on the "worktree_init_command" field.
 func WorktreeInitCommandContainsFold(v string) predicate.Project {
 	return predicate.Project(sql.FieldContainsFold(FieldWorktreeInitCommand, v))
+}
+
+// MindMapEnabledEQ applies the EQ predicate on the "mind_map_enabled" field.
+func MindMapEnabledEQ(v bool) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldMindMapEnabled, v))
+}
+
+// MindMapEnabledNEQ applies the NEQ predicate on the "mind_map_enabled" field.
+func MindMapEnabledNEQ(v bool) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldMindMapEnabled, v))
 }
 
 // DefaultWorkflowIDEQ applies the EQ predicate on the "default_workflow_id" field.

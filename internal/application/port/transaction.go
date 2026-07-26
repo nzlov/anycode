@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nzlov/anycode/internal/domain/event"
+	"github.com/nzlov/anycode/internal/domain/mindmap"
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
@@ -65,6 +66,7 @@ type Tx interface {
 	ClaimExecution(ctx context.Context, input ExecutionClaimInput) (ExecutionClaimResult, error)
 	PrepareClose(ctx context.Context, input ClosePreparationInput) (ClosePreparationResult, error)
 	Projects() project.Repository
+	MindMaps() mindmap.Repository
 	Sessions() session.Repository
 	Workflows() workflow.Repository
 	Questions() question.Repository

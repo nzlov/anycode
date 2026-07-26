@@ -60,6 +60,7 @@ export function useProjects() {
   async function updateProjectSettingsById(input: {
     projectId: string;
     worktreeInitCommand: string;
+    mindMapEnabled: boolean;
   }) {
     const project = await updateProjectSettings(input);
     mutationRevision += 1;

@@ -8,6 +8,7 @@ import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	authapp "github.com/nzlov/anycode/internal/application/auth"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	promptcompletionapp "github.com/nzlov/anycode/internal/application/promptcompletion"
@@ -30,6 +31,7 @@ import (
 type UseCases struct {
 	Auth             authapp.UseCase
 	Projects         projectapp.UseCase
+	MindMaps         mindmapapp.UseCase
 	Sessions         sessionapp.UseCase
 	Timeline         timelineapp.UseCase
 	SessionEvents    sessioneventapp.UseCase

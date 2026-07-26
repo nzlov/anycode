@@ -39,6 +39,23 @@
           label="工作树初始化命令"
           :rows="10"
         />
+        <q-item class="project-settings-dialog__mind-map" tag="label">
+          <q-item-section avatar>
+            <q-icon name="hub" color="primary" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>项目思维图</q-item-label>
+            <q-item-label caption>{{ mindMapAvailabilityCaption }}</q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-toggle
+              v-model="mindMapEnabled"
+              color="primary"
+              aria-label="启用项目思维图"
+              :disable="saving || (!mindMapAvailable && !mindMapEnabled)"
+            />
+          </q-item-section>
+        </q-item>
       </q-card-section>
       <q-card-section
         v-else
@@ -80,12 +97,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { QDialog, useQuasar } from 'quasar';
 
 import QuickCommandManager from '@/components/QuickCommandManager.vue';
 import { useProjects } from '@/composables/useProjects';
 import type { ProjectSummary } from '@/services/projects';
+import { getGeneralSettings, type GeneralSettings } from '@/services/generalSettings';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -101,7 +119,23 @@ const $q = useQuasar();
 const { updateProjectSettingsById } = useProjects();
 const activeSection = ref<'general' | 'quick_commands'>('general');
 const worktreeInitCommand = ref('');
+const mindMapEnabled = ref(false);
+const globalSettings = ref<GeneralSettings | null>(null);
 const saving = ref(false);
+const mindMapAvailable = computed(() => {
+  const settings = globalSettings.value;
+  if (!settings?.mindMapEnabled) return false;
+  if (settings.mindMapMode === 'realtime') return true;
+  return Boolean(settings.mindMapModel && settings.mindMapReasoningEffort);
+});
+const mindMapAvailabilityCaption = computed(() => {
+  if (!globalSettings.value) return '正在检查全局思维图设置';
+  if (!globalSettings.value.mindMapEnabled) return '请先在全局常规设置中开启思维图';
+  if (!mindMapAvailable.value) return '请先完成异步模型和思考强度配置';
+  return globalSettings.value.mindMapMode === 'async'
+    ? '关闭会话后由全局异步队列整理'
+    : '卡片 Agent 实时维护隔离思维图';
+});
 
 watch(
   () => [props.modelValue, props.project?.id] as const,
@@ -109,6 +143,8 @@ watch(
     if (open) {
       activeSection.value = 'general';
       worktreeInitCommand.value = props.project?.worktreeInitCommand ?? '';
+      mindMapEnabled.value = props.project?.mindMapEnabled ?? false;
+      void loadMindMapAvailability();
     }
   },
   { immediate: true },
@@ -118,6 +154,14 @@ function emitModel(value: boolean) {
   emit('update:modelValue', value);
 }
 
+async function loadMindMapAvailability() {
+  try {
+    globalSettings.value = await getGeneralSettings();
+  } catch {
+    globalSettings.value = null;
+  }
+}
+
 async function save() {
   if (!props.project) return;
   saving.value = true;
@@ -125,6 +169,7 @@ async function save() {
     await updateProjectSettingsById({
       projectId: props.project.id,
       worktreeInitCommand: worktreeInitCommand.value,
+      mindMapEnabled: mindMapEnabled.value,
     });
     $q.notify({ type: 'positive', message: '项目设置已保存' });
     emit('update:modelValue', false);

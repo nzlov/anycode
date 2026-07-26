@@ -14,6 +14,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationcheckpoint"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationconfiguration"
@@ -91,6 +94,9 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			eventrecord.Table:               eventrecord.ValidColumn,
 			mergerecord.Table:               mergerecord.ValidColumn,
+			mindmapgraph.Table:              mindmapgraph.ValidColumn,
+			mindmapoverlay.Table:            mindmapoverlay.ValidColumn,
+			mindmaptask.Table:               mindmaptask.ValidColumn,
 			noderun.Table:                   noderun.ValidColumn,
 			notificationcheckpoint.Table:    notificationcheckpoint.ValidColumn,
 			notificationconfiguration.Table: notificationconfiguration.ValidColumn,

@@ -53,6 +53,25 @@ func (backgroundType BackgroundType) Valid() bool {
 
 type SolidTheme string
 
+type MindMapMode string
+
+const (
+	MindMapModeRealtime MindMapMode = "realtime"
+	MindMapModeAsync    MindMapMode = "async"
+)
+
+func (mode MindMapMode) Valid() bool {
+	return mode == MindMapModeRealtime || mode == MindMapModeAsync
+}
+
+type MindMapConfiguration struct {
+	Enabled         bool
+	Mode            MindMapMode
+	Model           string
+	ReasoningEffort string
+	MaxConcurrent   int
+}
+
 const (
 	SolidThemeVermilion SolidTheme = "vermilion"
 	SolidThemeAmber     SolidTheme = "amber"
@@ -112,6 +131,7 @@ func (scheme WallpaperColorScheme) Valid() bool {
 type SystemConfiguration struct {
 	AgentMaxConcurrent   int
 	AgentWritableRoots   []string
+	MindMap              MindMapConfiguration
 	BackgroundType       BackgroundType
 	SolidTheme           SolidTheme
 	BackgroundMask       int
@@ -123,7 +143,10 @@ type SystemConfiguration struct {
 
 func DefaultSystemConfiguration() SystemConfiguration {
 	return SystemConfiguration{
-		AgentMaxConcurrent:   2,
+		AgentMaxConcurrent: 2,
+		MindMap: MindMapConfiguration{
+			Mode: MindMapModeRealtime, MaxConcurrent: 1,
+		},
 		BackgroundType:       BackgroundTypeBing,
 		SolidTheme:           SolidThemeVermilion,
 		BackgroundMask:       0,
@@ -141,6 +164,10 @@ type Repository interface {
 	GetSystemConfiguration(ctx context.Context) (SystemConfiguration, error)
 	SaveSystemConfiguration(ctx context.Context, configuration SystemConfiguration) error
 	UpdateGeneralSettings(ctx context.Context, max int, writableRoots []string) error
+}
+
+type MindMapConfigurationProvider interface {
+	MindMapConfiguration(ctx context.Context) (MindMapConfiguration, error)
 }
 
 type WallpaperStore interface {

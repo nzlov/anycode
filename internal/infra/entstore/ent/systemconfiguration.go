@@ -22,6 +22,16 @@ type SystemConfiguration struct {
 	AgentMaxConcurrent int `json:"agent_max_concurrent,omitempty"`
 	// AgentWritableRoots holds the value of the "agent_writable_roots" field.
 	AgentWritableRoots []string `json:"agent_writable_roots,omitempty"`
+	// MindMapEnabled holds the value of the "mind_map_enabled" field.
+	MindMapEnabled bool `json:"mind_map_enabled,omitempty"`
+	// MindMapMode holds the value of the "mind_map_mode" field.
+	MindMapMode string `json:"mind_map_mode,omitempty"`
+	// MindMapModel holds the value of the "mind_map_model" field.
+	MindMapModel string `json:"mind_map_model,omitempty"`
+	// MindMapReasoningEffort holds the value of the "mind_map_reasoning_effort" field.
+	MindMapReasoningEffort string `json:"mind_map_reasoning_effort,omitempty"`
+	// MindMapMaxConcurrent holds the value of the "mind_map_max_concurrent" field.
+	MindMapMaxConcurrent int `json:"mind_map_max_concurrent,omitempty"`
 	// WallpaperColorScheme holds the value of the "wallpaper_color_scheme" field.
 	WallpaperColorScheme string `json:"wallpaper_color_scheme,omitempty"`
 	// BackgroundType holds the value of the "background_type" field.
@@ -48,9 +58,11 @@ func (*SystemConfiguration) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case systemconfiguration.FieldAgentWritableRoots:
 			values[i] = new([]byte)
-		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldBackgroundMask:
+		case systemconfiguration.FieldMindMapEnabled:
+			values[i] = new(sql.NullBool)
+		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldMindMapMaxConcurrent, systemconfiguration.FieldBackgroundMask:
 			values[i] = new(sql.NullInt64)
-		case systemconfiguration.FieldID, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
+		case systemconfiguration.FieldID, systemconfiguration.FieldMindMapMode, systemconfiguration.FieldMindMapModel, systemconfiguration.FieldMindMapReasoningEffort, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
 			values[i] = new(sql.NullString)
 		case systemconfiguration.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -88,6 +100,36 @@ func (_m *SystemConfiguration) assignValues(columns []string, values []any) erro
 				if err := json.Unmarshal(*value, &_m.AgentWritableRoots); err != nil {
 					return fmt.Errorf("unmarshal field agent_writable_roots: %w", err)
 				}
+			}
+		case systemconfiguration.FieldMindMapEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_enabled", values[i])
+			} else if value.Valid {
+				_m.MindMapEnabled = value.Bool
+			}
+		case systemconfiguration.FieldMindMapMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_mode", values[i])
+			} else if value.Valid {
+				_m.MindMapMode = value.String
+			}
+		case systemconfiguration.FieldMindMapModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_model", values[i])
+			} else if value.Valid {
+				_m.MindMapModel = value.String
+			}
+		case systemconfiguration.FieldMindMapReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.MindMapReasoningEffort = value.String
+			}
+		case systemconfiguration.FieldMindMapMaxConcurrent:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_max_concurrent", values[i])
+			} else if value.Valid {
+				_m.MindMapMaxConcurrent = int(value.Int64)
 			}
 		case systemconfiguration.FieldWallpaperColorScheme:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -178,6 +220,21 @@ func (_m *SystemConfiguration) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("agent_writable_roots=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AgentWritableRoots))
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MindMapEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_mode=")
+	builder.WriteString(_m.MindMapMode)
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_model=")
+	builder.WriteString(_m.MindMapModel)
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_reasoning_effort=")
+	builder.WriteString(_m.MindMapReasoningEffort)
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_max_concurrent=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MindMapMaxConcurrent))
 	builder.WriteString(", ")
 	builder.WriteString("wallpaper_color_scheme=")
 	builder.WriteString(_m.WallpaperColorScheme)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/project"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
 type UseCase interface {
@@ -41,6 +42,7 @@ type SetDefaultWorkflowInput struct {
 type UpdateProjectSettingsInput struct {
 	ProjectID           domain.ID
 	WorktreeInitCommand string
+	MindMapEnabled      bool
 }
 
 type RemoveProjectInput struct {
@@ -58,6 +60,7 @@ type DTO struct {
 	Path                string
 	IsGit               bool
 	WorktreeInitCommand string
+	MindMapEnabled      bool
 	DefaultWorkflowID   *domain.WorkflowDefinitionID
 	RemovedAt           *time.Time
 	GitState            domain.GitState
@@ -72,17 +75,24 @@ type DirectoryPageDTO struct {
 }
 
 type Service struct {
-	repo       domain.Repository
-	browser    domain.DirectoryBrowser
-	inspector  domain.GitInspector
-	gitCacheMu sync.Mutex
-	gitCache   map[domain.ID]domain.GitState
-	now        func() time.Time
-	generateID func() (domain.ID, error)
+	repo            domain.Repository
+	browser         domain.DirectoryBrowser
+	inspector       domain.GitInspector
+	gitCacheMu      sync.Mutex
+	gitCache        map[domain.ID]domain.GitState
+	now             func() time.Time
+	generateID      func() (domain.ID, error)
+	mindMapSettings settingdomain.MindMapConfigurationProvider
 }
 
-func New(repo domain.Repository, browser domain.DirectoryBrowser, inspector domain.GitInspector) *Service {
-	return &Service{
+type Option func(*Service)
+
+func WithMindMapSettings(provider settingdomain.MindMapConfigurationProvider) Option {
+	return func(service *Service) { service.mindMapSettings = provider }
+}
+
+func New(repo domain.Repository, browser domain.DirectoryBrowser, inspector domain.GitInspector, options ...Option) *Service {
+	service := &Service{
 		repo:       repo,
 		browser:    browser,
 		inspector:  inspector,
@@ -90,6 +100,10 @@ func New(repo domain.Repository, browser domain.DirectoryBrowser, inspector doma
 		now:        time.Now,
 		generateID: generateID,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (DTO, error) {
@@ -169,7 +183,20 @@ func (s *Service) UpdateProjectSettings(ctx context.Context, input UpdateProject
 	if err != nil {
 		return DTO{}, fmt.Errorf("find project: %w", err)
 	}
+	if input.MindMapEnabled && !project.MindMapEnabled {
+		if s.mindMapSettings == nil {
+			return DTO{}, errors.New("mind map settings are unavailable")
+		}
+		configuration, err := s.mindMapSettings.MindMapConfiguration(ctx)
+		if err != nil {
+			return DTO{}, fmt.Errorf("get mind map settings: %w", err)
+		}
+		if !configuration.Enabled || !configuration.Mode.Valid() || configuration.Mode == settingdomain.MindMapModeAsync && (strings.TrimSpace(configuration.Model) == "" || strings.TrimSpace(configuration.ReasoningEffort) == "") {
+			return DTO{}, errors.New("global mind map settings must be enabled and complete")
+		}
+	}
 	project.WorktreeInitCommand = input.WorktreeInitCommand
+	project.MindMapEnabled = input.MindMapEnabled
 	project.UpdatedAt = s.now()
 	if err := s.repo.Save(ctx, project); err != nil {
 		return DTO{}, fmt.Errorf("save project settings: %w", err)
@@ -274,6 +301,7 @@ func toDTO(project domain.Project, gitState domain.GitState) DTO {
 		Path:                project.Path.Value,
 		IsGit:               project.IsGit,
 		WorktreeInitCommand: project.WorktreeInitCommand,
+		MindMapEnabled:      project.MindMapEnabled,
 		DefaultWorkflowID:   project.DefaultWorkflowID,
 		RemovedAt:           project.RemovedAt,
 		GitState:            gitState,
