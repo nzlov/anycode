@@ -1173,16 +1173,16 @@ body.desktop
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px 20px 88px;
+  padding: 20px;
 }
 
 .quick-command-manager {
   display: flex;
-  position: relative;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .global-settings-panel__header {
@@ -1215,13 +1215,20 @@ body.desktop
 .quick-command-list {
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border-top: 1px solid var(--ac-border);
   border-bottom: 1px solid var(--ac-border);
 }
 
 .quick-command-list .q-item {
+  min-width: 0;
   min-height: 60px;
+}
+
+.quick-command-list .q-item__section--main {
+  min-width: 0;
 }
 
 .quick-command-text {
@@ -1230,6 +1237,10 @@ body.desktop
 }
 
 .global-settings-empty {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  place-items: center;
   padding: 40px 16px;
   color: var(--ac-text-muted);
   text-align: center;
@@ -1370,9 +1381,10 @@ body.desktop
 }
 
 .global-settings-add-fab {
-  position: absolute;
-  right: 24px;
-  bottom: 24px;
+  position: static;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 12px;
 }
 
 .forward-approval-dialog {
@@ -2089,7 +2101,8 @@ body.desktop
 
 .project-settings-dialog__commands {
   display: flex;
-  padding-bottom: 80px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .state-card {
@@ -2437,7 +2450,7 @@ body.desktop
   }
 
   .global-settings-panel {
-    padding: 12px 12px 80px;
+    padding: 12px;
   }
 
   .quick-command-editor {
@@ -2446,11 +2459,6 @@ body.desktop
 
   .quick-command-editor__actions {
     justify-content: flex-end;
-  }
-
-  .global-settings-add-fab {
-    right: 16px;
-    bottom: 16px;
   }
 
   .global-project-list .q-item {

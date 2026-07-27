@@ -101,13 +101,39 @@ test('long content dialogs keep one explicit scrolling content area', () => {
     stylesSource,
     /\.new-session-body\s*{[^}]*align-content:\s*start[^}]*overflow-y:\s*auto/s,
   );
-  assert.match(stylesSource, /\.quick-command-list\s*{[^}]*overflow-y:\s*auto/s);
+  assert.match(
+    stylesSource,
+    /\.quick-command-manager\s*{[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.quick-command-list\s*{[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.project-settings-dialog__commands\s*{[^}]*overflow:\s*hidden/s,
+  );
   assert.match(questionsSource, /\.questions-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
   assert.match(stylesSource, /\.directory-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.directory-list\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /\.diff-files\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
+});
+
+test('quick command actions stay outside the scrolling list', () => {
+  assert.match(
+    stylesSource,
+    /\.global-settings-add-fab\s*{[^}]*position:\s*static[^}]*align-self:\s*flex-start/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.quick-command-list \.q-item__section--main\s*{[^}]*min-width:\s*0/s,
+  );
+  assert.doesNotMatch(
+    stylesSource,
+    /\.global-settings-panel\s*{[^}]*padding:\s*20px 20px 88px/s,
+  );
 });
 
 test('questions dialog caps its height at 90% of the viewport and uses compact content spacing', () => {
