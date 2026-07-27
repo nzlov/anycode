@@ -324,7 +324,7 @@ func mindMapUpdateTool() map[string]any {
 	}}
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
-		"description": "Apply node and relationship changes to this card's isolated mind map. Search first, then update an existing node's title, content, or optional code file locations, delete obsolete nodes, and maintain relationships as needed. Node titles must not be empty. Each node must express exactly one durable concept. Use project-root as the immutable project-name center node. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
+		"description": "Apply node and relationship changes to this card's isolated mind map. Search first, then update an existing node's title, content, or optional code file locations, delete obsolete nodes, and maintain relationships as needed. Node titles must not be empty. Each node must express exactly one durable concept. Do not put file lists in node content; store file paths, methods, and line ranges only in the dedicated code file locations field. Use project-root as the immutable project-name center node. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"operations"},
 			"properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": operation}},

@@ -750,6 +750,9 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if !strings.Contains(description, "Each node must express exactly one durable concept") {
 		t.Fatalf("mind map update description = %q", description)
 	}
+	if !strings.Contains(description, "Do not put file lists in node content") {
+		t.Fatalf("mind map update description allows file lists in node content = %q", description)
+	}
 	updateSchema := realtime[6]["inputSchema"].(map[string]any)
 	operations := updateSchema["properties"].(map[string]any)["operations"].(map[string]any)
 	if operations["maxItems"] != 100 {

@@ -79,6 +79,9 @@ func TestAsyncQueueUsesIndependentGlobalConcurrencyAndConfiguredModel(t *testing
 		if !strings.Contains(input.DeveloperInstructions, "禁止创建仅用于记录错误") {
 			t.Fatalf("developer instructions = %q", input.DeveloperInstructions)
 		}
+		if !strings.Contains(input.DeveloperInstructions, "禁止将文件列表更新到节点内容里") {
+			t.Fatalf("developer instructions allow file lists in node content = %q", input.DeveloperInstructions)
+		}
 		if len(input.DynamicTools) != 2 || input.DynamicTools[0] != processdomain.DynamicToolMindMapSearch || input.DynamicTools[1] != processdomain.DynamicToolMindMapUpdate {
 			t.Fatalf("dynamic tools = %#v", input.DynamicTools)
 		}
