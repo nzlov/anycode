@@ -64,3 +64,17 @@ test('failed prompt append save keeps the dialog and edited body intact', () => 
   assert.doesNotMatch(catchBlock, /promptEditDialogOpen\.value = false/);
   assert.doesNotMatch(catchBlock, /promptEditBody\.value = ''/);
 });
+
+test('empty prompt append sends continue', () => {
+  const composableSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const appendBlock = composableSource.slice(
+    composableSource.indexOf('async function appendDescription'),
+    composableSource.indexOf('async function updatePromptAppendBody'),
+  );
+
+  assert.match(appendBlock, /const text = body\.trim\(\) \|\| 'continue';/);
+  assert.match(appendBlock, /await appendPrompt\(sessionId, text,/);
+});

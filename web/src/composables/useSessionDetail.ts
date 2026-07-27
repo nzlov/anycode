@@ -139,8 +139,7 @@ export function useSessionDetail(sessionId: string) {
 		artifactIds: string[] = [],
 		mentions: PromptMention[] = [],
 	) {
-		const text = body.trim();
-		if (!text && stagedAttachmentIds.length === 0 && artifactIds.length === 0 && mentions.length === 0) return;
+		const text = body.trim() || 'continue';
 
     appending.value = true;
     error.value = '';
