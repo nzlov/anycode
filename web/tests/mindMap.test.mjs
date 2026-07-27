@@ -59,6 +59,7 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(page, /directlyRelatedEdgeIds/);
   assert.match(page, /mind-map-element--muted/);
   assert.match(page, /@nodes-initialized="fitGraph"/);
+  assert.match(page, /:pan-on-drag="true"/);
   assert.match(page, /:zoom-on-pinch="true"/);
   assert.match(page, /<div class="mind-map-canvas">/);
   assert.doesNotMatch(page, /<PageToolbar[^>]*title-icon=/);
@@ -67,6 +68,10 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(
     page,
     /\.mind-map-canvas :deep\(\.vue-flow__background\)\s*\{[^}]*pointer-events:\s*none/s,
+  );
+  assert.match(
+    page,
+    /\.mind-map-canvas :deep\(\.vue-flow__viewport\),[\s\S]*\.mind-map-canvas :deep\(\.vue-flow__pane\)\s*\{[^}]*touch-action:\s*none/s,
   );
   assert.match(
     page,
@@ -106,6 +111,15 @@ test('mind map node information opens on desktop hover and mobile click with a c
   assert.match(page, /\{\{ data\.content \|\| '暂无节点内容' \}\}/);
   assert.match(page, /v-if="data\.files\.length"/);
   assert.match(page, /item\.method.*L\{\{ item\.startLine \}\}–\{\{ item\.endLine \}\}/s);
+  assert.match(page, /\.mind-map-node-info\s*\{[^}]*overflow-x:\s*hidden/s);
+  assert.match(
+    page,
+    /\.mind-map-node-info__files :deep\(\.q-item__section\)\s*\{[^}]*min-width:\s*0/s,
+  );
+  assert.match(
+    page,
+    /\.mind-map-node-info__files :deep\(\.q-item__label\)\s*\{[^}]*overflow-wrap:\s*anywhere/s,
+  );
   assert.match(page, /aria-label="关闭节点信息"/);
   assert.match(page, /@click="closeNodeInfo"/);
 });

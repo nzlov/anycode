@@ -83,6 +83,7 @@
         v-model:edges="flowEdges"
         :min-zoom="0.2"
         :max-zoom="2"
+        :pan-on-drag="true"
         :zoom-on-pinch="true"
         :nodes-connectable="true"
         :elements-selectable="true"
@@ -1041,6 +1042,11 @@ function taskStatusColor(status: string) {
   pointer-events: none;
 }
 
+.mind-map-canvas :deep(.vue-flow__viewport),
+.mind-map-canvas :deep(.vue-flow__pane) {
+  touch-action: none;
+}
+
 .mind-map-node-content {
   display: flex;
   width: 172px;
@@ -1085,6 +1091,7 @@ function taskStatusColor(status: string) {
 .mind-map-node-info {
   width: min(360px, calc(100vw - 32px));
   max-height: min(420px, calc(100vh - 32px));
+  overflow-x: hidden;
 }
 
 .mind-map-node-info__title {
@@ -1107,6 +1114,14 @@ function taskStatusColor(status: string) {
 .mind-map-node-info__files {
   max-height: 200px;
   overflow: auto;
+}
+
+.mind-map-node-info__files :deep(.q-item__section) {
+  min-width: 0;
+}
+
+.mind-map-node-info__files :deep(.q-item__label) {
+  overflow-wrap: anywhere;
 }
 
 .mind-map-canvas :deep(.vue-flow__node),
