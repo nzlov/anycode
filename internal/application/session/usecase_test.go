@@ -10987,6 +10987,17 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"execute", "close"},
 		},
 		{
+			name: "initializing",
+			session: domain.Session{
+				Status:     domain.StatusInitializing,
+				BaseBranch: "main",
+				WorktreeCleanup: domain.WorktreeCleanup{
+					Status: domain.WorktreeCleanupProvisioning,
+				},
+			},
+			want: []string{},
+		},
+		{
 			name:    "running",
 			session: domain.Session{Status: domain.StatusRunning},
 			want:    []string{"stop"},

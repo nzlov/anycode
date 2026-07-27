@@ -206,19 +206,12 @@ test('horizontal headers expose live card metadata and priority controls for con
   assert.match(indexSource, /if \(update\.priority\)[\s\S]*priority: update\.priority/);
 });
 
-test('horizontal headers keep mind map close actions on one row and close every card last', () => {
+test('horizontal headers keep compact close actions last in the top action row', () => {
   assert.match(
     conversationSource,
-    /class="overview-horizontal-conversation__close-actions"[\s\S]*label="合并思维图并关闭"[\s\S]*label="关闭"[\s\S]*<\/div>\s*<\/header>/,
+    /aria-label="打开会话详情"[\s\S]*aria-label="合并思维图并关闭"[\s\S]*:aria-label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
   );
-  assert.match(
-    conversationSource,
-    /\.overview-horizontal-conversation__actions,\s*\.overview-horizontal-conversation__close-actions\s*\{[^}]*display: flex;/s,
-  );
-  assert.match(
-    conversationSource,
-    /\.overview-horizontal-conversation__close-actions\s*\{[^}]*gap: 4px;[^}]*white-space: nowrap;/s,
-  );
+  assert.doesNotMatch(conversationSource, /overview-horizontal-conversation__close-actions|label="关闭"/);
   assert.match(
     terminalSource,
     /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
@@ -230,6 +223,13 @@ test('horizontal headers keep mind map close actions on one row and close every 
   assert.match(indexSource, /:close-loading="activeCloseSessionId === card\.id"/);
   assert.match(indexSource, /@close="closeCard\(card\)"/);
   assert.match(indexSource, /@merge-close="closeCard\(card, true\)"/);
+});
+
+test('horizontal mobile headers keep actions in the top row', () => {
+  assert.match(
+    conversationSource,
+    /\.overview-horizontal-conversation--mobile \.overview-horizontal-conversation__header\s*{[^}]*grid-template-areas:\s*'badges actions'\s*'identity identity'/s,
+  );
 });
 
 test('horizontal sessions omit the card context menu while retaining header priority controls', () => {

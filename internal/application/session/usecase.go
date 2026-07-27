@@ -8566,6 +8566,9 @@ func availableActions(session domain.Session) []string {
 	if session.Status == domain.StatusFailed && strings.TrimSpace(session.InitializationErrorCode) != "" {
 		return []string{"retry_initialization", "close"}
 	}
+	if session.Status == domain.StatusInitializing {
+		return []string{}
+	}
 	if strings.TrimSpace(session.BaseBranch) != "" && session.WorktreeCleanup.Status != domain.WorktreeCleanupActive {
 		if session.Status == domain.StatusClosed && session.WorktreeCleanup.Status == domain.WorktreeCleanupFailed && session.WorktreeCleanup.Retryable {
 			return []string{"retry_worktree_cleanup"}
