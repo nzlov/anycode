@@ -51,13 +51,12 @@
           flat
           dense
           class="lane-icon-btn app-icon-btn"
-          color="positive"
-          icon="merge"
-          aria-label="合并思维图并关闭"
-          :loading="closeLoading"
-          @click="emit('merge-close')"
+          color="primary"
+          icon="hub"
+          aria-label="思维图"
+          :to="{ name: 'project-mind-map', params: { projectId: card.projectId }, query: { card: card.id } }"
         >
-          <q-tooltip>合并思维图并关闭</q-tooltip>
+          <q-tooltip>思维图</q-tooltip>
         </q-btn>
         <q-btn
           v-if="card.availableActions.includes('close')"
@@ -110,7 +109,6 @@ const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
   close: [];
-  'merge-close': [];
 }>();
 </script>
 

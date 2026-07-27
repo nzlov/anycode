@@ -26,7 +26,6 @@
         @set-priority="emit('set-priority', $event)"
         @terminal-opened="emit('terminal-opened', $event)"
         @close="emit('close')"
-        @merge-close="emit('merge-close')"
       />
     </div>
 
@@ -74,7 +73,6 @@ const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
   close: [];
-  'merge-close': [];
 }>();
 
 const desktopSessionMinWidth = 1024;

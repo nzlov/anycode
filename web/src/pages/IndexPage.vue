@@ -58,7 +58,6 @@
           @set-priority="setCardPriority(card, $event)"
           @terminal-opened="refreshOverviewCard"
           @close="closeCard(card)"
-          @merge-close="closeCard(card, true)"
         />
       </div>
     </section>

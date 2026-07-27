@@ -206,11 +206,13 @@ test('horizontal headers expose live card metadata and priority controls for con
   assert.match(indexSource, /if \(update\.priority\)[\s\S]*priority: update\.priority/);
 });
 
-test('horizontal headers put terminal actions after details and close every card last', () => {
+test('horizontal headers link conversations to their mind map and close every card last', () => {
   assert.match(
     conversationSource,
-    /aria-label="合并思维图并关闭"[\s\S]*:aria-label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
+    /aria-label="思维图"[\s\S]*:to="\{ name: 'project-mind-map', params: \{ projectId: card\.projectId \}, query: \{ card: card\.id \} \}"[\s\S]*:aria-label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
   );
+  assert.doesNotMatch(conversationSource, /emit\('merge-close'\)/);
+  assert.doesNotMatch(horizontalSessionSource, /merge-close/);
   assert.match(
     terminalSource,
     /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
@@ -221,7 +223,6 @@ test('horizontal headers put terminal actions after details and close every card
   );
   assert.match(indexSource, /:close-loading="activeCloseSessionId === card\.id"/);
   assert.match(indexSource, /@close="closeCard\(card\)"/);
-  assert.match(indexSource, /@merge-close="closeCard\(card, true\)"/);
 });
 
 test('horizontal sessions omit the card context menu while retaining header priority controls', () => {
