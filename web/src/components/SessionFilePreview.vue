@@ -4,14 +4,16 @@
     <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
     <div
       v-else-if="file?.previewKind === 'image' && objectURL"
+      ref="zoomSurface"
       class="session-file-preview__zoom-surface"
       :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
-      @pointerdown="startZoom"
-      @pointermove="moveZoom"
-      @pointerup="endZoom"
-      @pointercancel="endZoom"
+      @pointerdown="startGesture"
+      @pointermove="moveGesture"
+      @pointerup="endGesture"
+      @pointercancel="endGesture"
     >
       <img
+        ref="mediaElement"
         :src="objectURL"
         :alt="file.filename"
         class="session-file-preview__image"
@@ -26,14 +28,16 @@
     />
     <div
       v-else-if="file?.previewKind === 'video' && objectURL"
+      ref="zoomSurface"
       class="session-file-preview__zoom-surface"
       :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
-      @pointerdown="startZoom"
-      @pointermove="moveZoom"
-      @pointerup="endZoom"
-      @pointercancel="endZoom"
+      @pointerdown="startGesture"
+      @pointermove="moveGesture"
+      @pointerup="endGesture"
+      @pointercancel="endGesture"
     >
       <video
+        ref="mediaElement"
         :src="objectURL"
         class="session-file-preview__media"
         :style="mediaTransform"
@@ -70,12 +74,21 @@ const error = ref('');
 const objectURL = ref('');
 const text = ref('');
 const scale = ref(1);
+const offsetX = ref(0);
+const offsetY = ref(0);
+const zoomSurface = ref<HTMLElement | null>(null);
+const mediaElement = ref<HTMLImageElement | HTMLVideoElement | null>(null);
 const pointers = new Map<number, { x: number; y: number }>();
 let pinchStartDistance = 0;
 let pinchStartScale = 1;
+let dragStart: { x: number; y: number; offsetX: number; offsetY: number } | null = null;
 let controller: AbortController | null = null;
 const mediaTransform = computed(() =>
-  props.zoomable ? { transform: `scale(${scale.value})` } : undefined,
+  props.zoomable
+    ? {
+        transform: `translate3d(${offsetX.value}px, ${offsetY.value}px, 0) scale(${scale.value})`,
+      }
+    : undefined,
 );
 
 async function load(file: SessionFilePreviewData | null) {
@@ -120,26 +133,44 @@ function clear() {
   resetZoom();
 }
 
-function startZoom(event: PointerEvent) {
+function startGesture(event: PointerEvent) {
   if (!props.zoomable || event.pointerType !== 'touch') return;
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  if (pointers.size === 2) {
+  if (pointers.size === 1) {
+    setDragStart(event.clientX, event.clientY);
+  } else if (pointers.size === 2) {
     pinchStartDistance = pointerDistance();
     pinchStartScale = scale.value;
+    dragStart = null;
   }
 }
 
-function moveZoom(event: PointerEvent) {
+function moveGesture(event: PointerEvent) {
   if (!props.zoomable || !pointers.has(event.pointerId)) return;
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  if (pointers.size !== 2 || pinchStartDistance === 0) return;
-  scale.value = Math.min(4, Math.max(1, pinchStartScale * (pointerDistance() / pinchStartDistance)));
+  if (pointers.size === 2 && pinchStartDistance > 0) {
+    scale.value = Math.min(
+      4,
+      Math.max(1, pinchStartScale * (pointerDistance() / pinchStartDistance)),
+    );
+    clampOffset();
+    event.preventDefault();
+    return;
+  }
+  if (pointers.size !== 1 || scale.value <= 1 || !dragStart) return;
+  offsetX.value = dragStart.offsetX + event.clientX - dragStart.x;
+  offsetY.value = dragStart.offsetY + event.clientY - dragStart.y;
+  clampOffset();
+  event.preventDefault();
 }
 
-function endZoom(event: PointerEvent) {
+function endGesture(event: PointerEvent) {
   pointers.delete(event.pointerId);
   pinchStartDistance = 0;
   pinchStartScale = scale.value;
+  const remaining = [...pointers.values()][0];
+  if (remaining) setDragStart(remaining.x, remaining.y);
+  else dragStart = null;
 }
 
 function pointerDistance() {
@@ -148,11 +179,32 @@ function pointerDistance() {
   return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
+function setDragStart(x: number, y: number) {
+  dragStart = { x, y, offsetX: offsetX.value, offsetY: offsetY.value };
+}
+
+function clampOffset() {
+  const surface = zoomSurface.value;
+  const media = mediaElement.value;
+  if (!surface || !media || scale.value <= 1) {
+    offsetX.value = 0;
+    offsetY.value = 0;
+    return;
+  }
+  const maxX = Math.max(0, (media.clientWidth * scale.value - surface.clientWidth) / 2);
+  const maxY = Math.max(0, (media.clientHeight * scale.value - surface.clientHeight) / 2);
+  offsetX.value = Math.min(maxX, Math.max(-maxX, offsetX.value));
+  offsetY.value = Math.min(maxY, Math.max(-maxY, offsetY.value));
+}
+
 function resetZoom() {
   pointers.clear();
   pinchStartDistance = 0;
   pinchStartScale = 1;
+  dragStart = null;
   scale.value = 1;
+  offsetX.value = 0;
+  offsetY.value = 0;
 }
 
 function errorMessage(err: unknown, fallback: string) {

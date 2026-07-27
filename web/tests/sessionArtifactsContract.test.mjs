@@ -86,7 +86,7 @@ test('authenticated previews revoke blob URLs and keep bounded text fully scroll
   assert.match(preview, /file\?\.previewKind === 'text'/);
 });
 
-test('mobile artifact previews are titleless full-screen dialogs with pinch-zoom media', () => {
+test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
   assert.match(panel, /:maximized="\$q\.screen\.lt\.md"/);
   assert.match(panel, /v-if="!\$q\.screen\.lt\.md" class="artifact-preview-header"/);
   assert.match(panel, /<SessionFilePreview :file="selected" :zoomable="\$q\.screen\.lt\.md"/);
@@ -104,9 +104,20 @@ test('mobile artifact previews are titleless full-screen dialogs with pinch-zoom
   assert.match(event, /artifact-event-preview__close/);
   assert.doesNotMatch(event, /useRouter|name: 'session-artifact'/);
   assert.match(preview, /zoomable\?: boolean/);
-  assert.match(preview, /@pointerdown="startZoom"/);
-  assert.match(preview, /Math\.min\(4, Math\.max\(1,/);
-  assert.match(preview, /\.session-file-preview__zoom-surface--enabled\s*\{[^}]*touch-action:\s*none/s);
+  assert.match(preview, /@pointerdown="startGesture"/);
+  assert.match(preview, /Math\.min\(\s*4,\s*Math\.max\(1,/);
+  assert.match(preview, /translate3d\(\$\{offsetX\.value\}px, \$\{offsetY\.value\}px, 0\)/);
+  assert.match(
+    preview,
+    /if \(pointers\.size !== 1 \|\| scale\.value <= 1 \|\| !dragStart\) return;/,
+  );
+  assert.match(preview, /function clampOffset\(\)/);
+  assert.match(preview, /media\.clientWidth \* scale\.value - surface\.clientWidth/);
+  assert.match(preview, /media\.clientHeight \* scale\.value - surface\.clientHeight/);
+  assert.match(
+    preview,
+    /\.session-file-preview__zoom-surface--enabled\s*\{[^}]*touch-action:\s*none/s,
+  );
 });
 
 test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {
