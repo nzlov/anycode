@@ -3,6 +3,7 @@ package mindmap
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"time"
 )
@@ -48,9 +49,18 @@ type Node struct {
 	ID               NodeID
 	Title            string
 	Content          string
+	Files            []NodeFile
 	TitleUpdatedAt   time.Time
 	ContentUpdatedAt time.Time
+	FilesUpdatedAt   time.Time
 	DeletedAt        *time.Time
+}
+
+type NodeFile struct {
+	File      string
+	Method    string
+	StartLine int
+	EndLine   int
 }
 
 type Edge struct {
@@ -72,6 +82,7 @@ type Change struct {
 	EntityID   string
 	Title      *string
 	Content    *string
+	Files      *[]NodeFile
 	SourceID   *NodeID
 	TargetID   *NodeID
 	Label      *string
@@ -83,6 +94,12 @@ type Overlay struct {
 	SessionID SessionID
 	Changes   []Change
 	UpdatedAt time.Time
+}
+
+type GraphPage struct {
+	Graph          Graph
+	NextNodeCursor NodeID
+	NextEdgeCursor EdgeID
 }
 
 type Task struct {
@@ -101,7 +118,9 @@ type Task struct {
 
 type Repository interface {
 	FindGraph(ctx context.Context, projectID ProjectID) (Graph, bool, error)
-	SaveGraph(ctx context.Context, graph Graph) error
+	FindGraphPage(ctx context.Context, projectID ProjectID, nodeAfter NodeID, edgeAfter EdgeID, nodeLimit int, edgeLimit int) (GraphPage, bool, error)
+	FindRevision(ctx context.Context, projectID ProjectID, sessionID SessionID) (time.Time, error)
+	SaveGraph(ctx context.Context, graph Graph, changes []Change) error
 	FindOverlay(ctx context.Context, sessionID SessionID) (Overlay, bool, error)
 	ListOverlays(ctx context.Context, projectID ProjectID) ([]Overlay, error)
 	SaveOverlay(ctx context.Context, overlay Overlay) error
@@ -123,9 +142,9 @@ func EnsureRoot(graph *Graph, projectName string, updatedAt time.Time) {
 	}
 	index := nodeIndex(graph.Nodes, RootNodeID)
 	if index < 0 {
-		graph.Nodes = append(graph.Nodes, Node{
+		graph.Nodes = append([]Node{{
 			ID: RootNodeID, Title: projectName, TitleUpdatedAt: updatedAt,
-		})
+		}}, graph.Nodes...)
 		return
 	}
 	root := &graph.Nodes[index]
@@ -263,6 +282,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 	type nodeChanges struct {
 		title   *Change
 		content *Change
+		files   *Change
 		deleted *Change
 	}
 	type edgeChanges struct {
@@ -285,6 +305,10 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 			if change.Content != nil {
 				value := change
 				fields.content = &value
+			}
+			if change.Files != nil {
+				value := change
+				fields.files = &value
 			}
 			latestNodeChanges[id] = fields
 		case ChangeDeleteNode:
@@ -338,28 +362,38 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 		fields := latestNodeChanges[node.ID]
 		titleChanged := !found || node.Title != baseNode.Title
 		contentChanged := (!found && node.Content != "") || (found && node.Content != baseNode.Content)
-		if titleChanged && contentChanged && fields.title != nil && fields.content != nil && fields.title.ID == fields.content.ID && fields.title.OccurredAt.Equal(fields.content.OccurredAt) {
+		filesChanged := (!found && len(node.Files) > 0) || (found && !slices.Equal(node.Files, baseNode.Files))
+		combinedTextChange := titleChanged && contentChanged && fields.title != nil && fields.content != nil && fields.title.ID == fields.content.ID && fields.title.OccurredAt.Equal(fields.content.OccurredAt)
+		if combinedTextChange {
 			change := *fields.title
 			title, content := node.Title, node.Content
 			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
 			change.Title, change.Content = &title, &content
-			change.SourceID, change.TargetID, change.Label = nil, nil, nil
+			change.Files, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil
 			compacted = append(compacted, change)
-			continue
+		} else {
+			if titleChanged && fields.title != nil {
+				change := *fields.title
+				title := node.Title
+				change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
+				change.Title, change.Content = &title, nil
+				change.Files, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil
+				compacted = append(compacted, change)
+			}
+			if contentChanged && fields.content != nil {
+				change := *fields.content
+				content := node.Content
+				change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
+				change.Title, change.Content = nil, &content
+				change.Files, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil
+				compacted = append(compacted, change)
+			}
 		}
-		if titleChanged && fields.title != nil {
-			change := *fields.title
-			title := node.Title
+		if filesChanged && fields.files != nil {
+			change := *fields.files
+			files := append([]NodeFile(nil), node.Files...)
 			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
-			change.Title, change.Content = &title, nil
-			change.SourceID, change.TargetID, change.Label = nil, nil, nil
-			compacted = append(compacted, change)
-		}
-		if contentChanged && fields.content != nil {
-			change := *fields.content
-			content := node.Content
-			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
-			change.Title, change.Content = nil, &content
+			change.Title, change.Content, change.Files = nil, nil, &files
 			change.SourceID, change.TargetID, change.Label = nil, nil, nil
 			compacted = append(compacted, change)
 		}
@@ -373,7 +407,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 			change := *fields.endpoints
 			sourceID, targetID, label := edge.SourceID, edge.TargetID, edge.Label
 			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
-			change.Title, change.Content = nil, nil
+			change.Title, change.Content, change.Files = nil, nil, nil
 			change.SourceID, change.TargetID, change.Label = &sourceID, &targetID, &label
 			compacted = append(compacted, change)
 			continue
@@ -382,7 +416,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 			change := *fields.endpoints
 			sourceID, targetID := edge.SourceID, edge.TargetID
 			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
-			change.Title, change.Content, change.Label = nil, nil, nil
+			change.Title, change.Content, change.Files, change.Label = nil, nil, nil, nil
 			change.SourceID, change.TargetID = &sourceID, &targetID
 			compacted = append(compacted, change)
 		}
@@ -390,7 +424,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 			change := *fields.label
 			label := edge.Label
 			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
-			change.Title, change.Content, change.SourceID, change.TargetID = nil, nil, nil, nil
+			change.Title, change.Content, change.Files, change.SourceID, change.TargetID = nil, nil, nil, nil, nil
 			change.Label = &label
 			compacted = append(compacted, change)
 		}
@@ -424,7 +458,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 		}
 		change.Kind = ChangeDeleteEdge
 		change.EntityID = string(edge.ID)
-		change.Title, change.Content, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil, nil
+		change.Title, change.Content, change.Files, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil, nil, nil
 		compacted = append(compacted, change)
 	}
 	for _, node := range base.Nodes {
@@ -438,7 +472,7 @@ func CompactOverlay(base Graph, overlay Overlay) Overlay {
 		value := *change
 		value.Kind = ChangeDeleteNode
 		value.EntityID = string(node.ID)
-		value.Title, value.Content, value.SourceID, value.TargetID, value.Label = nil, nil, nil, nil, nil
+		value.Title, value.Content, value.Files, value.SourceID, value.TargetID, value.Label = nil, nil, nil, nil, nil, nil
 		compacted = append(compacted, value)
 	}
 	overlay.Changes = compacted
@@ -464,13 +498,17 @@ func applyNode(graph *Graph, change Change) {
 		node.Content = *change.Content
 		node.ContentUpdatedAt = change.OccurredAt
 	}
+	if change.Files != nil && !change.OccurredAt.Before(node.FilesUpdatedAt) {
+		node.Files = append([]NodeFile(nil), (*change.Files)...)
+		node.FilesUpdatedAt = change.OccurredAt
+	}
 }
 
 func deleteNode(graph *Graph, change Change) {
 	id := NodeID(change.EntityID)
 	for index := range graph.Nodes {
 		node := &graph.Nodes[index]
-		if node.ID != id || change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt)) {
+		if node.ID != id || change.OccurredAt.Before(latestTime(node.TitleUpdatedAt, node.ContentUpdatedAt, node.FilesUpdatedAt)) {
 			continue
 		}
 		if node.DeletedAt == nil || !change.OccurredAt.Before(*node.DeletedAt) {
@@ -542,8 +580,12 @@ func mergeNode(target *Node, candidate Node) {
 		target.Content = candidate.Content
 		target.ContentUpdatedAt = candidate.ContentUpdatedAt
 	}
+	if !candidate.FilesUpdatedAt.Before(target.FilesUpdatedAt) {
+		target.Files = append([]NodeFile(nil), candidate.Files...)
+		target.FilesUpdatedAt = candidate.FilesUpdatedAt
+	}
 	target.DeletedAt = latestDeletion(target.DeletedAt, candidate.DeletedAt)
-	if target.DeletedAt != nil && latestTime(target.TitleUpdatedAt, target.ContentUpdatedAt).After(*target.DeletedAt) {
+	if target.DeletedAt != nil && latestTime(target.TitleUpdatedAt, target.ContentUpdatedAt, target.FilesUpdatedAt).After(*target.DeletedAt) {
 		target.DeletedAt = nil
 	}
 }
@@ -608,6 +650,9 @@ func edgeIndex(edges []Edge, id EdgeID) int {
 func cloneGraph(graph Graph) Graph {
 	result := graph
 	result.Nodes = append([]Node(nil), graph.Nodes...)
+	for index := range result.Nodes {
+		result.Nodes[index].Files = append([]NodeFile(nil), result.Nodes[index].Files...)
+	}
 	result.Edges = append([]Edge(nil), graph.Edges...)
 	result.History = append([]Change(nil), graph.History...)
 	return result

@@ -760,8 +760,13 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if len(variants) != 4 {
 		t.Fatalf("mind map operation schema = %#v", operation)
 	}
-	if anyOf, ok := variants[0]["anyOf"].([]map[string]any); !ok || len(anyOf) != 2 {
-		t.Fatalf("node upsert must allow title or content updates: %#v", variants[0])
+	if anyOf, ok := variants[0]["anyOf"].([]map[string]any); !ok || len(anyOf) != 3 {
+		t.Fatalf("node upsert must allow title, content, or file updates: %#v", variants[0])
+	}
+	nodeProperties := variants[0]["properties"].(map[string]any)
+	files, ok := nodeProperties["files"].(map[string]any)
+	if !ok || files["maxItems"] != 100 {
+		t.Fatalf("node upsert files schema = %#v", variants[0])
 	}
 	for _, variant := range variants {
 		if properties := variant["properties"].(map[string]any); properties["x"] != nil || properties["y"] != nil {

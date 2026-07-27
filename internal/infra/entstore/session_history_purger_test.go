@@ -52,6 +52,12 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	if err := store.client.MindMapOverlay.Create().SetID("session-1").SetProjectID("project-1").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.client.MindMapNode.Create().SetProjectID("project-1").SetSessionID("session-1").SetNodeID("mind-map-node").Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.client.MindMapEdge.Create().SetProjectID("project-1").SetSessionID("session-1").SetEdgeID("mind-map-edge").Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.client.MindMapTask.Create().SetID("mind-map-task-1").SetProjectID("project-1").SetSessionID("session-1").SetStatus("failed").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +75,8 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	counts["appends"] = mustCount(t, func() (int, error) { return store.client.PromptAppend.Query().Count(ctx) })
 	counts["merges"] = mustCount(t, func() (int, error) { return store.client.MergeRecord.Query().Count(ctx) })
 	counts["mind_map_overlays"] = mustCount(t, func() (int, error) { return store.client.MindMapOverlay.Query().Count(ctx) })
+	counts["mind_map_nodes"] = mustCount(t, func() (int, error) { return store.client.MindMapNode.Query().Count(ctx) })
+	counts["mind_map_edges"] = mustCount(t, func() (int, error) { return store.client.MindMapEdge.Query().Count(ctx) })
 	counts["mind_map_tasks"] = mustCount(t, func() (int, error) { return store.client.MindMapTask.Query().Count(ctx) })
 	if counts["sessions"] != 1 {
 		t.Fatalf("counts = %#v", counts)

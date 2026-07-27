@@ -17,6 +17,7 @@ import (
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
@@ -114,11 +115,11 @@ func mapProject(dto projectapp.DTO) *model.Project {
 	}
 }
 
-func mapMindMapGraph(dto mindmapapp.GraphDTO) *model.MindMapGraph {
+func mapMindMapGraphPage(dto mindmapapp.GraphPageDTO) *model.MindMapGraphPage {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
 		nodes = append(nodes, &model.MindMapNode{
-			ID: string(node.ID), Title: node.Title, Content: node.Content, ChangeType: string(node.ChangeType),
+			ID: string(node.ID), Title: node.Title, Content: node.Content, Files: mapMindMapNodeFiles(node.Files), ChangeType: string(node.ChangeType),
 		})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
@@ -130,7 +131,28 @@ func mapMindMapGraph(dto mindmapapp.GraphDTO) *model.MindMapGraph {
 		value := string(dto.SessionID)
 		sessionID = &value
 	}
-	return &model.MindMapGraph{ProjectID: string(dto.ProjectID), SessionID: sessionID, Nodes: nodes, Edges: edges, UpdatedAt: dto.UpdatedAt}
+	var nextNodeCursor, nextEdgeCursor *string
+	if dto.NextNodeCursor != "" {
+		value := string(dto.NextNodeCursor)
+		nextNodeCursor = &value
+	}
+	if dto.NextEdgeCursor != "" {
+		value := string(dto.NextEdgeCursor)
+		nextEdgeCursor = &value
+	}
+	return &model.MindMapGraphPage{
+		ProjectID: string(dto.ProjectID), SessionID: sessionID, Nodes: nodes, Edges: edges, UpdatedAt: dto.UpdatedAt,
+		NextNodeCursor: nextNodeCursor, NextEdgeCursor: nextEdgeCursor,
+	}
+}
+
+func mapMindMapUpdate(dto mindmapapp.GraphDTO) *model.MindMapUpdateEvent {
+	var sessionID *string
+	if dto.SessionID != "" {
+		value := string(dto.SessionID)
+		sessionID = &value
+	}
+	return &model.MindMapUpdateEvent{ProjectID: string(dto.ProjectID), SessionID: sessionID, UpdatedAt: dto.UpdatedAt}
 }
 
 func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
@@ -142,7 +164,7 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
 		nodes = append(nodes, &model.MindMapNode{
-			ID: string(node.ID), Title: node.Title, Content: node.Content, ChangeType: string(node.ChangeType),
+			ID: string(node.ID), Title: node.Title, Content: node.Content, Files: mapMindMapNodeFiles(node.Files), ChangeType: string(node.ChangeType),
 		})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
@@ -165,6 +187,17 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 		TaskID:     taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
 		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs,
 	}
+}
+
+// GLUE: GraphQL owns transport models while mindmap owns node file references; remove when gqlgen can bind the domain value directly.
+func mapMindMapNodeFiles(files []mindmapdomain.NodeFile) []*model.MindMapNodeFile {
+	result := make([]*model.MindMapNodeFile, len(files))
+	for index, item := range files {
+		result[index] = &model.MindMapNodeFile{
+			File: item.File, Method: item.Method, StartLine: item.StartLine, EndLine: item.EndLine,
+		}
+	}
+	return result
 }
 
 func mapGitState(state projectdomain.GitState) *model.GitState {

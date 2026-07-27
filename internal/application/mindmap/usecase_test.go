@@ -2,7 +2,9 @@ package mindmap
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,13 +197,17 @@ func TestActiveAsyncTaskCanFinishAfterGlobalModeIsDisabled(t *testing.T) {
 
 func TestBuildChangesRejectsOperationFieldsOutsideTheirKind(t *testing.T) {
 	title := "node"
+	emptyTitle := "   "
 	source, target := domain.NodeID("source"), domain.NodeID("target")
+	invalidFiles := []domain.NodeFile{{File: "file.go", Method: "Run", StartLine: 20, EndLine: 10}}
 	service := &Service{now: time.Now, generateID: func() (domain.ChangeID, error) { return "change", nil }}
 	tests := []struct {
 		name      string
 		operation OperationInput
 	}{
 		{name: "node without fields", operation: OperationInput{Kind: domain.ChangeUpsertNode, ID: "node"}},
+		{name: "node with empty title", operation: OperationInput{Kind: domain.ChangeUpsertNode, ID: "node", Title: &emptyTitle}},
+		{name: "node with invalid files", operation: OperationInput{Kind: domain.ChangeUpsertNode, ID: "node", Title: &title, Files: &invalidFiles}},
 		{name: "node with edge field", operation: OperationInput{Kind: domain.ChangeUpsertNode, ID: "node", Title: &title, SourceID: &source}},
 		{name: "edge without endpoint", operation: OperationInput{Kind: domain.ChangeUpsertEdge, ID: "edge", SourceID: &source}},
 		{name: "delete with payload", operation: OperationInput{Kind: domain.ChangeDeleteNode, ID: "node", Content: &title}},
@@ -219,10 +225,18 @@ func TestBuildChangesRejectsOperationFieldsOutsideTheirKind(t *testing.T) {
 		t.Fatalf("valid edge failed: %v", err)
 	}
 	content := "updated content"
+	files := []domain.NodeFile{{File: " mindmap.go ", Method: " Apply ", StartLine: 10, EndLine: 20}}
 	if _, err := service.buildChanges(UpdateInput{ProjectID: "project", Operations: []OperationInput{{
-		Kind: domain.ChangeUpsertNode, ID: "node", Content: &content,
+		Kind: domain.ChangeUpsertNode, ID: "node", Content: &content, Files: &files,
 	}}}); err != nil {
 		t.Fatalf("content-only node update failed: %v", err)
+	}
+}
+
+func TestValidateVisibleGraphRequiresNodeTitle(t *testing.T) {
+	err := validateVisibleGraph(domain.Graph{Nodes: []domain.Node{{ID: "untitled", Content: "content"}}})
+	if err == nil || !strings.Contains(err.Error(), "requires a title") {
+		t.Fatalf("validateVisibleGraph() error = %v", err)
 	}
 }
 
@@ -342,6 +356,77 @@ func TestProjectWatchEmitsAfterCardOverlayUpdate(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for card mind map change")
+	}
+}
+
+func TestProjectGraphPagesLoadEveryNodeAndEdgeOnce(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{Enabled: true, Mode: settingdomain.MindMapModeRealtime}}
+	project, _ := saveMindMapTestProjectAndSession(t, store, "session-pages")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	sequence := 0
+	service.generateID = func() (domain.ChangeID, error) {
+		sequence++
+		return domain.ChangeID(fmt.Sprintf("change-%d", sequence)), nil
+	}
+	operations := make([]OperationInput, 0, 49)
+	for index := 0; index < 25; index++ {
+		id := fmt.Sprintf("node-%02d", index)
+		title := fmt.Sprintf("Node %02d", index)
+		operation := OperationInput{Kind: domain.ChangeUpsertNode, ID: id, Title: &title}
+		if index == 0 {
+			files := []domain.NodeFile{{File: "internal/node.go", Method: "Node00", StartLine: 1, EndLine: 10}}
+			operation.Files = &files
+		}
+		operations = append(operations, operation)
+		if index > 0 {
+			source, target := domain.NodeID(fmt.Sprintf("node-%02d", index-1)), domain.NodeID(id)
+			operations = append(operations, OperationInput{Kind: domain.ChangeUpsertEdge, ID: fmt.Sprintf("edge-%02d", index), SourceID: &source, TargetID: &target})
+		}
+	}
+	update, err := service.Apply(ctx, UpdateInput{ProjectID: domain.ProjectID(project.ID), Operations: operations})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if update.UpdatedAt.IsZero() || len(update.Nodes) != 0 || len(update.Edges) != 0 {
+		t.Fatalf("minimal update result=%#v", update)
+	}
+	nodeIDs, edgeIDs := map[domain.NodeID]struct{}{}, map[domain.EdgeID]struct{}{}
+	foundFiles := false
+	var nodeAfter domain.NodeID
+	var edgeAfter domain.EdgeID
+	includeNodes, includeEdges := true, true
+	for includeNodes || includeEdges {
+		page, err := service.GetPage(ctx, GetPageInput{
+			ProjectID: domain.ProjectID(project.ID), NodeAfter: nodeAfter, EdgeAfter: edgeAfter,
+			IncludeNodes: includeNodes, IncludeEdges: includeEdges, PageSize: 10,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, node := range page.Nodes {
+			if _, duplicate := nodeIDs[node.ID]; duplicate {
+				t.Fatalf("duplicate node %q", node.ID)
+			}
+			nodeIDs[node.ID] = struct{}{}
+			if node.ID == "node-00" && len(node.Files) == 1 && node.Files[0].Method == "Node00" {
+				foundFiles = true
+			}
+		}
+		for _, edge := range page.Edges {
+			if _, duplicate := edgeIDs[edge.ID]; duplicate {
+				t.Fatalf("duplicate edge %q", edge.ID)
+			}
+			edgeIDs[edge.ID] = struct{}{}
+		}
+		nodeAfter, edgeAfter = page.NextNodeCursor, page.NextEdgeCursor
+		includeNodes, includeEdges = nodeAfter != "", edgeAfter != ""
+	}
+	if len(nodeIDs) != 26 || len(edgeIDs) != 24 || !foundFiles {
+		t.Fatalf("loaded nodes=%d edges=%d foundFiles=%v", len(nodeIDs), len(edgeIDs), foundFiles)
 	}
 }
 

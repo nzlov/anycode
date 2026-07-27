@@ -8,7 +8,15 @@ export interface MindMapNode {
   id: string;
   title: string;
   content: string;
+  files: MindMapNodeFile[];
   changeType: 'unchanged' | 'added' | 'modified' | 'deleted';
+}
+
+export interface MindMapNodeFile {
+  file: string;
+  method: string;
+  startLine: number;
+  endLine: number;
 }
 
 export interface MindMapEdge {
@@ -46,22 +54,30 @@ export interface MindMapUpdate {
   updatedAt: string;
 }
 
+interface MindMapGraphPage extends MindMapGraph {
+  nextNodeCursor?: string | null;
+  nextEdgeCursor?: string | null;
+}
+
 export interface MindMapOperation {
   kind: 'upsert_node' | 'delete_node' | 'upsert_edge' | 'delete_edge';
   id: string;
   title?: string;
   content?: string;
+  files?: MindMapNodeFile[];
   sourceId?: string;
   targetId?: string;
   label?: string;
 }
 
-const graphFields = `
+const graphPageFields = `
   projectId
   sessionId
-  nodes { id title content changeType }
+  nodes { id title content files { file method startLine endLine } changeType }
   edges { id sourceId targetId label }
   updatedAt
+  nextNodeCursor
+  nextEdgeCursor
 `;
 
 const cardFields = `
@@ -72,25 +88,61 @@ const cardFields = `
   taskId
   taskStatus
   taskError
-  nodes { id title content changeType }
+  nodes { id title content files { file method startLine endLine } changeType }
   edges { id sourceId targetId label }
   modifiedNodeIds
   deletedNodeIds
 `;
 
 export async function getProjectMindMap(projectId: string, sessionId = '') {
-  const data = await graphqlFetch<
-    { projectMindMap: MindMapGraph },
-    { projectId: string; sessionId?: string }
-  >({
-    query: `
-      query ProjectMindMap($projectId: ID!, $sessionId: ID) {
-        projectMindMap(projectId: $projectId, sessionId: $sessionId) { ${graphFields} }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const nodes: MindMapNode[] = [];
+    const edges: MindMapEdge[] = [];
+    let nodeAfter = '';
+    let edgeAfter = '';
+    let includeNodes = true;
+    let includeEdges = true;
+    let revision = '';
+    let stable = true;
+    do {
+      const input = {
+        projectId,
+        ...(sessionId ? { sessionId } : {}),
+        ...(nodeAfter ? { nodeAfter } : {}),
+        ...(edgeAfter ? { edgeAfter } : {}),
+        includeNodes,
+        includeEdges,
+        pageSize: 200,
+      };
+      const data = await graphqlFetch<
+        { projectMindMap: MindMapGraphPage },
+        { input: typeof input }
+      >({
+        query: `
+          query ProjectMindMap($input: MindMapPageInput!) {
+            projectMindMap(input: $input) { ${graphPageFields} }
+          }
+        `,
+        variables: { input },
+      });
+      const page = data.projectMindMap;
+      if (revision && page.updatedAt !== revision) {
+        stable = false;
+        break;
       }
-    `,
-    variables: { projectId, ...(sessionId ? { sessionId } : {}) },
-  });
-  return data.projectMindMap;
+      revision = page.updatedAt;
+      nodes.push(...page.nodes);
+      edges.push(...page.edges);
+      nodeAfter = page.nextNodeCursor ?? '';
+      edgeAfter = page.nextEdgeCursor ?? '';
+      includeNodes = Boolean(nodeAfter);
+      includeEdges = Boolean(edgeAfter);
+    } while (includeNodes || includeEdges);
+    if (stable) {
+      return { projectId, sessionId: sessionId || null, nodes, edges, updatedAt: revision };
+    }
+  }
+  throw new Error('思维图在分页加载期间持续变化，请稍后重试');
 }
 
 export async function listProjectMindMapCards(projectId: string) {
@@ -125,14 +177,16 @@ export async function updateProjectMindMap(input: {
   sessionId?: string;
   operations: MindMapOperation[];
 }) {
-  const data = await graphqlFetch<{ updateProjectMindMap: MindMapGraph }, { input: typeof input }>({
-    query: `
+  const data = await graphqlFetch<{ updateProjectMindMap: MindMapUpdate }, { input: typeof input }>(
+    {
+      query: `
       mutation UpdateProjectMindMap($input: UpdateMindMapInput!) {
-        updateProjectMindMap(input: $input) { ${graphFields} }
+        updateProjectMindMap(input: $input) { projectId sessionId updatedAt }
       }
     `,
-    variables: { input },
-  });
+      variables: { input },
+    },
+  );
   return data.updateProjectMindMap;
 }
 

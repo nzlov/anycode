@@ -14,7 +14,9 @@ import (
 	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapnode"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -28,6 +30,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
@@ -45,7 +48,9 @@ const (
 	// Node types.
 	TypeEventRecord               = "EventRecord"
 	TypeMergeRecord               = "MergeRecord"
+	TypeMindMapEdge               = "MindMapEdge"
 	TypeMindMapGraph              = "MindMapGraph"
+	TypeMindMapNode               = "MindMapNode"
 	TypeMindMapOverlay            = "MindMapOverlay"
 	TypeMindMapTask               = "MindMapTask"
 	TypeNodeRun                   = "NodeRun"
@@ -1871,6 +1876,954 @@ func (m *MergeRecordMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown MergeRecord edge %s", name)
 }
 
+// MindMapEdgeMutation represents an operation that mutates the MindMapEdge nodes in the graph.
+type MindMapEdgeMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int
+	project_id        *string
+	session_id        *string
+	edge_id           *string
+	source_id         *string
+	target_id         *string
+	label             *string
+	source_updated_at *time.Time
+	target_updated_at *time.Time
+	label_updated_at  *time.Time
+	deleted_at        *time.Time
+	clearedFields     map[string]struct{}
+	done              bool
+	oldValue          func(context.Context) (*MindMapEdge, error)
+	predicates        []predicate.MindMapEdge
+}
+
+var _ ent.Mutation = (*MindMapEdgeMutation)(nil)
+
+// mindmapedgeOption allows management of the mutation configuration using functional options.
+type mindmapedgeOption func(*MindMapEdgeMutation)
+
+// newMindMapEdgeMutation creates new mutation for the MindMapEdge entity.
+func newMindMapEdgeMutation(c config, op Op, opts ...mindmapedgeOption) *MindMapEdgeMutation {
+	m := &MindMapEdgeMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMindMapEdge,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMindMapEdgeID sets the ID field of the mutation.
+func withMindMapEdgeID(id int) mindmapedgeOption {
+	return func(m *MindMapEdgeMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MindMapEdge
+		)
+		m.oldValue = func(ctx context.Context) (*MindMapEdge, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MindMapEdge.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMindMapEdge sets the old MindMapEdge of the mutation.
+func withMindMapEdge(node *MindMapEdge) mindmapedgeOption {
+	return func(m *MindMapEdgeMutation) {
+		m.oldValue = func(context.Context) (*MindMapEdge, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MindMapEdgeMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MindMapEdgeMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MindMapEdgeMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MindMapEdgeMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MindMapEdge.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProjectID sets the "project_id" field.
+func (m *MindMapEdgeMutation) SetProjectID(s string) {
+	m.project_id = &s
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *MindMapEdgeMutation) ProjectID() (r string, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldProjectID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *MindMapEdgeMutation) ResetProjectID() {
+	m.project_id = nil
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *MindMapEdgeMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *MindMapEdgeMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *MindMapEdgeMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetEdgeID sets the "edge_id" field.
+func (m *MindMapEdgeMutation) SetEdgeID(s string) {
+	m.edge_id = &s
+}
+
+// EdgeID returns the value of the "edge_id" field in the mutation.
+func (m *MindMapEdgeMutation) EdgeID() (r string, exists bool) {
+	v := m.edge_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEdgeID returns the old "edge_id" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldEdgeID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEdgeID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEdgeID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEdgeID: %w", err)
+	}
+	return oldValue.EdgeID, nil
+}
+
+// ResetEdgeID resets all changes to the "edge_id" field.
+func (m *MindMapEdgeMutation) ResetEdgeID() {
+	m.edge_id = nil
+}
+
+// SetSourceID sets the "source_id" field.
+func (m *MindMapEdgeMutation) SetSourceID(s string) {
+	m.source_id = &s
+}
+
+// SourceID returns the value of the "source_id" field in the mutation.
+func (m *MindMapEdgeMutation) SourceID() (r string, exists bool) {
+	v := m.source_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceID returns the old "source_id" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldSourceID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceID: %w", err)
+	}
+	return oldValue.SourceID, nil
+}
+
+// ClearSourceID clears the value of the "source_id" field.
+func (m *MindMapEdgeMutation) ClearSourceID() {
+	m.source_id = nil
+	m.clearedFields[mindmapedge.FieldSourceID] = struct{}{}
+}
+
+// SourceIDCleared returns if the "source_id" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) SourceIDCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldSourceID]
+	return ok
+}
+
+// ResetSourceID resets all changes to the "source_id" field.
+func (m *MindMapEdgeMutation) ResetSourceID() {
+	m.source_id = nil
+	delete(m.clearedFields, mindmapedge.FieldSourceID)
+}
+
+// SetTargetID sets the "target_id" field.
+func (m *MindMapEdgeMutation) SetTargetID(s string) {
+	m.target_id = &s
+}
+
+// TargetID returns the value of the "target_id" field in the mutation.
+func (m *MindMapEdgeMutation) TargetID() (r string, exists bool) {
+	v := m.target_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTargetID returns the old "target_id" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldTargetID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTargetID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTargetID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTargetID: %w", err)
+	}
+	return oldValue.TargetID, nil
+}
+
+// ClearTargetID clears the value of the "target_id" field.
+func (m *MindMapEdgeMutation) ClearTargetID() {
+	m.target_id = nil
+	m.clearedFields[mindmapedge.FieldTargetID] = struct{}{}
+}
+
+// TargetIDCleared returns if the "target_id" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) TargetIDCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldTargetID]
+	return ok
+}
+
+// ResetTargetID resets all changes to the "target_id" field.
+func (m *MindMapEdgeMutation) ResetTargetID() {
+	m.target_id = nil
+	delete(m.clearedFields, mindmapedge.FieldTargetID)
+}
+
+// SetLabel sets the "label" field.
+func (m *MindMapEdgeMutation) SetLabel(s string) {
+	m.label = &s
+}
+
+// Label returns the value of the "label" field in the mutation.
+func (m *MindMapEdgeMutation) Label() (r string, exists bool) {
+	v := m.label
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLabel returns the old "label" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldLabel(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLabel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLabel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLabel: %w", err)
+	}
+	return oldValue.Label, nil
+}
+
+// ClearLabel clears the value of the "label" field.
+func (m *MindMapEdgeMutation) ClearLabel() {
+	m.label = nil
+	m.clearedFields[mindmapedge.FieldLabel] = struct{}{}
+}
+
+// LabelCleared returns if the "label" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) LabelCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldLabel]
+	return ok
+}
+
+// ResetLabel resets all changes to the "label" field.
+func (m *MindMapEdgeMutation) ResetLabel() {
+	m.label = nil
+	delete(m.clearedFields, mindmapedge.FieldLabel)
+}
+
+// SetSourceUpdatedAt sets the "source_updated_at" field.
+func (m *MindMapEdgeMutation) SetSourceUpdatedAt(t time.Time) {
+	m.source_updated_at = &t
+}
+
+// SourceUpdatedAt returns the value of the "source_updated_at" field in the mutation.
+func (m *MindMapEdgeMutation) SourceUpdatedAt() (r time.Time, exists bool) {
+	v := m.source_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceUpdatedAt returns the old "source_updated_at" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldSourceUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceUpdatedAt: %w", err)
+	}
+	return oldValue.SourceUpdatedAt, nil
+}
+
+// ClearSourceUpdatedAt clears the value of the "source_updated_at" field.
+func (m *MindMapEdgeMutation) ClearSourceUpdatedAt() {
+	m.source_updated_at = nil
+	m.clearedFields[mindmapedge.FieldSourceUpdatedAt] = struct{}{}
+}
+
+// SourceUpdatedAtCleared returns if the "source_updated_at" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) SourceUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldSourceUpdatedAt]
+	return ok
+}
+
+// ResetSourceUpdatedAt resets all changes to the "source_updated_at" field.
+func (m *MindMapEdgeMutation) ResetSourceUpdatedAt() {
+	m.source_updated_at = nil
+	delete(m.clearedFields, mindmapedge.FieldSourceUpdatedAt)
+}
+
+// SetTargetUpdatedAt sets the "target_updated_at" field.
+func (m *MindMapEdgeMutation) SetTargetUpdatedAt(t time.Time) {
+	m.target_updated_at = &t
+}
+
+// TargetUpdatedAt returns the value of the "target_updated_at" field in the mutation.
+func (m *MindMapEdgeMutation) TargetUpdatedAt() (r time.Time, exists bool) {
+	v := m.target_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTargetUpdatedAt returns the old "target_updated_at" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldTargetUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTargetUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTargetUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTargetUpdatedAt: %w", err)
+	}
+	return oldValue.TargetUpdatedAt, nil
+}
+
+// ClearTargetUpdatedAt clears the value of the "target_updated_at" field.
+func (m *MindMapEdgeMutation) ClearTargetUpdatedAt() {
+	m.target_updated_at = nil
+	m.clearedFields[mindmapedge.FieldTargetUpdatedAt] = struct{}{}
+}
+
+// TargetUpdatedAtCleared returns if the "target_updated_at" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) TargetUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldTargetUpdatedAt]
+	return ok
+}
+
+// ResetTargetUpdatedAt resets all changes to the "target_updated_at" field.
+func (m *MindMapEdgeMutation) ResetTargetUpdatedAt() {
+	m.target_updated_at = nil
+	delete(m.clearedFields, mindmapedge.FieldTargetUpdatedAt)
+}
+
+// SetLabelUpdatedAt sets the "label_updated_at" field.
+func (m *MindMapEdgeMutation) SetLabelUpdatedAt(t time.Time) {
+	m.label_updated_at = &t
+}
+
+// LabelUpdatedAt returns the value of the "label_updated_at" field in the mutation.
+func (m *MindMapEdgeMutation) LabelUpdatedAt() (r time.Time, exists bool) {
+	v := m.label_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLabelUpdatedAt returns the old "label_updated_at" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldLabelUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLabelUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLabelUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLabelUpdatedAt: %w", err)
+	}
+	return oldValue.LabelUpdatedAt, nil
+}
+
+// ClearLabelUpdatedAt clears the value of the "label_updated_at" field.
+func (m *MindMapEdgeMutation) ClearLabelUpdatedAt() {
+	m.label_updated_at = nil
+	m.clearedFields[mindmapedge.FieldLabelUpdatedAt] = struct{}{}
+}
+
+// LabelUpdatedAtCleared returns if the "label_updated_at" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) LabelUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldLabelUpdatedAt]
+	return ok
+}
+
+// ResetLabelUpdatedAt resets all changes to the "label_updated_at" field.
+func (m *MindMapEdgeMutation) ResetLabelUpdatedAt() {
+	m.label_updated_at = nil
+	delete(m.clearedFields, mindmapedge.FieldLabelUpdatedAt)
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *MindMapEdgeMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *MindMapEdgeMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the MindMapEdge entity.
+// If the MindMapEdge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapEdgeMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *MindMapEdgeMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[mindmapedge.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *MindMapEdgeMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapedge.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *MindMapEdgeMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, mindmapedge.FieldDeletedAt)
+}
+
+// Where appends a list predicates to the MindMapEdgeMutation builder.
+func (m *MindMapEdgeMutation) Where(ps ...predicate.MindMapEdge) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MindMapEdgeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MindMapEdgeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MindMapEdge, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MindMapEdgeMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MindMapEdgeMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MindMapEdge).
+func (m *MindMapEdgeMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MindMapEdgeMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.project_id != nil {
+		fields = append(fields, mindmapedge.FieldProjectID)
+	}
+	if m.session_id != nil {
+		fields = append(fields, mindmapedge.FieldSessionID)
+	}
+	if m.edge_id != nil {
+		fields = append(fields, mindmapedge.FieldEdgeID)
+	}
+	if m.source_id != nil {
+		fields = append(fields, mindmapedge.FieldSourceID)
+	}
+	if m.target_id != nil {
+		fields = append(fields, mindmapedge.FieldTargetID)
+	}
+	if m.label != nil {
+		fields = append(fields, mindmapedge.FieldLabel)
+	}
+	if m.source_updated_at != nil {
+		fields = append(fields, mindmapedge.FieldSourceUpdatedAt)
+	}
+	if m.target_updated_at != nil {
+		fields = append(fields, mindmapedge.FieldTargetUpdatedAt)
+	}
+	if m.label_updated_at != nil {
+		fields = append(fields, mindmapedge.FieldLabelUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, mindmapedge.FieldDeletedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MindMapEdgeMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case mindmapedge.FieldProjectID:
+		return m.ProjectID()
+	case mindmapedge.FieldSessionID:
+		return m.SessionID()
+	case mindmapedge.FieldEdgeID:
+		return m.EdgeID()
+	case mindmapedge.FieldSourceID:
+		return m.SourceID()
+	case mindmapedge.FieldTargetID:
+		return m.TargetID()
+	case mindmapedge.FieldLabel:
+		return m.Label()
+	case mindmapedge.FieldSourceUpdatedAt:
+		return m.SourceUpdatedAt()
+	case mindmapedge.FieldTargetUpdatedAt:
+		return m.TargetUpdatedAt()
+	case mindmapedge.FieldLabelUpdatedAt:
+		return m.LabelUpdatedAt()
+	case mindmapedge.FieldDeletedAt:
+		return m.DeletedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MindMapEdgeMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case mindmapedge.FieldProjectID:
+		return m.OldProjectID(ctx)
+	case mindmapedge.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case mindmapedge.FieldEdgeID:
+		return m.OldEdgeID(ctx)
+	case mindmapedge.FieldSourceID:
+		return m.OldSourceID(ctx)
+	case mindmapedge.FieldTargetID:
+		return m.OldTargetID(ctx)
+	case mindmapedge.FieldLabel:
+		return m.OldLabel(ctx)
+	case mindmapedge.FieldSourceUpdatedAt:
+		return m.OldSourceUpdatedAt(ctx)
+	case mindmapedge.FieldTargetUpdatedAt:
+		return m.OldTargetUpdatedAt(ctx)
+	case mindmapedge.FieldLabelUpdatedAt:
+		return m.OldLabelUpdatedAt(ctx)
+	case mindmapedge.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown MindMapEdge field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MindMapEdgeMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case mindmapedge.FieldProjectID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
+	case mindmapedge.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case mindmapedge.FieldEdgeID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEdgeID(v)
+		return nil
+	case mindmapedge.FieldSourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceID(v)
+		return nil
+	case mindmapedge.FieldTargetID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTargetID(v)
+		return nil
+	case mindmapedge.FieldLabel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLabel(v)
+		return nil
+	case mindmapedge.FieldSourceUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceUpdatedAt(v)
+		return nil
+	case mindmapedge.FieldTargetUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTargetUpdatedAt(v)
+		return nil
+	case mindmapedge.FieldLabelUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLabelUpdatedAt(v)
+		return nil
+	case mindmapedge.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapEdge field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MindMapEdgeMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MindMapEdgeMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MindMapEdgeMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown MindMapEdge numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MindMapEdgeMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(mindmapedge.FieldSourceID) {
+		fields = append(fields, mindmapedge.FieldSourceID)
+	}
+	if m.FieldCleared(mindmapedge.FieldTargetID) {
+		fields = append(fields, mindmapedge.FieldTargetID)
+	}
+	if m.FieldCleared(mindmapedge.FieldLabel) {
+		fields = append(fields, mindmapedge.FieldLabel)
+	}
+	if m.FieldCleared(mindmapedge.FieldSourceUpdatedAt) {
+		fields = append(fields, mindmapedge.FieldSourceUpdatedAt)
+	}
+	if m.FieldCleared(mindmapedge.FieldTargetUpdatedAt) {
+		fields = append(fields, mindmapedge.FieldTargetUpdatedAt)
+	}
+	if m.FieldCleared(mindmapedge.FieldLabelUpdatedAt) {
+		fields = append(fields, mindmapedge.FieldLabelUpdatedAt)
+	}
+	if m.FieldCleared(mindmapedge.FieldDeletedAt) {
+		fields = append(fields, mindmapedge.FieldDeletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MindMapEdgeMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MindMapEdgeMutation) ClearField(name string) error {
+	switch name {
+	case mindmapedge.FieldSourceID:
+		m.ClearSourceID()
+		return nil
+	case mindmapedge.FieldTargetID:
+		m.ClearTargetID()
+		return nil
+	case mindmapedge.FieldLabel:
+		m.ClearLabel()
+		return nil
+	case mindmapedge.FieldSourceUpdatedAt:
+		m.ClearSourceUpdatedAt()
+		return nil
+	case mindmapedge.FieldTargetUpdatedAt:
+		m.ClearTargetUpdatedAt()
+		return nil
+	case mindmapedge.FieldLabelUpdatedAt:
+		m.ClearLabelUpdatedAt()
+		return nil
+	case mindmapedge.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapEdge nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MindMapEdgeMutation) ResetField(name string) error {
+	switch name {
+	case mindmapedge.FieldProjectID:
+		m.ResetProjectID()
+		return nil
+	case mindmapedge.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case mindmapedge.FieldEdgeID:
+		m.ResetEdgeID()
+		return nil
+	case mindmapedge.FieldSourceID:
+		m.ResetSourceID()
+		return nil
+	case mindmapedge.FieldTargetID:
+		m.ResetTargetID()
+		return nil
+	case mindmapedge.FieldLabel:
+		m.ResetLabel()
+		return nil
+	case mindmapedge.FieldSourceUpdatedAt:
+		m.ResetSourceUpdatedAt()
+		return nil
+	case mindmapedge.FieldTargetUpdatedAt:
+		m.ResetTargetUpdatedAt()
+		return nil
+	case mindmapedge.FieldLabelUpdatedAt:
+		m.ResetLabelUpdatedAt()
+		return nil
+	case mindmapedge.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapEdge field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MindMapEdgeMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MindMapEdgeMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MindMapEdgeMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MindMapEdgeMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MindMapEdgeMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MindMapEdgeMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MindMapEdgeMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown MindMapEdge unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MindMapEdgeMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown MindMapEdge edge %s", name)
+}
+
 // MindMapGraphMutation represents an operation that mutates the MindMapGraph nodes in the graph.
 type MindMapGraphMutation struct {
 	config
@@ -2411,6 +3364,971 @@ func (m *MindMapGraphMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *MindMapGraphMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown MindMapGraph edge %s", name)
+}
+
+// MindMapNodeMutation represents an operation that mutates the MindMapNode nodes in the graph.
+type MindMapNodeMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *int
+	project_id         *string
+	session_id         *string
+	node_id            *string
+	title              *string
+	content            *string
+	files              *[]schema.MindMapNodeFile
+	appendfiles        []schema.MindMapNodeFile
+	title_updated_at   *time.Time
+	content_updated_at *time.Time
+	files_updated_at   *time.Time
+	deleted_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*MindMapNode, error)
+	predicates         []predicate.MindMapNode
+}
+
+var _ ent.Mutation = (*MindMapNodeMutation)(nil)
+
+// mindmapnodeOption allows management of the mutation configuration using functional options.
+type mindmapnodeOption func(*MindMapNodeMutation)
+
+// newMindMapNodeMutation creates new mutation for the MindMapNode entity.
+func newMindMapNodeMutation(c config, op Op, opts ...mindmapnodeOption) *MindMapNodeMutation {
+	m := &MindMapNodeMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMindMapNode,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMindMapNodeID sets the ID field of the mutation.
+func withMindMapNodeID(id int) mindmapnodeOption {
+	return func(m *MindMapNodeMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MindMapNode
+		)
+		m.oldValue = func(ctx context.Context) (*MindMapNode, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MindMapNode.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMindMapNode sets the old MindMapNode of the mutation.
+func withMindMapNode(node *MindMapNode) mindmapnodeOption {
+	return func(m *MindMapNodeMutation) {
+		m.oldValue = func(context.Context) (*MindMapNode, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MindMapNodeMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MindMapNodeMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MindMapNodeMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MindMapNodeMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MindMapNode.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProjectID sets the "project_id" field.
+func (m *MindMapNodeMutation) SetProjectID(s string) {
+	m.project_id = &s
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *MindMapNodeMutation) ProjectID() (r string, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldProjectID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *MindMapNodeMutation) ResetProjectID() {
+	m.project_id = nil
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *MindMapNodeMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *MindMapNodeMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *MindMapNodeMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetNodeID sets the "node_id" field.
+func (m *MindMapNodeMutation) SetNodeID(s string) {
+	m.node_id = &s
+}
+
+// NodeID returns the value of the "node_id" field in the mutation.
+func (m *MindMapNodeMutation) NodeID() (r string, exists bool) {
+	v := m.node_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNodeID returns the old "node_id" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldNodeID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNodeID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNodeID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNodeID: %w", err)
+	}
+	return oldValue.NodeID, nil
+}
+
+// ResetNodeID resets all changes to the "node_id" field.
+func (m *MindMapNodeMutation) ResetNodeID() {
+	m.node_id = nil
+}
+
+// SetTitle sets the "title" field.
+func (m *MindMapNodeMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *MindMapNodeMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldTitle(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ClearTitle clears the value of the "title" field.
+func (m *MindMapNodeMutation) ClearTitle() {
+	m.title = nil
+	m.clearedFields[mindmapnode.FieldTitle] = struct{}{}
+}
+
+// TitleCleared returns if the "title" field was cleared in this mutation.
+func (m *MindMapNodeMutation) TitleCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldTitle]
+	return ok
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *MindMapNodeMutation) ResetTitle() {
+	m.title = nil
+	delete(m.clearedFields, mindmapnode.FieldTitle)
+}
+
+// SetContent sets the "content" field.
+func (m *MindMapNodeMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *MindMapNodeMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldContent(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ClearContent clears the value of the "content" field.
+func (m *MindMapNodeMutation) ClearContent() {
+	m.content = nil
+	m.clearedFields[mindmapnode.FieldContent] = struct{}{}
+}
+
+// ContentCleared returns if the "content" field was cleared in this mutation.
+func (m *MindMapNodeMutation) ContentCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldContent]
+	return ok
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *MindMapNodeMutation) ResetContent() {
+	m.content = nil
+	delete(m.clearedFields, mindmapnode.FieldContent)
+}
+
+// SetFiles sets the "files" field.
+func (m *MindMapNodeMutation) SetFiles(smnf []schema.MindMapNodeFile) {
+	m.files = &smnf
+	m.appendfiles = nil
+}
+
+// Files returns the value of the "files" field in the mutation.
+func (m *MindMapNodeMutation) Files() (r []schema.MindMapNodeFile, exists bool) {
+	v := m.files
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFiles returns the old "files" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldFiles(ctx context.Context) (v []schema.MindMapNodeFile, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFiles is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFiles requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFiles: %w", err)
+	}
+	return oldValue.Files, nil
+}
+
+// AppendFiles adds smnf to the "files" field.
+func (m *MindMapNodeMutation) AppendFiles(smnf []schema.MindMapNodeFile) {
+	m.appendfiles = append(m.appendfiles, smnf...)
+}
+
+// AppendedFiles returns the list of values that were appended to the "files" field in this mutation.
+func (m *MindMapNodeMutation) AppendedFiles() ([]schema.MindMapNodeFile, bool) {
+	if len(m.appendfiles) == 0 {
+		return nil, false
+	}
+	return m.appendfiles, true
+}
+
+// ClearFiles clears the value of the "files" field.
+func (m *MindMapNodeMutation) ClearFiles() {
+	m.files = nil
+	m.appendfiles = nil
+	m.clearedFields[mindmapnode.FieldFiles] = struct{}{}
+}
+
+// FilesCleared returns if the "files" field was cleared in this mutation.
+func (m *MindMapNodeMutation) FilesCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldFiles]
+	return ok
+}
+
+// ResetFiles resets all changes to the "files" field.
+func (m *MindMapNodeMutation) ResetFiles() {
+	m.files = nil
+	m.appendfiles = nil
+	delete(m.clearedFields, mindmapnode.FieldFiles)
+}
+
+// SetTitleUpdatedAt sets the "title_updated_at" field.
+func (m *MindMapNodeMutation) SetTitleUpdatedAt(t time.Time) {
+	m.title_updated_at = &t
+}
+
+// TitleUpdatedAt returns the value of the "title_updated_at" field in the mutation.
+func (m *MindMapNodeMutation) TitleUpdatedAt() (r time.Time, exists bool) {
+	v := m.title_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitleUpdatedAt returns the old "title_updated_at" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldTitleUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitleUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitleUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitleUpdatedAt: %w", err)
+	}
+	return oldValue.TitleUpdatedAt, nil
+}
+
+// ClearTitleUpdatedAt clears the value of the "title_updated_at" field.
+func (m *MindMapNodeMutation) ClearTitleUpdatedAt() {
+	m.title_updated_at = nil
+	m.clearedFields[mindmapnode.FieldTitleUpdatedAt] = struct{}{}
+}
+
+// TitleUpdatedAtCleared returns if the "title_updated_at" field was cleared in this mutation.
+func (m *MindMapNodeMutation) TitleUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldTitleUpdatedAt]
+	return ok
+}
+
+// ResetTitleUpdatedAt resets all changes to the "title_updated_at" field.
+func (m *MindMapNodeMutation) ResetTitleUpdatedAt() {
+	m.title_updated_at = nil
+	delete(m.clearedFields, mindmapnode.FieldTitleUpdatedAt)
+}
+
+// SetContentUpdatedAt sets the "content_updated_at" field.
+func (m *MindMapNodeMutation) SetContentUpdatedAt(t time.Time) {
+	m.content_updated_at = &t
+}
+
+// ContentUpdatedAt returns the value of the "content_updated_at" field in the mutation.
+func (m *MindMapNodeMutation) ContentUpdatedAt() (r time.Time, exists bool) {
+	v := m.content_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentUpdatedAt returns the old "content_updated_at" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldContentUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentUpdatedAt: %w", err)
+	}
+	return oldValue.ContentUpdatedAt, nil
+}
+
+// ClearContentUpdatedAt clears the value of the "content_updated_at" field.
+func (m *MindMapNodeMutation) ClearContentUpdatedAt() {
+	m.content_updated_at = nil
+	m.clearedFields[mindmapnode.FieldContentUpdatedAt] = struct{}{}
+}
+
+// ContentUpdatedAtCleared returns if the "content_updated_at" field was cleared in this mutation.
+func (m *MindMapNodeMutation) ContentUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldContentUpdatedAt]
+	return ok
+}
+
+// ResetContentUpdatedAt resets all changes to the "content_updated_at" field.
+func (m *MindMapNodeMutation) ResetContentUpdatedAt() {
+	m.content_updated_at = nil
+	delete(m.clearedFields, mindmapnode.FieldContentUpdatedAt)
+}
+
+// SetFilesUpdatedAt sets the "files_updated_at" field.
+func (m *MindMapNodeMutation) SetFilesUpdatedAt(t time.Time) {
+	m.files_updated_at = &t
+}
+
+// FilesUpdatedAt returns the value of the "files_updated_at" field in the mutation.
+func (m *MindMapNodeMutation) FilesUpdatedAt() (r time.Time, exists bool) {
+	v := m.files_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilesUpdatedAt returns the old "files_updated_at" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldFilesUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilesUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilesUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilesUpdatedAt: %w", err)
+	}
+	return oldValue.FilesUpdatedAt, nil
+}
+
+// ClearFilesUpdatedAt clears the value of the "files_updated_at" field.
+func (m *MindMapNodeMutation) ClearFilesUpdatedAt() {
+	m.files_updated_at = nil
+	m.clearedFields[mindmapnode.FieldFilesUpdatedAt] = struct{}{}
+}
+
+// FilesUpdatedAtCleared returns if the "files_updated_at" field was cleared in this mutation.
+func (m *MindMapNodeMutation) FilesUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldFilesUpdatedAt]
+	return ok
+}
+
+// ResetFilesUpdatedAt resets all changes to the "files_updated_at" field.
+func (m *MindMapNodeMutation) ResetFilesUpdatedAt() {
+	m.files_updated_at = nil
+	delete(m.clearedFields, mindmapnode.FieldFilesUpdatedAt)
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *MindMapNodeMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *MindMapNodeMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the MindMapNode entity.
+// If the MindMapNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MindMapNodeMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *MindMapNodeMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[mindmapnode.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *MindMapNodeMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[mindmapnode.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *MindMapNodeMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, mindmapnode.FieldDeletedAt)
+}
+
+// Where appends a list predicates to the MindMapNodeMutation builder.
+func (m *MindMapNodeMutation) Where(ps ...predicate.MindMapNode) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MindMapNodeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MindMapNodeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MindMapNode, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MindMapNodeMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MindMapNodeMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MindMapNode).
+func (m *MindMapNodeMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MindMapNodeMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.project_id != nil {
+		fields = append(fields, mindmapnode.FieldProjectID)
+	}
+	if m.session_id != nil {
+		fields = append(fields, mindmapnode.FieldSessionID)
+	}
+	if m.node_id != nil {
+		fields = append(fields, mindmapnode.FieldNodeID)
+	}
+	if m.title != nil {
+		fields = append(fields, mindmapnode.FieldTitle)
+	}
+	if m.content != nil {
+		fields = append(fields, mindmapnode.FieldContent)
+	}
+	if m.files != nil {
+		fields = append(fields, mindmapnode.FieldFiles)
+	}
+	if m.title_updated_at != nil {
+		fields = append(fields, mindmapnode.FieldTitleUpdatedAt)
+	}
+	if m.content_updated_at != nil {
+		fields = append(fields, mindmapnode.FieldContentUpdatedAt)
+	}
+	if m.files_updated_at != nil {
+		fields = append(fields, mindmapnode.FieldFilesUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, mindmapnode.FieldDeletedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MindMapNodeMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case mindmapnode.FieldProjectID:
+		return m.ProjectID()
+	case mindmapnode.FieldSessionID:
+		return m.SessionID()
+	case mindmapnode.FieldNodeID:
+		return m.NodeID()
+	case mindmapnode.FieldTitle:
+		return m.Title()
+	case mindmapnode.FieldContent:
+		return m.Content()
+	case mindmapnode.FieldFiles:
+		return m.Files()
+	case mindmapnode.FieldTitleUpdatedAt:
+		return m.TitleUpdatedAt()
+	case mindmapnode.FieldContentUpdatedAt:
+		return m.ContentUpdatedAt()
+	case mindmapnode.FieldFilesUpdatedAt:
+		return m.FilesUpdatedAt()
+	case mindmapnode.FieldDeletedAt:
+		return m.DeletedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MindMapNodeMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case mindmapnode.FieldProjectID:
+		return m.OldProjectID(ctx)
+	case mindmapnode.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case mindmapnode.FieldNodeID:
+		return m.OldNodeID(ctx)
+	case mindmapnode.FieldTitle:
+		return m.OldTitle(ctx)
+	case mindmapnode.FieldContent:
+		return m.OldContent(ctx)
+	case mindmapnode.FieldFiles:
+		return m.OldFiles(ctx)
+	case mindmapnode.FieldTitleUpdatedAt:
+		return m.OldTitleUpdatedAt(ctx)
+	case mindmapnode.FieldContentUpdatedAt:
+		return m.OldContentUpdatedAt(ctx)
+	case mindmapnode.FieldFilesUpdatedAt:
+		return m.OldFilesUpdatedAt(ctx)
+	case mindmapnode.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown MindMapNode field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MindMapNodeMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case mindmapnode.FieldProjectID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
+	case mindmapnode.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case mindmapnode.FieldNodeID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNodeID(v)
+		return nil
+	case mindmapnode.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case mindmapnode.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case mindmapnode.FieldFiles:
+		v, ok := value.([]schema.MindMapNodeFile)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFiles(v)
+		return nil
+	case mindmapnode.FieldTitleUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitleUpdatedAt(v)
+		return nil
+	case mindmapnode.FieldContentUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentUpdatedAt(v)
+		return nil
+	case mindmapnode.FieldFilesUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilesUpdatedAt(v)
+		return nil
+	case mindmapnode.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapNode field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MindMapNodeMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MindMapNodeMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MindMapNodeMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown MindMapNode numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MindMapNodeMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(mindmapnode.FieldTitle) {
+		fields = append(fields, mindmapnode.FieldTitle)
+	}
+	if m.FieldCleared(mindmapnode.FieldContent) {
+		fields = append(fields, mindmapnode.FieldContent)
+	}
+	if m.FieldCleared(mindmapnode.FieldFiles) {
+		fields = append(fields, mindmapnode.FieldFiles)
+	}
+	if m.FieldCleared(mindmapnode.FieldTitleUpdatedAt) {
+		fields = append(fields, mindmapnode.FieldTitleUpdatedAt)
+	}
+	if m.FieldCleared(mindmapnode.FieldContentUpdatedAt) {
+		fields = append(fields, mindmapnode.FieldContentUpdatedAt)
+	}
+	if m.FieldCleared(mindmapnode.FieldFilesUpdatedAt) {
+		fields = append(fields, mindmapnode.FieldFilesUpdatedAt)
+	}
+	if m.FieldCleared(mindmapnode.FieldDeletedAt) {
+		fields = append(fields, mindmapnode.FieldDeletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MindMapNodeMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MindMapNodeMutation) ClearField(name string) error {
+	switch name {
+	case mindmapnode.FieldTitle:
+		m.ClearTitle()
+		return nil
+	case mindmapnode.FieldContent:
+		m.ClearContent()
+		return nil
+	case mindmapnode.FieldFiles:
+		m.ClearFiles()
+		return nil
+	case mindmapnode.FieldTitleUpdatedAt:
+		m.ClearTitleUpdatedAt()
+		return nil
+	case mindmapnode.FieldContentUpdatedAt:
+		m.ClearContentUpdatedAt()
+		return nil
+	case mindmapnode.FieldFilesUpdatedAt:
+		m.ClearFilesUpdatedAt()
+		return nil
+	case mindmapnode.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapNode nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MindMapNodeMutation) ResetField(name string) error {
+	switch name {
+	case mindmapnode.FieldProjectID:
+		m.ResetProjectID()
+		return nil
+	case mindmapnode.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case mindmapnode.FieldNodeID:
+		m.ResetNodeID()
+		return nil
+	case mindmapnode.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case mindmapnode.FieldContent:
+		m.ResetContent()
+		return nil
+	case mindmapnode.FieldFiles:
+		m.ResetFiles()
+		return nil
+	case mindmapnode.FieldTitleUpdatedAt:
+		m.ResetTitleUpdatedAt()
+		return nil
+	case mindmapnode.FieldContentUpdatedAt:
+		m.ResetContentUpdatedAt()
+		return nil
+	case mindmapnode.FieldFilesUpdatedAt:
+		m.ResetFilesUpdatedAt()
+		return nil
+	case mindmapnode.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MindMapNode field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MindMapNodeMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MindMapNodeMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MindMapNodeMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MindMapNodeMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MindMapNodeMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MindMapNodeMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MindMapNodeMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown MindMapNode unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MindMapNodeMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown MindMapNode edge %s", name)
 }
 
 // MindMapOverlayMutation represents an operation that mutates the MindMapOverlay nodes in the graph.

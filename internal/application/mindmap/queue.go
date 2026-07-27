@@ -19,7 +19,7 @@ import (
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
-const asyncTaskPromptGuidance = "你正在执行异步项目思维图整理任务。需要定位已有概念或关系时调用 `mind_map_search` 按需检索节点标题、内容及一跳关联；不要尝试读取全图。结合当前会话上下文整理需求、功能、决策与关联关系，并调用 `mind_map_update` 完成必要更新。不要询问用户。一个节点只表达一个稳定概念；更新前先检索，优先修改已有节点的标题或内容，并删除已失效节点及其关系，保持思维图最新有效。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；结束前删除已有的交付状态、提交、测试结果、事故和调试节点，并清理重复节点、重复关系和悬空关系。思维图只保留稳定的项目结构、需求、功能、决策和关联关系。完成更新后直接结束。"
+const asyncTaskPromptGuidance = "你正在执行异步项目思维图整理任务。需要定位已有概念或关系时调用 `mind_map_search` 按需检索节点标题、内容、代码位置及一跳关联；不要尝试读取全图。结合当前会话上下文整理需求、功能、决策与关联关系，并调用 `mind_map_update` 完成必要更新。不要询问用户。节点标题不能为空，一个节点只表达一个稳定概念；涉及具体代码时记录准确的文件、方法和行号范围。更新前先检索，优先修改已有节点，并删除已失效节点及其关系，保持思维图最新有效。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；结束前删除已有的交付状态、提交、测试结果、事故和调试节点，并清理重复节点、重复关系和悬空关系。思维图只保留稳定的项目结构、需求、功能、决策和关联关系。完成更新后直接结束。"
 
 type Queue struct {
 	repo      domain.Repository
@@ -290,7 +290,7 @@ func (q *Queue) complete(task domain.Task, result processdomain.ExitResult) {
 		if found {
 			domain.MergeOverlay(&graph, overlay)
 			domain.Touch(&graph, now)
-			if err := tx.MindMaps().SaveGraph(ctx, graph); err != nil {
+			if err := tx.MindMaps().SaveGraph(ctx, graph, overlay.Changes); err != nil {
 				return err
 			}
 			if err := tx.MindMaps().DeleteOverlay(ctx, task.SessionID); err != nil {

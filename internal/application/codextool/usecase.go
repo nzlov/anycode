@@ -120,13 +120,14 @@ func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicT
 	}
 	var input struct {
 		Operations []struct {
-			Kind     mindmapdomain.ChangeKind `json:"kind"`
-			ID       string                   `json:"id"`
-			Title    *string                  `json:"title"`
-			Content  *string                  `json:"content"`
-			SourceID *mindmapdomain.NodeID    `json:"sourceId"`
-			TargetID *mindmapdomain.NodeID    `json:"targetId"`
-			Label    *string                  `json:"label"`
+			Kind     mindmapdomain.ChangeKind  `json:"kind"`
+			ID       string                    `json:"id"`
+			Title    *string                   `json:"title"`
+			Content  *string                   `json:"content"`
+			Files    *[]mindmapdomain.NodeFile `json:"files"`
+			SourceID *mindmapdomain.NodeID     `json:"sourceId"`
+			TargetID *mindmapdomain.NodeID     `json:"targetId"`
+			Label    *string                   `json:"label"`
 		} `json:"operations"`
 	}
 	if err := json.Unmarshal(call.Arguments, &input); err != nil {
@@ -136,7 +137,7 @@ func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicT
 	for _, operation := range input.Operations {
 		operations = append(operations, mindmapapp.OperationInput{
 			Kind: operation.Kind, ID: operation.ID, Title: operation.Title, Content: operation.Content,
-			SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label,
+			Files: operation.Files, SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label,
 		})
 	}
 	graph, err := s.mindMaps.UpdateForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID), operations)
@@ -161,12 +162,12 @@ func mindMapSearchResult(result mindmapapp.SearchResultDTO) (processdomain.Dynam
 	matches := make([]map[string]any, 0, len(result.Matches))
 	for _, match := range result.Matches {
 		matches = append(matches, map[string]any{
-			"id": match.Node.ID, "title": match.Node.Title, "content": match.Node.Content, "matchedFields": match.MatchedFields,
+			"id": match.Node.ID, "title": match.Node.Title, "content": match.Node.Content, "files": mindMapNodeFiles(match.Node.Files), "matchedFields": match.MatchedFields,
 		})
 	}
 	relatedNodes := make([]map[string]any, 0, len(result.RelatedNodes))
 	for _, node := range result.RelatedNodes {
-		relatedNodes = append(relatedNodes, map[string]any{"id": node.ID, "title": node.Title, "content": node.Content})
+		relatedNodes = append(relatedNodes, map[string]any{"id": node.ID, "title": node.Title, "content": node.Content, "files": mindMapNodeFiles(node.Files)})
 	}
 	edges := make([]map[string]any, 0, len(result.Edges))
 	for _, edge := range result.Edges {
@@ -181,6 +182,17 @@ func mindMapSearchResult(result mindmapapp.SearchResultDTO) (processdomain.Dynam
 		return processdomain.DynamicToolResult{}, fmt.Errorf("encode mind map search result: %w", err)
 	}
 	return textResult(payload), nil
+}
+
+// GLUE: Dynamic tool JSON uses lower-camel fields while the domain value object is transport-agnostic.
+func mindMapNodeFiles(files []mindmapdomain.NodeFile) []map[string]any {
+	result := make([]map[string]any, 0, len(files))
+	for _, item := range files {
+		result = append(result, map[string]any{
+			"file": item.File, "method": item.Method, "startLine": item.StartLine, "endLine": item.EndLine,
+		})
+	}
+	return result
 }
 
 func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {

@@ -1,6 +1,7 @@
 package mindmap
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -42,6 +43,24 @@ func TestApplyUsesLatestFieldTimestampAndIgnoresOlderDelete(t *testing.T) {
 	Apply(&graph, Change{Kind: ChangeUpsertNode, EntityID: "node-1", Title: &olderTitle, OccurredAt: base})
 	if graph.Nodes[0].Title != title || graph.Nodes[0].Content != content {
 		t.Fatalf("node fields lost latest values: %#v", graph.Nodes[0])
+	}
+}
+
+func TestApplyAndCompactOverlayTrackNodeFiles(t *testing.T) {
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	files := []NodeFile{{File: "internal/domain/mindmap/mindmap.go", Method: "Apply", StartLine: 205, EndLine: 222}}
+	base := Graph{ProjectID: "project-1", Nodes: []Node{{ID: "node-1", Title: "Node"}}}
+	overlay := Overlay{ProjectID: "project-1", SessionID: "session-1", Changes: []Change{{
+		ID: "files", Kind: ChangeUpsertNode, EntityID: "node-1", Files: &files, OccurredAt: now,
+	}}}
+
+	current := Materialize(base, overlay.Changes)
+	if len(current.Nodes) != 1 || !slices.Equal(current.Nodes[0].Files, files) {
+		t.Fatalf("materialized files = %#v", current.Nodes)
+	}
+	compacted := CompactOverlay(base, overlay)
+	if len(compacted.Changes) != 1 || compacted.Changes[0].Files == nil || !slices.Equal(*compacted.Changes[0].Files, files) {
+		t.Fatalf("compacted files = %#v", compacted.Changes)
 	}
 }
 

@@ -74,6 +74,38 @@ var (
 			},
 		},
 	}
+	// MindMapEdgesColumns holds the columns for the "mind_map_edges" table.
+	MindMapEdgesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString, Default: ""},
+		{Name: "edge_id", Type: field.TypeString},
+		{Name: "source_id", Type: field.TypeString, Nullable: true},
+		{Name: "target_id", Type: field.TypeString, Nullable: true},
+		{Name: "label", Type: field.TypeString, Nullable: true},
+		{Name: "source_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "target_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "label_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+	}
+	// MindMapEdgesTable holds the schema information for the "mind_map_edges" table.
+	MindMapEdgesTable = &schema.Table{
+		Name:       "mind_map_edges",
+		Columns:    MindMapEdgesColumns,
+		PrimaryKey: []*schema.Column{MindMapEdgesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mindmapedge_project_id_session_id_edge_id",
+				Unique:  true,
+				Columns: []*schema.Column{MindMapEdgesColumns[1], MindMapEdgesColumns[2], MindMapEdgesColumns[3]},
+			},
+			{
+				Name:    "mindmapedge_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{MindMapEdgesColumns[2]},
+			},
+		},
+	}
 	// MindMapGraphsColumns holds the columns for the "mind_map_graphs" table.
 	MindMapGraphsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -87,6 +119,38 @@ var (
 		Name:       "mind_map_graphs",
 		Columns:    MindMapGraphsColumns,
 		PrimaryKey: []*schema.Column{MindMapGraphsColumns[0]},
+	}
+	// MindMapNodesColumns holds the columns for the "mind_map_nodes" table.
+	MindMapNodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString, Default: ""},
+		{Name: "node_id", Type: field.TypeString},
+		{Name: "title", Type: field.TypeString, Nullable: true},
+		{Name: "content", Type: field.TypeString, Nullable: true},
+		{Name: "files", Type: field.TypeJSON, Nullable: true},
+		{Name: "title_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "content_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "files_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+	}
+	// MindMapNodesTable holds the schema information for the "mind_map_nodes" table.
+	MindMapNodesTable = &schema.Table{
+		Name:       "mind_map_nodes",
+		Columns:    MindMapNodesColumns,
+		PrimaryKey: []*schema.Column{MindMapNodesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mindmapnode_project_id_session_id_node_id",
+				Unique:  true,
+				Columns: []*schema.Column{MindMapNodesColumns[1], MindMapNodesColumns[2], MindMapNodesColumns[3]},
+			},
+			{
+				Name:    "mindmapnode_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{MindMapNodesColumns[2]},
+			},
+		},
 	}
 	// MindMapOverlaysColumns holds the columns for the "mind_map_overlays" table.
 	MindMapOverlaysColumns = []*schema.Column{
@@ -589,7 +653,9 @@ var (
 	Tables = []*schema.Table{
 		EventRecordsTable,
 		MergeRecordsTable,
+		MindMapEdgesTable,
 		MindMapGraphsTable,
+		MindMapNodesTable,
 		MindMapOverlaysTable,
 		MindMapTasksTable,
 		NodeRunsTable,

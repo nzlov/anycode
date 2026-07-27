@@ -104,6 +104,8 @@ test('mind map node information opens on desktop hover and mobile click with a c
   assert.match(page, /class="mind-map-node-info"/);
   assert.match(page, /\{\{ data\.label \}\}/);
   assert.match(page, /\{\{ data\.content \|\| '暂无节点内容' \}\}/);
+  assert.match(page, /v-if="data\.files\.length"/);
+  assert.match(page, /item\.method.*L\{\{ item\.startLine \}\}–\{\{ item\.endLine \}\}/s);
   assert.match(page, /aria-label="关闭节点信息"/);
   assert.match(page, /@click="closeNodeInfo"/);
 });
@@ -114,8 +116,16 @@ test('mind map combines compact card deltas without a graph selector', () => {
   const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
 
   assert.match(service, /changeType: 'unchanged' \| 'added' \| 'modified' \| 'deleted'/);
-  assert.match(service, /nodes \{ id title content changeType \}/);
-  assert.match(schema, /type MindMapNode \{[\s\S]*changeType: String!/);
+  assert.match(
+    service,
+    /nodes \{ id title content files \{ file method startLine endLine \} changeType \}/,
+  );
+  assert.match(
+    schema,
+    /type MindMapNode \{[\s\S]*files: \[MindMapNodeFile!\]![\s\S]*changeType: String!/,
+  );
+  assert.match(schema, /input MindMapNodeFileInput \{[\s\S]*startLine: Int![\s\S]*endLine: Int!/);
+  assert.match(page, /:disable="!nodeTitle\.trim\(\) \|\| invalidNodeFiles"/);
   assert.match(service, /nodes: MindMapNode\[\]/);
   assert.match(service, /modifiedNodeIds: string\[\]/);
   assert.match(service, /deletedNodeIds: string\[\]/);
@@ -236,9 +246,9 @@ test('realtime cards have merge-close while async cards use ordinary close', () 
 test('GraphQL exposes project main and card graphs plus async task state', () => {
   const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
 
-  assert.match(schema, /projectMindMap\(projectId: ID!, sessionId: ID\): MindMapGraph!/);
+  assert.match(schema, /projectMindMap\(input: MindMapPageInput!\): MindMapGraphPage!/);
   assert.match(schema, /projectMindMapCards\(projectId: ID!\): \[MindMapCard!/);
-  assert.match(schema, /updateProjectMindMap\(input: UpdateMindMapInput!\): MindMapGraph!/);
+  assert.match(schema, /updateProjectMindMap\(input: UpdateMindMapInput!\): MindMapUpdateEvent!/);
   assert.match(schema, /retryMindMapTask\(id: ID!\): MindMapCard!/);
   assert.match(schema, /mindMapUpdates\(projectId: ID!, sessionId: ID\): MindMapUpdateEvent!/);
   assert.match(schema, /taskStatus: String!/);
@@ -255,5 +265,12 @@ test('mind map refresh rejects stale project responses and follows all graph and
   assert.match(page, /card\.taskStatus === 'queued' \|\| card\.taskStatus === 'running'/);
   assert.match(page, /Promise\.all\(\[loadCards\(\), loadGraph\(\)\]\)/);
   assert.match(service, /subscription MindMapUpdates/);
+  assert.match(service, /pageSize: 200/);
+  assert.match(service, /nextNodeCursor/);
+  assert.match(service, /nextEdgeCursor/);
+  assert.match(service, /while \(includeNodes \|\| includeEdges\)/);
+  assert.match(page, /if \(refreshPromise\) return refreshPromise/);
+  assert.match(page, /while \(refreshPending\)/);
+  assert.match(page, /update\.updatedAt !== loadedRevision/);
   assert.doesNotMatch(service, /nodes \{ id title content x y \}/);
 });

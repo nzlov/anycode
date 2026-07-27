@@ -163,9 +163,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
 	}
-	if err := s.repairMindMapGraphs(ctx); err != nil {
-		return err
-	}
 	if err := s.migrateWorkflowApprovalOutputFields(ctx); err != nil {
 		return err
 	}
@@ -210,27 +207,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) repairMindMapGraphs(ctx context.Context) error {
-	rows, err := s.client.MindMapGraph.Query().All(ctx)
-	if err != nil {
-		return fmt.Errorf("list mind map graphs for repair: %w", err)
-	}
-	repo := s.MindMaps()
-	for _, row := range rows {
-		graph, _, err := repo.FindGraph(ctx, mindmap.ProjectID(row.ID))
-		if err != nil {
-			return err
-		}
-		if len(graph.Nodes) == len(row.Nodes) && len(graph.Edges) == len(row.Edges) {
-			continue
-		}
-		if err := repo.SaveGraph(ctx, graph); err != nil {
-			return fmt.Errorf("repair mind map graph %s: %w", row.ID, err)
-		}
-	}
-	return nil
-}
-
 // GLUE: Remove the superseded schema shape. This is intentionally destructive because legacy data is not supported.
 func (s *Store) dropRemovedStorage(ctx context.Context) error {
 	if err := s.migrateSessionAttachmentFiles(ctx); err != nil {
@@ -240,7 +216,7 @@ func (s *Store) dropRemovedStorage(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	statements := make([]string, 0, 4)
+	statements := make([]string, 0, 3)
 	if legacyNodeRuns {
 		statements = append(statements, `DROP TABLE node_runs`)
 	}

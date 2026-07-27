@@ -201,12 +201,23 @@ func (r *mutationResolver) UpdateProjectSettings(ctx context.Context, input mode
 }
 
 // UpdateProjectMindMap is the resolver for the updateProjectMindMap field.
-func (r *mutationResolver) UpdateProjectMindMap(ctx context.Context, input model.UpdateMindMapInput) (*model.MindMapGraph, error) {
+func (r *mutationResolver) UpdateProjectMindMap(ctx context.Context, input model.UpdateMindMapInput) (*model.MindMapUpdateEvent, error) {
 	if r.UseCases.MindMaps == nil {
 		return nil, missingUseCase("mind maps")
 	}
 	operations := make([]mindmapapp.OperationInput, 0, len(input.Operations))
 	for _, operation := range input.Operations {
+		var files *[]mindmapdomain.NodeFile
+		if operation.Files != nil {
+			// GLUE: gqlgen input pointers preserve omitted versus empty files, while the domain uses value objects.
+			values := make([]mindmapdomain.NodeFile, 0, len(operation.Files))
+			for _, item := range operation.Files {
+				values = append(values, mindmapdomain.NodeFile{
+					File: item.File, Method: item.Method, StartLine: item.StartLine, EndLine: item.EndLine,
+				})
+			}
+			files = &values
+		}
 		var sourceID *mindmapdomain.NodeID
 		if operation.SourceID != nil {
 			value := mindmapdomain.NodeID(*operation.SourceID)
@@ -219,16 +230,16 @@ func (r *mutationResolver) UpdateProjectMindMap(ctx context.Context, input model
 		}
 		operations = append(operations, mindmapapp.OperationInput{
 			Kind: mindmapdomain.ChangeKind(operation.Kind), ID: operation.ID, Title: operation.Title, Content: operation.Content,
-			SourceID: sourceID, TargetID: targetID, Label: operation.Label,
+			Files: files, SourceID: sourceID, TargetID: targetID, Label: operation.Label,
 		})
 	}
-	dto, err := r.UseCases.MindMaps.Update(ctx, mindmapapp.UpdateInput{
+	dto, err := r.UseCases.MindMaps.Apply(ctx, mindmapapp.UpdateInput{
 		ProjectID: mindmapdomain.ProjectID(input.ProjectID), SessionID: mindmapdomain.SessionID(stringValue(input.SessionID, "")), Operations: operations,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return mapMindMapGraph(dto), nil
+	return mapMindMapUpdate(dto), nil
 }
 
 // RetryMindMapTask is the resolver for the retryMindMapTask field.
@@ -749,17 +760,19 @@ func (r *queryResolver) BrowseDirectory(ctx context.Context, input model.BrowseD
 }
 
 // ProjectMindMap is the resolver for the projectMindMap field.
-func (r *queryResolver) ProjectMindMap(ctx context.Context, projectID string, sessionID *string) (*model.MindMapGraph, error) {
+func (r *queryResolver) ProjectMindMap(ctx context.Context, input model.MindMapPageInput) (*model.MindMapGraphPage, error) {
 	if r.UseCases.MindMaps == nil {
 		return nil, missingUseCase("mind maps")
 	}
-	dto, err := r.UseCases.MindMaps.Get(ctx, mindmapapp.GetInput{
-		ProjectID: mindmapdomain.ProjectID(projectID), SessionID: mindmapdomain.SessionID(stringValue(sessionID, "")),
+	dto, err := r.UseCases.MindMaps.GetPage(ctx, mindmapapp.GetPageInput{
+		ProjectID: mindmapdomain.ProjectID(input.ProjectID), SessionID: mindmapdomain.SessionID(stringValue(input.SessionID, "")),
+		NodeAfter: mindmapdomain.NodeID(stringValue(input.NodeAfter, "")), EdgeAfter: mindmapdomain.EdgeID(stringValue(input.EdgeAfter, "")),
+		IncludeNodes: input.IncludeNodes, IncludeEdges: input.IncludeEdges, PageSize: input.PageSize,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return mapMindMapGraph(dto), nil
+	return mapMindMapGraphPage(dto), nil
 }
 
 // ProjectMindMapCards is the resolver for the projectMindMapCards field.

@@ -13722,7 +13722,16 @@ func (r *fakeMindMapRepository) FindGraph(context.Context, mindmapdomain.Project
 	return r.graph, r.graph.ProjectID != "" || len(r.graph.Nodes) > 0, nil
 }
 
-func (r *fakeMindMapRepository) SaveGraph(_ context.Context, graph mindmapdomain.Graph) error {
+func (r *fakeMindMapRepository) FindGraphPage(context.Context, mindmapdomain.ProjectID, mindmapdomain.NodeID, mindmapdomain.EdgeID, int, int) (mindmapdomain.GraphPage, bool, error) {
+	found := r.graph.ProjectID != "" || len(r.graph.Nodes) > 0
+	return mindmapdomain.GraphPage{Graph: r.graph}, found, nil
+}
+
+func (r *fakeMindMapRepository) FindRevision(context.Context, mindmapdomain.ProjectID, mindmapdomain.SessionID) (time.Time, error) {
+	return r.graph.UpdatedAt, nil
+}
+
+func (r *fakeMindMapRepository) SaveGraph(_ context.Context, graph mindmapdomain.Graph, _ []mindmapdomain.Change) error {
 	r.graph = graph
 	return nil
 }

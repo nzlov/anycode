@@ -16,7 +16,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapnode"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -44,8 +46,12 @@ type Client struct {
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
+	// MindMapEdge is the client for interacting with the MindMapEdge builders.
+	MindMapEdge *MindMapEdgeClient
 	// MindMapGraph is the client for interacting with the MindMapGraph builders.
 	MindMapGraph *MindMapGraphClient
+	// MindMapNode is the client for interacting with the MindMapNode builders.
+	MindMapNode *MindMapNodeClient
 	// MindMapOverlay is the client for interacting with the MindMapOverlay builders.
 	MindMapOverlay *MindMapOverlayClient
 	// MindMapTask is the client for interacting with the MindMapTask builders.
@@ -91,7 +97,9 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
+	c.MindMapEdge = NewMindMapEdgeClient(c.config)
 	c.MindMapGraph = NewMindMapGraphClient(c.config)
+	c.MindMapNode = NewMindMapNodeClient(c.config)
 	c.MindMapOverlay = NewMindMapOverlayClient(c.config)
 	c.MindMapTask = NewMindMapTaskClient(c.config)
 	c.NodeRun = NewNodeRunClient(c.config)
@@ -202,7 +210,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:                    cfg,
 		EventRecord:               NewEventRecordClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
+		MindMapEdge:               NewMindMapEdgeClient(cfg),
 		MindMapGraph:              NewMindMapGraphClient(cfg),
+		MindMapNode:               NewMindMapNodeClient(cfg),
 		MindMapOverlay:            NewMindMapOverlayClient(cfg),
 		MindMapTask:               NewMindMapTaskClient(cfg),
 		NodeRun:                   NewNodeRunClient(cfg),
@@ -240,7 +250,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:                    cfg,
 		EventRecord:               NewEventRecordClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
+		MindMapEdge:               NewMindMapEdgeClient(cfg),
 		MindMapGraph:              NewMindMapGraphClient(cfg),
+		MindMapNode:               NewMindMapNodeClient(cfg),
 		MindMapOverlay:            NewMindMapOverlayClient(cfg),
 		MindMapTask:               NewMindMapTaskClient(cfg),
 		NodeRun:                   NewNodeRunClient(cfg),
@@ -286,11 +298,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.EventRecord, c.MergeRecord, c.MindMapGraph, c.MindMapOverlay, c.MindMapTask,
-		c.NodeRun, c.NotificationCheckpoint, c.NotificationConfiguration,
-		c.NotificationDelivery, c.ProcessRun, c.Project, c.PromptAppend,
-		c.PushSubscription, c.QuestionRequest, c.QuickCommand, c.Session,
-		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph, c.MindMapNode,
+		c.MindMapOverlay, c.MindMapTask, c.NodeRun, c.NotificationCheckpoint,
+		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
+		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
+		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -300,11 +312,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.EventRecord, c.MergeRecord, c.MindMapGraph, c.MindMapOverlay, c.MindMapTask,
-		c.NodeRun, c.NotificationCheckpoint, c.NotificationConfiguration,
-		c.NotificationDelivery, c.ProcessRun, c.Project, c.PromptAppend,
-		c.PushSubscription, c.QuestionRequest, c.QuickCommand, c.Session,
-		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph, c.MindMapNode,
+		c.MindMapOverlay, c.MindMapTask, c.NodeRun, c.NotificationCheckpoint,
+		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
+		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
+		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -317,8 +329,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.EventRecord.mutate(ctx, m)
 	case *MergeRecordMutation:
 		return c.MergeRecord.mutate(ctx, m)
+	case *MindMapEdgeMutation:
+		return c.MindMapEdge.mutate(ctx, m)
 	case *MindMapGraphMutation:
 		return c.MindMapGraph.mutate(ctx, m)
+	case *MindMapNodeMutation:
+		return c.MindMapNode.mutate(ctx, m)
 	case *MindMapOverlayMutation:
 		return c.MindMapOverlay.mutate(ctx, m)
 	case *MindMapTaskMutation:
@@ -622,6 +638,139 @@ func (c *MergeRecordClient) mutate(ctx context.Context, m *MergeRecordMutation) 
 	}
 }
 
+// MindMapEdgeClient is a client for the MindMapEdge schema.
+type MindMapEdgeClient struct {
+	config
+}
+
+// NewMindMapEdgeClient returns a client for the MindMapEdge from the given config.
+func NewMindMapEdgeClient(c config) *MindMapEdgeClient {
+	return &MindMapEdgeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mindmapedge.Hooks(f(g(h())))`.
+func (c *MindMapEdgeClient) Use(hooks ...Hook) {
+	c.hooks.MindMapEdge = append(c.hooks.MindMapEdge, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mindmapedge.Intercept(f(g(h())))`.
+func (c *MindMapEdgeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MindMapEdge = append(c.inters.MindMapEdge, interceptors...)
+}
+
+// Create returns a builder for creating a MindMapEdge entity.
+func (c *MindMapEdgeClient) Create() *MindMapEdgeCreate {
+	mutation := newMindMapEdgeMutation(c.config, OpCreate)
+	return &MindMapEdgeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MindMapEdge entities.
+func (c *MindMapEdgeClient) CreateBulk(builders ...*MindMapEdgeCreate) *MindMapEdgeCreateBulk {
+	return &MindMapEdgeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MindMapEdgeClient) MapCreateBulk(slice any, setFunc func(*MindMapEdgeCreate, int)) *MindMapEdgeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MindMapEdgeCreateBulk{err: fmt.Errorf("calling to MindMapEdgeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MindMapEdgeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MindMapEdgeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MindMapEdge.
+func (c *MindMapEdgeClient) Update() *MindMapEdgeUpdate {
+	mutation := newMindMapEdgeMutation(c.config, OpUpdate)
+	return &MindMapEdgeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MindMapEdgeClient) UpdateOne(_m *MindMapEdge) *MindMapEdgeUpdateOne {
+	mutation := newMindMapEdgeMutation(c.config, OpUpdateOne, withMindMapEdge(_m))
+	return &MindMapEdgeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MindMapEdgeClient) UpdateOneID(id int) *MindMapEdgeUpdateOne {
+	mutation := newMindMapEdgeMutation(c.config, OpUpdateOne, withMindMapEdgeID(id))
+	return &MindMapEdgeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MindMapEdge.
+func (c *MindMapEdgeClient) Delete() *MindMapEdgeDelete {
+	mutation := newMindMapEdgeMutation(c.config, OpDelete)
+	return &MindMapEdgeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MindMapEdgeClient) DeleteOne(_m *MindMapEdge) *MindMapEdgeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MindMapEdgeClient) DeleteOneID(id int) *MindMapEdgeDeleteOne {
+	builder := c.Delete().Where(mindmapedge.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MindMapEdgeDeleteOne{builder}
+}
+
+// Query returns a query builder for MindMapEdge.
+func (c *MindMapEdgeClient) Query() *MindMapEdgeQuery {
+	return &MindMapEdgeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMindMapEdge},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MindMapEdge entity by its id.
+func (c *MindMapEdgeClient) Get(ctx context.Context, id int) (*MindMapEdge, error) {
+	return c.Query().Where(mindmapedge.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MindMapEdgeClient) GetX(ctx context.Context, id int) *MindMapEdge {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MindMapEdgeClient) Hooks() []Hook {
+	return c.hooks.MindMapEdge
+}
+
+// Interceptors returns the client interceptors.
+func (c *MindMapEdgeClient) Interceptors() []Interceptor {
+	return c.inters.MindMapEdge
+}
+
+func (c *MindMapEdgeClient) mutate(ctx context.Context, m *MindMapEdgeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MindMapEdgeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MindMapEdgeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MindMapEdgeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MindMapEdgeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MindMapEdge mutation op: %q", m.Op())
+	}
+}
+
 // MindMapGraphClient is a client for the MindMapGraph schema.
 type MindMapGraphClient struct {
 	config
@@ -752,6 +901,139 @@ func (c *MindMapGraphClient) mutate(ctx context.Context, m *MindMapGraphMutation
 		return (&MindMapGraphDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown MindMapGraph mutation op: %q", m.Op())
+	}
+}
+
+// MindMapNodeClient is a client for the MindMapNode schema.
+type MindMapNodeClient struct {
+	config
+}
+
+// NewMindMapNodeClient returns a client for the MindMapNode from the given config.
+func NewMindMapNodeClient(c config) *MindMapNodeClient {
+	return &MindMapNodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mindmapnode.Hooks(f(g(h())))`.
+func (c *MindMapNodeClient) Use(hooks ...Hook) {
+	c.hooks.MindMapNode = append(c.hooks.MindMapNode, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mindmapnode.Intercept(f(g(h())))`.
+func (c *MindMapNodeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MindMapNode = append(c.inters.MindMapNode, interceptors...)
+}
+
+// Create returns a builder for creating a MindMapNode entity.
+func (c *MindMapNodeClient) Create() *MindMapNodeCreate {
+	mutation := newMindMapNodeMutation(c.config, OpCreate)
+	return &MindMapNodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MindMapNode entities.
+func (c *MindMapNodeClient) CreateBulk(builders ...*MindMapNodeCreate) *MindMapNodeCreateBulk {
+	return &MindMapNodeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MindMapNodeClient) MapCreateBulk(slice any, setFunc func(*MindMapNodeCreate, int)) *MindMapNodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MindMapNodeCreateBulk{err: fmt.Errorf("calling to MindMapNodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MindMapNodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MindMapNodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MindMapNode.
+func (c *MindMapNodeClient) Update() *MindMapNodeUpdate {
+	mutation := newMindMapNodeMutation(c.config, OpUpdate)
+	return &MindMapNodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MindMapNodeClient) UpdateOne(_m *MindMapNode) *MindMapNodeUpdateOne {
+	mutation := newMindMapNodeMutation(c.config, OpUpdateOne, withMindMapNode(_m))
+	return &MindMapNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MindMapNodeClient) UpdateOneID(id int) *MindMapNodeUpdateOne {
+	mutation := newMindMapNodeMutation(c.config, OpUpdateOne, withMindMapNodeID(id))
+	return &MindMapNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MindMapNode.
+func (c *MindMapNodeClient) Delete() *MindMapNodeDelete {
+	mutation := newMindMapNodeMutation(c.config, OpDelete)
+	return &MindMapNodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MindMapNodeClient) DeleteOne(_m *MindMapNode) *MindMapNodeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MindMapNodeClient) DeleteOneID(id int) *MindMapNodeDeleteOne {
+	builder := c.Delete().Where(mindmapnode.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MindMapNodeDeleteOne{builder}
+}
+
+// Query returns a query builder for MindMapNode.
+func (c *MindMapNodeClient) Query() *MindMapNodeQuery {
+	return &MindMapNodeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMindMapNode},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MindMapNode entity by its id.
+func (c *MindMapNodeClient) Get(ctx context.Context, id int) (*MindMapNode, error) {
+	return c.Query().Where(mindmapnode.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MindMapNodeClient) GetX(ctx context.Context, id int) *MindMapNode {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MindMapNodeClient) Hooks() []Hook {
+	return c.hooks.MindMapNode
+}
+
+// Interceptors returns the client interceptors.
+func (c *MindMapNodeClient) Interceptors() []Interceptor {
+	return c.inters.MindMapNode
+}
+
+func (c *MindMapNodeClient) mutate(ctx context.Context, m *MindMapNodeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MindMapNodeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MindMapNodeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MindMapNodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MindMapNodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MindMapNode mutation op: %q", m.Op())
 	}
 }
 
@@ -2886,17 +3168,17 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, MindMapGraph, MindMapOverlay, MindMapTask, NodeRun,
-		NotificationCheckpoint, NotificationConfiguration, NotificationDelivery,
-		ProcessRun, Project, PromptAppend, PushSubscription, QuestionRequest,
-		QuickCommand, Session, StagedAttachment, SystemConfiguration,
-		WorkflowDefinition []ent.Hook
+		EventRecord, MergeRecord, MindMapEdge, MindMapGraph, MindMapNode,
+		MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
+		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
+		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
+		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, MindMapGraph, MindMapOverlay, MindMapTask, NodeRun,
-		NotificationCheckpoint, NotificationConfiguration, NotificationDelivery,
-		ProcessRun, Project, PromptAppend, PushSubscription, QuestionRequest,
-		QuickCommand, Session, StagedAttachment, SystemConfiguration,
-		WorkflowDefinition []ent.Interceptor
+		EventRecord, MergeRecord, MindMapEdge, MindMapGraph, MindMapNode,
+		MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
+		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
+		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
+		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Interceptor
 	}
 )

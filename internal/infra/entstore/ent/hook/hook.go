@@ -33,6 +33,18 @@ func (f MergeRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MergeRecordMutation", m)
 }
 
+// The MindMapEdgeFunc type is an adapter to allow the use of ordinary
+// function as MindMapEdge mutator.
+type MindMapEdgeFunc func(context.Context, *ent.MindMapEdgeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MindMapEdgeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MindMapEdgeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MindMapEdgeMutation", m)
+}
+
 // The MindMapGraphFunc type is an adapter to allow the use of ordinary
 // function as MindMapGraph mutator.
 type MindMapGraphFunc func(context.Context, *ent.MindMapGraphMutation) (ent.Value, error)
@@ -43,6 +55,18 @@ func (f MindMapGraphFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MindMapGraphMutation", m)
+}
+
+// The MindMapNodeFunc type is an adapter to allow the use of ordinary
+// function as MindMapNode mutator.
+type MindMapNodeFunc func(context.Context, *ent.MindMapNodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MindMapNodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MindMapNodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MindMapNodeMutation", m)
 }
 
 // The MindMapOverlayFunc type is an adapter to allow the use of ordinary

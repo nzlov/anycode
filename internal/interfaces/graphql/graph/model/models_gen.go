@@ -261,29 +261,57 @@ type MindMapEdge struct {
 	Label    string `json:"label"`
 }
 
-type MindMapGraph struct {
-	ProjectID string         `json:"projectId"`
-	SessionID *string        `json:"sessionId,omitempty"`
-	Nodes     []*MindMapNode `json:"nodes"`
-	Edges     []*MindMapEdge `json:"edges"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+type MindMapGraphPage struct {
+	ProjectID      string         `json:"projectId"`
+	SessionID      *string        `json:"sessionId,omitempty"`
+	Nodes          []*MindMapNode `json:"nodes"`
+	Edges          []*MindMapEdge `json:"edges"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	NextNodeCursor *string        `json:"nextNodeCursor,omitempty"`
+	NextEdgeCursor *string        `json:"nextEdgeCursor,omitempty"`
 }
 
 type MindMapNode struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	ChangeType string `json:"changeType"`
+	ID         string             `json:"id"`
+	Title      string             `json:"title"`
+	Content    string             `json:"content"`
+	Files      []*MindMapNodeFile `json:"files"`
+	ChangeType string             `json:"changeType"`
+}
+
+type MindMapNodeFile struct {
+	File      string `json:"file"`
+	Method    string `json:"method"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
+}
+
+type MindMapNodeFileInput struct {
+	File      string `json:"file"`
+	Method    string `json:"method"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
 }
 
 type MindMapOperationInput struct {
-	Kind     string  `json:"kind"`
-	ID       string  `json:"id"`
-	Title    *string `json:"title,omitempty"`
-	Content  *string `json:"content,omitempty"`
-	SourceID *string `json:"sourceId,omitempty"`
-	TargetID *string `json:"targetId,omitempty"`
-	Label    *string `json:"label,omitempty"`
+	Kind     string                  `json:"kind"`
+	ID       string                  `json:"id"`
+	Title    *string                 `json:"title,omitempty"`
+	Content  *string                 `json:"content,omitempty"`
+	Files    []*MindMapNodeFileInput `json:"files,omitempty"`
+	SourceID *string                 `json:"sourceId,omitempty"`
+	TargetID *string                 `json:"targetId,omitempty"`
+	Label    *string                 `json:"label,omitempty"`
+}
+
+type MindMapPageInput struct {
+	ProjectID    string  `json:"projectId"`
+	SessionID    *string `json:"sessionId,omitempty"`
+	NodeAfter    *string `json:"nodeAfter,omitempty"`
+	EdgeAfter    *string `json:"edgeAfter,omitempty"`
+	IncludeNodes bool    `json:"includeNodes"`
+	IncludeEdges bool    `json:"includeEdges"`
+	PageSize     int     `json:"pageSize"`
 }
 
 type MindMapUpdateEvent struct {

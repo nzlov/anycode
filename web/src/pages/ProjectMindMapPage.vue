@@ -141,6 +141,22 @@
                 <q-card-section class="mind-map-node-info__content q-pt-none">
                   {{ data.content || '暂无节点内容' }}
                 </q-card-section>
+                <template v-if="data.files.length">
+                  <q-separator />
+                  <q-list dense class="mind-map-node-info__files">
+                    <q-item
+                      v-for="item in data.files"
+                      :key="`${item.file}:${item.method}:${item.startLine}:${item.endLine}`"
+                    >
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">{{ item.file }}</q-item-label>
+                        <q-item-label caption>
+                          {{ item.method }} · L{{ item.startLine }}–{{ item.endLine }}
+                        </q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </template>
               </q-card>
             </q-menu>
             <q-menu
@@ -188,8 +204,50 @@
             </div>
           </q-card-section>
           <q-card-section class="q-gutter-md">
-            <q-input v-model="nodeTitle" dense outlined autofocus label="节点标题" />
+            <q-input v-model="nodeTitle" dense outlined autofocus label="节点标题 *" />
             <q-input v-model="nodeContent" outlined autogrow type="textarea" label="节点内容" />
+            <div class="row items-center">
+              <div class="text-subtitle2">文件位置（可选）</div>
+              <q-space />
+              <q-btn
+                flat
+                dense
+                no-caps
+                icon="add"
+                label="添加"
+                :disable="nodeFiles.length >= 100"
+                @click="addNodeFile"
+              />
+            </div>
+            <div v-for="(item, index) in nodeFiles" :key="index" class="mind-map-file-editor">
+              <q-input v-model="item.file" dense outlined label="文件 *" />
+              <q-input v-model="item.method" dense outlined label="方法 *" />
+              <q-input
+                v-model.number="item.startLine"
+                dense
+                outlined
+                type="number"
+                min="1"
+                label="起始行 *"
+              />
+              <q-input
+                v-model.number="item.endLine"
+                dense
+                outlined
+                type="number"
+                min="1"
+                label="结束行 *"
+              />
+              <q-btn
+                flat
+                round
+                dense
+                color="negative"
+                icon="delete"
+                aria-label="删除文件位置"
+                @click="nodeFiles.splice(index, 1)"
+              />
+            </div>
           </q-card-section>
           <q-card-actions align="right">
             <q-btn v-close-popup flat label="取消" no-caps />
@@ -199,7 +257,7 @@
               label="保存"
               no-caps
               :loading="saving"
-              :disable="!nodeTitle.trim()"
+              :disable="!nodeTitle.trim() || invalidNodeFiles"
             />
           </q-card-actions>
         </q-form>
@@ -257,6 +315,7 @@ import {
   type MindMapEdge,
   type MindMapGraph,
   type MindMapNode,
+  type MindMapNodeFile,
   type MindMapOperation,
 } from '@/services/mindMaps';
 
@@ -298,6 +357,7 @@ const editDialog = ref(false);
 const deleteDialog = ref(false);
 const nodeTitle = ref('');
 const nodeContent = ref('');
+const nodeFiles = ref<MindMapNodeFile[]>([]);
 const handleSides = ['top', 'right', 'bottom', 'left'] as const;
 let graphRequestRevision = 0;
 let cardRequestRevision = 0;
@@ -305,6 +365,9 @@ let subscriptionRevision = 0;
 let mindMapSubscription: { unsubscribe: () => void } | null = null;
 let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let taskRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let refreshPromise: Promise<void> | null = null;
+let refreshPending = false;
+let loadedRevision = '';
 let disposed = false;
 
 const graph = computed<DisplayMindMapGraph>(() => combineMindMaps(mainGraph.value, cards.value));
@@ -384,6 +447,17 @@ const deletingEdgeCount = computed(
       (edge) => edge.sourceId === deletingNodeId.value || edge.targetId === deletingNodeId.value,
     ).length,
 );
+const invalidNodeFiles = computed(() =>
+  nodeFiles.value.some(
+    (item) =>
+      !item.file.trim() ||
+      !item.method.trim() ||
+      !Number.isInteger(Number(item.startLine)) ||
+      Number(item.startLine) < 1 ||
+      !Number.isInteger(Number(item.endLine)) ||
+      Number(item.endLine) < Number(item.startLine),
+  ),
+);
 const flowNodes = computed({
   get: () =>
     graph.value.nodes.map((node) => ({
@@ -393,6 +467,7 @@ const flowNodes = computed({
       data: {
         label: node.title,
         content: node.content,
+        files: node.files,
         changeType: node.changeType,
         cardLabel: node.cardLabel,
       },
@@ -566,8 +641,24 @@ async function loadGraph() {
 }
 
 async function refreshMindMap() {
-  await Promise.all([loadCards(), loadGraph()]);
-  fitGraph();
+  refreshPending = true;
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    do {
+      refreshPending = false;
+      await Promise.all([loadCards(), loadGraph()]);
+      loadedRevision = [
+        mainGraph.value.updatedAt,
+        ...cards.value.map((card) => card.updatedAt),
+      ].reduce((latest, value) => (value > latest ? value : latest), '');
+    } while (refreshPending);
+    fitGraph();
+  })();
+  try {
+    await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
 }
 
 function scheduleTaskRefresh() {
@@ -589,8 +680,9 @@ function startMindMapSubscription() {
   subscriptionReconnectTimer = null;
   mindMapSubscription?.unsubscribe();
   mindMapSubscription = subscribeMindMapUpdates(requestedProjectId, '', {
-    onData: () => {
-      if (currentRevision === subscriptionRevision) void refreshMindMap();
+    onData: (update) => {
+      if (currentRevision === subscriptionRevision && update.updatedAt !== loadedRevision)
+        void refreshMindMap();
     },
     onError: () => scheduleSubscriptionReconnect(currentRevision),
     onClose: () => scheduleSubscriptionReconnect(currentRevision),
@@ -671,6 +763,7 @@ function openNewNodeDialog() {
   editingNodeId.value = '';
   nodeTitle.value = '';
   nodeContent.value = '';
+  nodeFiles.value = [];
   editDialog.value = true;
 }
 
@@ -680,7 +773,12 @@ function openNodeEditor(nodeId: string) {
   editingNodeId.value = node.id;
   nodeTitle.value = node.title;
   nodeContent.value = node.content;
+  nodeFiles.value = node.files.map((item) => ({ ...item }));
   editDialog.value = true;
+}
+
+function addNodeFile() {
+  nodeFiles.value.push({ file: '', method: '', startLine: 1, endLine: 1 });
 }
 
 function openDeleteDialog(nodeId: string) {
@@ -702,6 +800,12 @@ async function saveNode() {
       id: nodeId,
       title,
       content: nodeContent.value,
+      files: nodeFiles.value.map((item) => ({
+        file: item.file.trim(),
+        method: item.method.trim(),
+        startLine: Number(item.startLine),
+        endLine: Number(item.endLine),
+      })),
     };
     await applyOperations([operation], editingNode?.sessionId);
     selectedNodeId.value = editingNode?.id || nodeId;
@@ -1000,6 +1104,11 @@ function taskStatusColor(status: string) {
   white-space: pre-wrap;
 }
 
+.mind-map-node-info__files {
+  max-height: 200px;
+  overflow: auto;
+}
+
 .mind-map-canvas :deep(.vue-flow__node),
 .mind-map-canvas :deep(.vue-flow__edge) {
   transition:
@@ -1081,7 +1190,14 @@ function taskStatusColor(status: string) {
 }
 
 .mind-map-dialog {
-  width: min(480px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
+}
+
+.mind-map-file-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) 92px 92px auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .mind-map-node-menu {
@@ -1089,6 +1205,14 @@ function taskStatusColor(status: string) {
 }
 
 @media (max-width: 699px) {
+  .mind-map-file-editor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .mind-map-file-editor :deep(.q-field:nth-child(-n + 2)) {
+    grid-column: span 3;
+  }
+
   .mind-map-card-strip {
     gap: 8px;
     padding: 8px;

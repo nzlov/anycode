@@ -282,11 +282,11 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 func mindMapSearchTool() map[string]any {
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapSearch),
-		"description": "Search node IDs, titles, and content in this card's current mind map. Returns matching nodes plus their one-hop related nodes and relationships. Use this before adding, updating, deleting, or linking concepts so existing durable nodes are reused.",
+		"description": "Search node IDs, titles, content, and code file locations in this card's current mind map. Returns matching nodes plus their one-hop related nodes and relationships. Use this before adding, updating, deleting, or linking concepts so existing durable nodes are reused.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"query"},
 			"properties": map[string]any{
-				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "Case-insensitive text to find in node IDs, titles, or content."},
+				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "Case-insensitive text to find in node IDs, titles, content, file paths, or methods."},
 				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "description": "Maximum matching nodes to return. Defaults to 20."},
 			},
 		},
@@ -297,8 +297,21 @@ func mindMapUpdateTool() map[string]any {
 	nodeUpsert := mindMapOperationSchema("upsert_node", []string{"kind", "id"}, map[string]any{
 		"title":   map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
 		"content": map[string]any{"type": "string", "maxLength": 20000},
+		"files": map[string]any{
+			"type": "array", "maxItems": 100,
+			"items": map[string]any{
+				"type": "object", "additionalProperties": false,
+				"required": []string{"file", "method", "startLine", "endLine"},
+				"properties": map[string]any{
+					"file":      map[string]any{"type": "string", "minLength": 1, "maxLength": 2000},
+					"method":    map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
+					"startLine": map[string]any{"type": "integer", "minimum": 1},
+					"endLine":   map[string]any{"type": "integer", "minimum": 1},
+				},
+			},
+		},
 	})
-	nodeUpsert["anyOf"] = []map[string]any{{"required": []string{"title"}}, {"required": []string{"content"}}}
+	nodeUpsert["anyOf"] = []map[string]any{{"required": []string{"title"}}, {"required": []string{"content"}}, {"required": []string{"files"}}}
 	operation := map[string]any{"oneOf": []map[string]any{
 		nodeUpsert,
 		mindMapOperationSchema("delete_node", []string{"kind", "id"}, nil),
@@ -311,7 +324,7 @@ func mindMapUpdateTool() map[string]any {
 	}}
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
-		"description": "Apply node and relationship changes to this card's isolated mind map. Search first, then update an existing node's title or content, delete obsolete nodes, and maintain relationships as needed. Each node must express exactly one durable concept. Use project-root as the immutable project-name center node. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
+		"description": "Apply node and relationship changes to this card's isolated mind map. Search first, then update an existing node's title, content, or optional code file locations, delete obsolete nodes, and maintain relationships as needed. Node titles must not be empty. Each node must express exactly one durable concept. Use project-root as the immutable project-name center node. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"operations"},
 			"properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": operation}},

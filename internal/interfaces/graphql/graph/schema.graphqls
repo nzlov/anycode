@@ -15,7 +15,7 @@ type Query {
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
-  projectMindMap(projectId: ID!, sessionId: ID): MindMapGraph!
+  projectMindMap(input: MindMapPageInput!): MindMapGraphPage!
   projectMindMapCards(projectId: ID!): [MindMapCard!]!
   sessions(input: ListSessionsInput): SessionCardPage!
   sessionCard(id: ID!): SessionCard!
@@ -64,7 +64,7 @@ type Mutation {
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
-  updateProjectMindMap(input: UpdateMindMapInput!): MindMapGraph!
+  updateProjectMindMap(input: UpdateMindMapInput!): MindMapUpdateEvent!
   retryMindMapTask(id: ID!): MindMapCard!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
@@ -842,19 +842,39 @@ input UpdateProjectSettingsInput {
   mindMapEnabled: Boolean!
 }
 
-type MindMapGraph {
+type MindMapGraphPage {
   projectId: ID!
   sessionId: ID
   nodes: [MindMapNode!]!
   edges: [MindMapEdge!]!
   updatedAt: Time!
+  nextNodeCursor: ID
+  nextEdgeCursor: ID
+}
+
+input MindMapPageInput {
+  projectId: ID!
+  sessionId: ID
+  nodeAfter: ID
+  edgeAfter: ID
+  includeNodes: Boolean!
+  includeEdges: Boolean!
+  pageSize: Int! = 200
 }
 
 type MindMapNode {
   id: ID!
   title: String!
   content: String!
+  files: [MindMapNodeFile!]!
   changeType: String!
+}
+
+type MindMapNodeFile {
+  file: String!
+  method: String!
+  startLine: Int!
+  endLine: Int!
 }
 
 type MindMapEdge {
@@ -889,9 +909,17 @@ input MindMapOperationInput {
   id: ID!
   title: String
   content: String
+  files: [MindMapNodeFileInput!]
   sourceId: ID
   targetId: ID
   label: String
+}
+
+input MindMapNodeFileInput {
+  file: String!
+  method: String!
+  startLine: Int!
+  endLine: Int!
 }
 
 input SetDefaultWorkflowInput {

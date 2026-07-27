@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -19,8 +20,10 @@ import (
 
 type UseCase interface {
 	Get(ctx context.Context, input GetInput) (GraphDTO, error)
+	GetPage(ctx context.Context, input GetPageInput) (GraphPageDTO, error)
 	ListCards(ctx context.Context, projectID domain.ProjectID) ([]CardDTO, error)
 	Update(ctx context.Context, input UpdateInput) (GraphDTO, error)
+	Apply(ctx context.Context, input UpdateInput) (GraphDTO, error)
 	GetForSession(ctx context.Context, sessionID domain.SessionID) (GraphDTO, error)
 	SearchForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, query string, limit int) (SearchResultDTO, error)
 	UpdateForSession(ctx context.Context, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error)
@@ -35,6 +38,16 @@ type GetInput struct {
 	SessionID domain.SessionID
 }
 
+type GetPageInput struct {
+	ProjectID    domain.ProjectID
+	SessionID    domain.SessionID
+	NodeAfter    domain.NodeID
+	EdgeAfter    domain.EdgeID
+	IncludeNodes bool
+	IncludeEdges bool
+	PageSize     int
+}
+
 type UpdateInput struct {
 	ProjectID  domain.ProjectID
 	SessionID  domain.SessionID
@@ -46,6 +59,7 @@ type OperationInput struct {
 	ID       string
 	Title    *string
 	Content  *string
+	Files    *[]domain.NodeFile
 	SourceID *domain.NodeID
 	TargetID *domain.NodeID
 	Label    *string
@@ -59,10 +73,21 @@ type GraphDTO struct {
 	UpdatedAt time.Time
 }
 
+type GraphPageDTO struct {
+	ProjectID      domain.ProjectID
+	SessionID      domain.SessionID
+	Nodes          []NodeDTO
+	Edges          []EdgeDTO
+	UpdatedAt      time.Time
+	NextNodeCursor domain.NodeID
+	NextEdgeCursor domain.EdgeID
+}
+
 type NodeDTO struct {
 	ID         domain.NodeID
 	Title      string
 	Content    string
+	Files      []domain.NodeFile
 	ChangeType NodeChangeType
 }
 
@@ -182,20 +207,23 @@ func (s *Service) Watch(ctx context.Context, input GetInput) (<-chan ChangeDTO, 
 }
 
 func (s *Service) watchSnapshot(ctx context.Context, input GetInput) (GraphDTO, error) {
-	graph, err := s.Get(ctx, input)
-	if err != nil || input.SessionID != "" {
-		return graph, err
-	}
-	overlays, err := s.repo.ListOverlays(ctx, input.ProjectID)
+	project, err := s.requireEnabledProject(ctx, input.ProjectID)
 	if err != nil {
-		return GraphDTO{}, fmt.Errorf("list card mind maps: %w", err)
+		return GraphDTO{}, err
 	}
-	for _, overlay := range overlays {
-		if overlay.UpdatedAt.After(graph.UpdatedAt) {
-			graph.UpdatedAt = overlay.UpdatedAt
+	if input.SessionID != "" {
+		if err := s.requireSession(ctx, input.ProjectID, input.SessionID, false); err != nil {
+			return GraphDTO{}, err
 		}
 	}
-	return graph, nil
+	updatedAt, err := s.repo.FindRevision(ctx, input.ProjectID, input.SessionID)
+	if err != nil {
+		return GraphDTO{}, err
+	}
+	if project.UpdatedAt.After(updatedAt) {
+		updatedAt = project.UpdatedAt
+	}
+	return GraphDTO{ProjectID: input.ProjectID, SessionID: input.SessionID, UpdatedAt: updatedAt}, nil
 }
 
 func (s *Service) Get(ctx context.Context, input GetInput) (GraphDTO, error) {
@@ -209,6 +237,131 @@ func (s *Service) Get(ctx context.Context, input GetInput) (GraphDTO, error) {
 		}
 	}
 	return s.loadGraph(ctx, project, input.SessionID, true)
+}
+
+func (s *Service) GetPage(ctx context.Context, input GetPageInput) (GraphPageDTO, error) {
+	if input.PageSize == 0 {
+		input.PageSize = 200
+	}
+	if input.PageSize < 10 || input.PageSize > 500 {
+		return GraphPageDTO{}, errors.New("mind map page size must be between 10 and 500")
+	}
+	if !input.IncludeNodes && !input.IncludeEdges {
+		return GraphPageDTO{}, errors.New("mind map page must include nodes or edges")
+	}
+	project, err := s.requireEnabledProject(ctx, input.ProjectID)
+	if err != nil {
+		return GraphPageDTO{}, err
+	}
+	if input.SessionID != "" {
+		if err := s.requireSession(ctx, input.ProjectID, input.SessionID, false); err != nil {
+			return GraphPageDTO{}, err
+		}
+		graph, err := s.loadGraph(ctx, project, input.SessionID, true)
+		if err != nil {
+			return GraphPageDTO{}, err
+		}
+		nodes, nextNode := pageNodeDTOs(graph.Nodes, input.NodeAfter, input.PageSize, input.IncludeNodes)
+		edges, nextEdge := pageEdgeDTOs(graph.Edges, input.EdgeAfter, input.PageSize, input.IncludeEdges)
+		return GraphPageDTO{
+			ProjectID: graph.ProjectID, SessionID: graph.SessionID, Nodes: nodes, Edges: edges, UpdatedAt: graph.UpdatedAt,
+			NextNodeCursor: nextNode, NextEdgeCursor: nextEdge,
+		}, nil
+	}
+	nodeLimit, edgeLimit := 0, 0
+	if input.IncludeNodes {
+		nodeLimit = input.PageSize
+		if input.NodeAfter == "" {
+			nodeLimit--
+		}
+	}
+	if input.IncludeEdges {
+		edgeLimit = input.PageSize
+	}
+	page, _, err := s.repo.FindGraphPage(ctx, input.ProjectID, input.NodeAfter, input.EdgeAfter, nodeLimit, edgeLimit)
+	if err != nil {
+		return GraphPageDTO{}, err
+	}
+	updatedAt := page.Graph.UpdatedAt
+	if project.UpdatedAt.After(updatedAt) {
+		updatedAt = project.UpdatedAt
+	}
+	result := GraphPageDTO{
+		ProjectID: input.ProjectID, UpdatedAt: updatedAt,
+		NextNodeCursor: page.NextNodeCursor, NextEdgeCursor: page.NextEdgeCursor,
+	}
+	if input.IncludeNodes {
+		result.Nodes = make([]NodeDTO, 0, len(page.Graph.Nodes)+1)
+		if input.NodeAfter == "" {
+			result.Nodes = append(result.Nodes, NodeDTO{ID: domain.RootNodeID, Title: project.Name, ChangeType: NodeUnchanged})
+		}
+		for _, node := range page.Graph.Nodes {
+			result.Nodes = append(result.Nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeUnchanged})
+		}
+	}
+	if input.IncludeEdges {
+		result.Edges = make([]EdgeDTO, 0, len(page.Graph.Edges))
+		for _, edge := range page.Graph.Edges {
+			result.Edges = append(result.Edges, EdgeDTO{ID: edge.ID, SourceID: edge.SourceID, TargetID: edge.TargetID, Label: edge.Label})
+		}
+	}
+	return result, nil
+}
+
+func pageNodeDTOs(items []NodeDTO, after domain.NodeID, limit int, include bool) ([]NodeDTO, domain.NodeID) {
+	if !include {
+		return nil, ""
+	}
+	ordered := append([]NodeDTO(nil), items...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].ID == domain.RootNodeID {
+			return true
+		}
+		if ordered[j].ID == domain.RootNodeID {
+			return false
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
+	start := 0
+	if after != "" {
+		start = len(ordered)
+		for index := range ordered {
+			if ordered[index].ID == after {
+				start = index + 1
+				break
+			}
+		}
+	}
+	end := start + limit
+	if end >= len(ordered) {
+		end = len(ordered)
+		return ordered[start:end], ""
+	}
+	return ordered[start:end], ordered[end-1].ID
+}
+
+func pageEdgeDTOs(items []EdgeDTO, after domain.EdgeID, limit int, include bool) ([]EdgeDTO, domain.EdgeID) {
+	if !include {
+		return nil, ""
+	}
+	ordered := append([]EdgeDTO(nil), items...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].ID < ordered[j].ID })
+	start := 0
+	if after != "" {
+		start = len(ordered)
+		for index := range ordered {
+			if ordered[index].ID == after {
+				start = index + 1
+				break
+			}
+		}
+	}
+	end := start + limit
+	if end >= len(ordered) {
+		end = len(ordered)
+		return ordered[start:end], ""
+	}
+	return ordered[start:end], ordered[end-1].ID
 }
 
 func (s *Service) loadGraph(ctx context.Context, project projectdomain.Project, sessionID domain.SessionID, withChanges bool) (GraphDTO, error) {
@@ -365,10 +518,14 @@ func (s *Service) RetryTask(ctx context.Context, taskID domain.TaskID) (CardDTO,
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (GraphDTO, error) {
-	return s.update(ctx, input, true, false, true)
+	return s.update(ctx, input, true, false, true, true)
 }
 
-func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSession bool, allowDisabled bool, withChanges bool) (GraphDTO, error) {
+func (s *Service) Apply(ctx context.Context, input UpdateInput) (GraphDTO, error) {
+	return s.update(ctx, input, true, false, false, false)
+}
+
+func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSession bool, allowDisabled bool, withChanges bool, reload bool) (GraphDTO, error) {
 	if len(input.Operations) > 100 {
 		return GraphDTO{}, errors.New("mind map update cannot contain more than 100 operations")
 	}
@@ -394,6 +551,7 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 	if err != nil {
 		return GraphDTO{}, err
 	}
+	result := GraphDTO{ProjectID: input.ProjectID, SessionID: input.SessionID}
 	apply := func(ctx context.Context, repo domain.Repository) error {
 		graph, _, err := repo.FindGraph(ctx, input.ProjectID)
 		if err != nil {
@@ -410,7 +568,8 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 			if err := validateVisibleGraph(domain.Visible(graph)); err != nil {
 				return err
 			}
-			return repo.SaveGraph(ctx, graph)
+			result.UpdatedAt = graph.UpdatedAt
+			return repo.SaveGraph(ctx, graph, changes)
 		}
 		overlay, _, err := repo.FindOverlay(ctx, input.SessionID)
 		if err != nil {
@@ -429,6 +588,7 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 			currentUpdatedAt = overlay.UpdatedAt
 		}
 		overlay.UpdatedAt = domain.NextUpdatedAt(currentUpdatedAt, changes[len(changes)-1].OccurredAt)
+		result.UpdatedAt = overlay.UpdatedAt
 		return repo.SaveOverlay(ctx, overlay)
 	}
 	if s.uow != nil {
@@ -437,6 +597,9 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 		}
 	} else if err := apply(ctx, s.repo); err != nil {
 		return GraphDTO{}, err
+	}
+	if !reload {
+		return result, nil
 	}
 	return s.loadGraph(ctx, project, input.SessionID, withChanges)
 }
@@ -465,7 +628,7 @@ func (s *Service) UpdateForSession(ctx context.Context, sessionID domain.Session
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find session: %w", err)
 	}
-	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, false, false)
+	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, false, false, true)
 }
 
 func (s *Service) UpdateForTask(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error) {
@@ -480,7 +643,7 @@ func (s *Service) UpdateForTask(ctx context.Context, processRunID string, sessio
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find session: %w", err)
 	}
-	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, true, false)
+	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, true, false, true)
 }
 
 func (s *Service) getForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID) (GraphDTO, error) {
@@ -560,6 +723,13 @@ func (s *Service) buildChanges(input UpdateInput) ([]domain.Change, error) {
 		if operation.Content != nil && len(*operation.Content) > 20000 {
 			return nil, errors.New("mind map node content is too long")
 		}
+		if operation.Files != nil {
+			files, err := validateNodeFiles(*operation.Files)
+			if err != nil {
+				return nil, err
+			}
+			operation.Files = &files
+		}
 		if operation.Label != nil && len(*operation.Label) > 500 {
 			return nil, errors.New("mind map edge label is too long")
 		}
@@ -572,7 +742,7 @@ func (s *Service) buildChanges(input UpdateInput) ([]domain.Change, error) {
 		}
 		changes = append(changes, domain.Change{
 			ID: changeID, ProjectID: input.ProjectID, SessionID: input.SessionID, Kind: operation.Kind,
-			EntityID: id, Title: operation.Title, Content: operation.Content,
+			EntityID: id, Title: operation.Title, Content: operation.Content, Files: operation.Files,
 			SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label, OccurredAt: s.now(),
 		})
 	}
@@ -580,12 +750,12 @@ func (s *Service) buildChanges(input UpdateInput) ([]domain.Change, error) {
 }
 
 func validateOperationShape(operation OperationInput) error {
-	hasNodeFields := operation.Title != nil || operation.Content != nil
+	hasNodeFields := operation.Title != nil || operation.Content != nil || operation.Files != nil
 	hasEdgeFields := operation.SourceID != nil || operation.TargetID != nil || operation.Label != nil
 	switch operation.Kind {
 	case domain.ChangeUpsertNode:
 		if !hasNodeFields {
-			return errors.New("mind map node upsert requires a title or content")
+			return errors.New("mind map node upsert requires a title, content, or files")
 		}
 		if operation.Title != nil && strings.TrimSpace(*operation.Title) == "" {
 			return errors.New("mind map node title cannot be empty")
@@ -609,6 +779,34 @@ func validateOperationShape(operation OperationInput) error {
 	return nil
 }
 
+func validateNodeFiles(files []domain.NodeFile) ([]domain.NodeFile, error) {
+	if len(files) > 100 {
+		return nil, errors.New("mind map node has too many files")
+	}
+	result := make([]domain.NodeFile, len(files))
+	for index, item := range files {
+		item.File = strings.TrimSpace(item.File)
+		item.Method = strings.TrimSpace(item.Method)
+		if item.File == "" {
+			return nil, fmt.Errorf("mind map node file %d requires a file path", index+1)
+		}
+		if len(item.File) > 2000 {
+			return nil, fmt.Errorf("mind map node file %d path is too long", index+1)
+		}
+		if item.Method == "" {
+			return nil, fmt.Errorf("mind map node file %d requires a method", index+1)
+		}
+		if len(item.Method) > 500 {
+			return nil, fmt.Errorf("mind map node file %d method is too long", index+1)
+		}
+		if item.StartLine < 1 || item.EndLine < item.StartLine {
+			return nil, fmt.Errorf("mind map node file %d has an invalid line range", index+1)
+		}
+		result[index] = item
+	}
+	return result, nil
+}
+
 func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 	type candidate struct {
 		match NodeMatchDTO
@@ -621,7 +819,15 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 		id := strings.ToLower(string(node.ID))
 		title := strings.ToLower(node.Title)
 		content := strings.ToLower(node.Content)
-		searchable := id + "\n" + title + "\n" + content
+		fileLocations := strings.Builder{}
+		for _, item := range node.Files {
+			fileLocations.WriteString("\n")
+			fileLocations.WriteString(strings.ToLower(item.File))
+			fileLocations.WriteString("\n")
+			fileLocations.WriteString(strings.ToLower(item.Method))
+		}
+		files := fileLocations.String()
+		searchable := id + "\n" + title + "\n" + content + files
 		matched := true
 		for _, term := range terms {
 			if !strings.Contains(searchable, term) {
@@ -632,7 +838,7 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 		if !matched {
 			continue
 		}
-		fields := make([]string, 0, 3)
+		fields := make([]string, 0, 4)
 		score := 0
 		if containsAny(id, terms) {
 			fields = append(fields, "id")
@@ -645,6 +851,10 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 		if containsAny(content, terms) {
 			fields = append(fields, "content")
 			score += 20
+		}
+		if containsAny(files, terms) {
+			fields = append(fields, "files")
+			score += 15
 		}
 		if id == normalizedQuery {
 			score += 200
@@ -790,7 +1000,7 @@ func toDTO(graph domain.Graph, sessionID domain.SessionID) GraphDTO {
 	dto := GraphDTO{ProjectID: graph.ProjectID, SessionID: sessionID, UpdatedAt: graph.UpdatedAt}
 	dto.Nodes = make([]NodeDTO, 0, len(graph.Nodes))
 	for _, node := range graph.Nodes {
-		dto.Nodes = append(dto.Nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeUnchanged})
+		dto.Nodes = append(dto.Nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeUnchanged})
 	}
 	dto.Edges = make([]EdgeDTO, 0, len(graph.Edges))
 	for _, edge := range graph.Edges {
@@ -812,7 +1022,7 @@ func toDiffDTO(base, current domain.Graph, sessionID domain.SessionID) GraphDTO 
 		baseNode, found := baseByID[node.ID]
 		if !found {
 			node.ChangeType = NodeAdded
-		} else if node.Title != baseNode.Title || node.Content != baseNode.Content {
+		} else if node.Title != baseNode.Title || node.Content != baseNode.Content || !slices.Equal(node.Files, baseNode.Files) {
 			node.ChangeType = NodeModified
 		}
 	}
@@ -821,7 +1031,7 @@ func toDiffDTO(base, current domain.Graph, sessionID domain.SessionID) GraphDTO 
 			continue
 		}
 		dto.Nodes = append(dto.Nodes, NodeDTO{
-			ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeDeleted,
+			ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeDeleted,
 		})
 	}
 	return dto
@@ -841,8 +1051,8 @@ func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.No
 		baseNode, found := baseNodes[node.ID]
 		if !found {
 			addedNodeIDs[node.ID] = struct{}{}
-			nodes = append(nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeAdded})
-		} else if node.Title != baseNode.Title || node.Content != baseNode.Content {
+			nodes = append(nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeAdded})
+		} else if node.Title != baseNode.Title || node.Content != baseNode.Content || !slices.Equal(node.Files, baseNode.Files) {
 			modifiedNodeIDs = append(modifiedNodeIDs, node.ID)
 		}
 	}

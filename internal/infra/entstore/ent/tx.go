@@ -16,8 +16,12 @@ type Tx struct {
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
+	// MindMapEdge is the client for interacting with the MindMapEdge builders.
+	MindMapEdge *MindMapEdgeClient
 	// MindMapGraph is the client for interacting with the MindMapGraph builders.
 	MindMapGraph *MindMapGraphClient
+	// MindMapNode is the client for interacting with the MindMapNode builders.
+	MindMapNode *MindMapNodeClient
 	// MindMapOverlay is the client for interacting with the MindMapOverlay builders.
 	MindMapOverlay *MindMapOverlayClient
 	// MindMapTask is the client for interacting with the MindMapTask builders.
@@ -183,7 +187,9 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.EventRecord = NewEventRecordClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
+	tx.MindMapEdge = NewMindMapEdgeClient(tx.config)
 	tx.MindMapGraph = NewMindMapGraphClient(tx.config)
+	tx.MindMapNode = NewMindMapNodeClient(tx.config)
 	tx.MindMapOverlay = NewMindMapOverlayClient(tx.config)
 	tx.MindMapTask = NewMindMapTaskClient(tx.config)
 	tx.NodeRun = NewNodeRunClient(tx.config)

@@ -7,7 +7,9 @@ import (
 
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapnode"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapoverlay"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmaptask"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -111,6 +113,20 @@ func init() {
 	mergerecordDescCreatedAt := mergerecordFields[13].Descriptor()
 	// mergerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
 	mergerecord.DefaultCreatedAt = mergerecordDescCreatedAt.Default.(func() time.Time)
+	mindmapedgeFields := schema.MindMapEdge{}.Fields()
+	_ = mindmapedgeFields
+	// mindmapedgeDescProjectID is the schema descriptor for project_id field.
+	mindmapedgeDescProjectID := mindmapedgeFields[0].Descriptor()
+	// mindmapedge.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	mindmapedge.ProjectIDValidator = mindmapedgeDescProjectID.Validators[0].(func(string) error)
+	// mindmapedgeDescSessionID is the schema descriptor for session_id field.
+	mindmapedgeDescSessionID := mindmapedgeFields[1].Descriptor()
+	// mindmapedge.DefaultSessionID holds the default value on creation for the session_id field.
+	mindmapedge.DefaultSessionID = mindmapedgeDescSessionID.Default.(string)
+	// mindmapedgeDescEdgeID is the schema descriptor for edge_id field.
+	mindmapedgeDescEdgeID := mindmapedgeFields[2].Descriptor()
+	// mindmapedge.EdgeIDValidator is a validator for the "edge_id" field. It is called by the builders before save.
+	mindmapedge.EdgeIDValidator = mindmapedgeDescEdgeID.Validators[0].(func(string) error)
 	mindmapgraphFields := schema.MindMapGraph{}.Fields()
 	_ = mindmapgraphFields
 	// mindmapgraphDescNodes is the schema descriptor for nodes field.
@@ -131,6 +147,20 @@ func init() {
 	mindmapgraph.DefaultUpdatedAt = mindmapgraphDescUpdatedAt.Default.(func() time.Time)
 	// mindmapgraph.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	mindmapgraph.UpdateDefaultUpdatedAt = mindmapgraphDescUpdatedAt.UpdateDefault.(func() time.Time)
+	mindmapnodeFields := schema.MindMapNode{}.Fields()
+	_ = mindmapnodeFields
+	// mindmapnodeDescProjectID is the schema descriptor for project_id field.
+	mindmapnodeDescProjectID := mindmapnodeFields[0].Descriptor()
+	// mindmapnode.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	mindmapnode.ProjectIDValidator = mindmapnodeDescProjectID.Validators[0].(func(string) error)
+	// mindmapnodeDescSessionID is the schema descriptor for session_id field.
+	mindmapnodeDescSessionID := mindmapnodeFields[1].Descriptor()
+	// mindmapnode.DefaultSessionID holds the default value on creation for the session_id field.
+	mindmapnode.DefaultSessionID = mindmapnodeDescSessionID.Default.(string)
+	// mindmapnodeDescNodeID is the schema descriptor for node_id field.
+	mindmapnodeDescNodeID := mindmapnodeFields[2].Descriptor()
+	// mindmapnode.NodeIDValidator is a validator for the "node_id" field. It is called by the builders before save.
+	mindmapnode.NodeIDValidator = mindmapnodeDescNodeID.Validators[0].(func(string) error)
 	mindmapoverlayFields := schema.MindMapOverlay{}.Fields()
 	_ = mindmapoverlayFields
 	// mindmapoverlayDescProjectID is the schema descriptor for project_id field.
