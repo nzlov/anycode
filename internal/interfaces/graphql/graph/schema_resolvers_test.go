@@ -273,15 +273,15 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 }
 
 func TestGeneralSettingsResolversForwardSettingsUseCase(t *testing.T) {
-	settings := &fakeSettingUseCase{generalResult: settingapp.GeneralSettingsDTO{AgentMaxConcurrent: 4, AgentWritableRoots: []string{"/cache/go-build"}}}
+	settings := &fakeSettingUseCase{generalResult: settingapp.GeneralSettingsDTO{AgentMaxConcurrent: 4, AgentWritableRoots: []string{"/cache/go-build"}, SendShortcut: settingdomain.SendShortcutShiftEnter}}
 	resolver := NewResolver(UseCases{Settings: settings})
 
 	got, err := resolver.Query().GeneralSettings(context.Background())
-	if err != nil || got.AgentMaxConcurrent != 4 || !slices.Equal(got.AgentWritableRoots, []string{"/cache/go-build"}) {
+	if err != nil || got.AgentMaxConcurrent != 4 || got.SendShortcut != "shift_enter" || !slices.Equal(got.AgentWritableRoots, []string{"/cache/go-build"}) {
 		t.Fatalf("GeneralSettings() = %#v, %v", got, err)
 	}
-	updated, err := resolver.Mutation().UpdateGeneralSettings(context.Background(), model.UpdateGeneralSettingsInput{AgentMaxConcurrent: 6, AgentWritableRoots: []string{"/go"}})
-	if err != nil || settings.generalInput.AgentMaxConcurrent != 6 || !slices.Equal(settings.generalInput.AgentWritableRoots, []string{"/go"}) || updated.AgentMaxConcurrent != 4 {
+	updated, err := resolver.Mutation().UpdateGeneralSettings(context.Background(), model.UpdateGeneralSettingsInput{AgentMaxConcurrent: 6, AgentWritableRoots: []string{"/go"}, SendShortcut: "enter"})
+	if err != nil || settings.generalInput.AgentMaxConcurrent != 6 || settings.generalInput.SendShortcut != settingdomain.SendShortcutEnter || !slices.Equal(settings.generalInput.AgentWritableRoots, []string{"/go"}) || updated.AgentMaxConcurrent != 4 {
 		t.Fatalf("UpdateGeneralSettings() = %#v, input=%#v, error=%v", updated, settings.generalInput, err)
 	}
 }

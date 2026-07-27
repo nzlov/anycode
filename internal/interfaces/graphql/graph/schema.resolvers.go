@@ -39,6 +39,7 @@ func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input mode
 	dto, err := r.UseCases.Settings.UpdateGeneralSettings(ctx, settingapp.UpdateGeneralSettingsInput{
 		AgentMaxConcurrent: input.AgentMaxConcurrent,
 		AgentWritableRoots: input.AgentWritableRoots,
+		SendShortcut:       settingdomain.SendShortcut(input.SendShortcut),
 		MindMapEnabled:     input.MindMapEnabled, MindMapMode: settingdomain.MindMapMode(input.MindMapMode),
 		MindMapModel: input.MindMapModel, MindMapReasoningEffort: input.MindMapReasoningEffort,
 		MindMapMaxConcurrent: input.MindMapMaxConcurrent,

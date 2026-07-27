@@ -38,6 +38,7 @@ type UseCase interface {
 type UpdateGeneralSettingsInput struct {
 	AgentMaxConcurrent     int
 	AgentWritableRoots     []string
+	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
 	MindMapMode            domain.MindMapMode
 	MindMapModel           string
@@ -48,6 +49,7 @@ type UpdateGeneralSettingsInput struct {
 type GeneralSettingsDTO struct {
 	AgentMaxConcurrent     int
 	AgentWritableRoots     []string
+	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
 	MindMapMode            domain.MindMapMode
 	MindMapModel           string
@@ -178,9 +180,13 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 	if configuration.AgentMaxConcurrent <= 0 {
 		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
 	}
+	if !configuration.SendShortcut.Valid() {
+		configuration.SendShortcut = domain.SendShortcutShiftEnter
+	}
 	return GeneralSettingsDTO{
 		AgentMaxConcurrent:     configuration.AgentMaxConcurrent,
 		AgentWritableRoots:     append([]string{}, configuration.AgentWritableRoots...),
+		SendShortcut:           configuration.SendShortcut,
 		MindMapEnabled:         configuration.MindMap.Enabled,
 		MindMapMode:            configuration.MindMap.Mode,
 		MindMapModel:           configuration.MindMap.Model,
@@ -199,6 +205,13 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	writableRoots, err := normalizeAgentWritableRoots(input.AgentWritableRoots)
 	if err != nil {
 		return GeneralSettingsDTO{}, err
+	}
+	sendShortcut := input.SendShortcut
+	if sendShortcut == "" {
+		sendShortcut = domain.SendShortcutShiftEnter
+	}
+	if !sendShortcut.Valid() {
+		return GeneralSettingsDTO{}, validationError("sendShortcut", "send shortcut is invalid")
 	}
 	mindMapMode := input.MindMapMode
 	if mindMapMode == "" {
@@ -224,6 +237,7 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	}
 	configuration.AgentMaxConcurrent = input.AgentMaxConcurrent
 	configuration.AgentWritableRoots = writableRoots
+	configuration.SendShortcut = sendShortcut
 	configuration.MindMap = mindMap
 	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update general settings failed").WithRetryable(true)
@@ -236,6 +250,7 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	}
 	return GeneralSettingsDTO{
 		AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots,
+		SendShortcut:   sendShortcut,
 		MindMapEnabled: mindMap.Enabled, MindMapMode: mindMap.Mode, MindMapModel: mindMap.Model,
 		MindMapReasoningEffort: mindMap.ReasoningEffort, MindMapMaxConcurrent: mindMap.MaxConcurrent,
 	}, nil

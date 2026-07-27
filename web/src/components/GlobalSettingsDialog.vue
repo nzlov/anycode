@@ -123,6 +123,28 @@
                   />
                 </q-item-section>
               </q-item>
+              <q-item>
+                <q-item-section avatar>
+                  <q-icon name="keyboard_return" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>发送快捷键</q-item-label>
+                  <q-item-label caption>未选中的回车组合用于换行</q-item-label>
+                </q-item-section>
+                <q-item-section side class="appearance-settings-list__control">
+                  <q-select
+                    v-model="general.sendShortcut"
+                    outlined
+                    dense
+                    emit-value
+                    map-options
+                    options-dense
+                    :options="sendShortcutOptions"
+                    aria-label="发送快捷键"
+                    :disable="generalLoading || generalSaving"
+                  />
+                </q-item-section>
+              </q-item>
               <q-item class="column items-stretch">
                 <q-item-section>
                   <q-item-label>Agent 目录白名单</q-item-label>
@@ -530,6 +552,7 @@ import {
   wallpaperColorSchemeOptions,
 } from '@/services/appearanceSettings';
 import {
+  defaultSendShortcut,
   getGeneralSettings,
   type GeneralSettings,
   updateGeneralSettings,
@@ -560,6 +583,7 @@ const activeSection = ref<'general' | 'appearance' | 'notifications' | 'quick_co
 const defaultGeneral: GeneralSettings = {
   agentMaxConcurrent: 2,
   agentWritableRoots: [],
+  sendShortcut: defaultSendShortcut,
   mindMapEnabled: false,
   mindMapMode: 'realtime',
   mindMapModel: '',
@@ -569,6 +593,10 @@ const defaultGeneral: GeneralSettings = {
 const mindMapModeOptions = [
   { label: '实时', value: 'realtime' },
   { label: '异步', value: 'async' },
+];
+const sendShortcutOptions = [
+  { label: 'Enter', value: 'enter' },
+  { label: 'Shift+Enter', value: 'shift_enter' },
 ];
 const general = ref<GeneralSettings>({ ...defaultGeneral });
 const persistedGeneral = ref<GeneralSettings>({ ...defaultGeneral });
@@ -615,6 +643,7 @@ const generalSettingsValid = computed(
 const generalSettingsChanged = computed(
   () =>
     general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent ||
+    general.value.sendShortcut !== persistedGeneral.value.sendShortcut ||
     general.value.mindMapEnabled !== persistedGeneral.value.mindMapEnabled ||
     general.value.mindMapMode !== persistedGeneral.value.mindMapMode ||
     general.value.mindMapModel !== persistedGeneral.value.mindMapModel ||
@@ -693,6 +722,7 @@ async function saveGeneralSettings() {
     general.value = await updateGeneralSettings({
       agentMaxConcurrent: general.value.agentMaxConcurrent,
       agentWritableRoots: parsedAgentWritableRoots.value,
+      sendShortcut: general.value.sendShortcut,
       mindMapEnabled: general.value.mindMapEnabled,
       mindMapMode: general.value.mindMapMode,
       mindMapModel: general.value.mindMapModel,
@@ -701,6 +731,7 @@ async function saveGeneralSettings() {
     });
     persistedGeneral.value = { ...general.value };
     agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
+    generalSettingsInvalidation?.setSendShortcut(general.value.sendShortcut);
     generalSettingsInvalidation?.invalidate();
   } catch {
     general.value = { ...persistedGeneral.value };
@@ -848,7 +879,11 @@ watch(activeSection, (section) => {
 });
 
 watch(
-  [() => general.value.agentMaxConcurrent, agentWritableRootsText],
+  [
+    () => general.value.agentMaxConcurrent,
+    () => general.value.sendShortcut,
+    agentWritableRootsText,
+  ],
   scheduleGeneralSettingsSave,
 );
 

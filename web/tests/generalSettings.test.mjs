@@ -20,6 +20,11 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /Agent 目录白名单/);
   assert.match(settingsSource, /agentWritableRootsText/);
   assert.match(settingsSource, /每行必须是绝对路径/);
+  assert.match(serviceSource, /sendShortcut: SendShortcut/);
+  assert.match(settingsSource, /发送快捷键/);
+  assert.match(settingsSource, /v-model="general\.sendShortcut"/);
+  assert.match(settingsSource, /\{ label: 'Enter', value: 'enter' \}/);
+  assert.match(settingsSource, /\{ label: 'Shift\+Enter', value: 'shift_enter' \}/);
   assert.match(settingsSource, /class="general-thinking-settings"/);
   assert.match(settingsSource, /<q-toggle\s+v-model="thinkingPhrasesEnabled"/);
   assert.match(
@@ -39,7 +44,23 @@ test('general settings save valid changes after a debounce without a separating 
   assert.match(settingsSource, /const generalSaveDebounceMs = 500/);
   assert.match(
     settingsSource,
-    /watch\(\s*\[\(\) => general\.value\.agentMaxConcurrent, agentWritableRootsText\][\s\S]*?generalSettingsValid\.value[\s\S]*?setTimeout\([\s\S]*?saveGeneralSettings\(\)/,
+    /watch\(\s*\[[\s\S]*?general\.value\.agentMaxConcurrent[\s\S]*?general\.value\.sendShortcut[\s\S]*?agentWritableRootsText[\s\S]*?scheduleGeneralSettingsSave/,
+  );
+  assert.match(
+    settingsSource,
+    /function scheduleGeneralSettingsSave\(\)[\s\S]*?generalSettingsValid\.value[\s\S]*?setTimeout\([\s\S]*?saveGeneralSettings\(\)/,
   );
   assert.match(settingsSource, /onBeforeUnmount\([\s\S]*?saveGeneralSettings\(\)/);
+});
+
+test('prompt composer dynamically applies the selected send shortcut', () => {
+  const composerSource = readSource('../src/components/PromptComposer.vue');
+  const invalidationSource = readSource('../src/composables/useGeneralSettingsInvalidation.ts');
+
+  assert.doesNotMatch(composerSource, /@keydown\.shift\.enter/);
+  assert.match(composerSource, /sendShortcut\.value === 'enter' && !event\.shiftKey/);
+  assert.match(composerSource, /sendShortcut\.value === 'shift_enter' && event\.shiftKey/);
+  assert.match(composerSource, /event\.preventDefault\(\);\s*emit\('submit'\)/);
+  assert.match(invalidationSource, /sendShortcut: readonly\(sendShortcut\)/);
+  assert.match(invalidationSource, /getGeneralSettings\(\)/);
 });

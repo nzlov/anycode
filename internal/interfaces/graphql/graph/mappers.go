@@ -63,6 +63,7 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {
 	return &model.GeneralSettings{
 		AgentMaxConcurrent: dto.AgentMaxConcurrent, AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
+		SendShortcut:   string(dto.SendShortcut),
 		MindMapEnabled: dto.MindMapEnabled, MindMapMode: string(dto.MindMapMode), MindMapModel: dto.MindMapModel,
 		MindMapReasoningEffort: dto.MindMapReasoningEffort, MindMapMaxConcurrent: dto.MindMapMaxConcurrent,
 	}

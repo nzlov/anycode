@@ -55,6 +55,17 @@ type SolidTheme string
 
 type MindMapMode string
 
+type SendShortcut string
+
+const (
+	SendShortcutEnter      SendShortcut = "enter"
+	SendShortcutShiftEnter SendShortcut = "shift_enter"
+)
+
+func (shortcut SendShortcut) Valid() bool {
+	return shortcut == SendShortcutEnter || shortcut == SendShortcutShiftEnter
+}
+
 const (
 	MindMapModeRealtime MindMapMode = "realtime"
 	MindMapModeAsync    MindMapMode = "async"
@@ -131,6 +142,7 @@ func (scheme WallpaperColorScheme) Valid() bool {
 type SystemConfiguration struct {
 	AgentMaxConcurrent   int
 	AgentWritableRoots   []string
+	SendShortcut         SendShortcut
 	MindMap              MindMapConfiguration
 	BackgroundType       BackgroundType
 	SolidTheme           SolidTheme
@@ -144,6 +156,7 @@ type SystemConfiguration struct {
 func DefaultSystemConfiguration() SystemConfiguration {
 	return SystemConfiguration{
 		AgentMaxConcurrent: 2,
+		SendShortcut:       SendShortcutShiftEnter,
 		MindMap: MindMapConfiguration{
 			Mode: MindMapModeRealtime, MaxConcurrent: 1,
 		},

@@ -69,6 +69,11 @@ func AgentMaxConcurrent(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldAgentMaxConcurrent, v))
 }
 
+// SendShortcut applies equality check predicate on the "send_shortcut" field. It's identical to SendShortcutEQ.
+func SendShortcut(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldSendShortcut, v))
+}
+
 // MindMapEnabled applies equality check predicate on the "mind_map_enabled" field. It's identical to MindMapEnabledEQ.
 func MindMapEnabled(v bool) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapEnabled, v))
@@ -172,6 +177,71 @@ func AgentMaxConcurrentLT(v int) predicate.SystemConfiguration {
 // AgentMaxConcurrentLTE applies the LTE predicate on the "agent_max_concurrent" field.
 func AgentMaxConcurrentLTE(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldLTE(FieldAgentMaxConcurrent, v))
+}
+
+// SendShortcutEQ applies the EQ predicate on the "send_shortcut" field.
+func SendShortcutEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldSendShortcut, v))
+}
+
+// SendShortcutNEQ applies the NEQ predicate on the "send_shortcut" field.
+func SendShortcutNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldSendShortcut, v))
+}
+
+// SendShortcutIn applies the In predicate on the "send_shortcut" field.
+func SendShortcutIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldSendShortcut, vs...))
+}
+
+// SendShortcutNotIn applies the NotIn predicate on the "send_shortcut" field.
+func SendShortcutNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldSendShortcut, vs...))
+}
+
+// SendShortcutGT applies the GT predicate on the "send_shortcut" field.
+func SendShortcutGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldSendShortcut, v))
+}
+
+// SendShortcutGTE applies the GTE predicate on the "send_shortcut" field.
+func SendShortcutGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldSendShortcut, v))
+}
+
+// SendShortcutLT applies the LT predicate on the "send_shortcut" field.
+func SendShortcutLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldSendShortcut, v))
+}
+
+// SendShortcutLTE applies the LTE predicate on the "send_shortcut" field.
+func SendShortcutLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldSendShortcut, v))
+}
+
+// SendShortcutContains applies the Contains predicate on the "send_shortcut" field.
+func SendShortcutContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldSendShortcut, v))
+}
+
+// SendShortcutHasPrefix applies the HasPrefix predicate on the "send_shortcut" field.
+func SendShortcutHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldSendShortcut, v))
+}
+
+// SendShortcutHasSuffix applies the HasSuffix predicate on the "send_shortcut" field.
+func SendShortcutHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldSendShortcut, v))
+}
+
+// SendShortcutEqualFold applies the EqualFold predicate on the "send_shortcut" field.
+func SendShortcutEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldSendShortcut, v))
+}
+
+// SendShortcutContainsFold applies the ContainsFold predicate on the "send_shortcut" field.
+func SendShortcutContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldSendShortcut, v))
 }
 
 // MindMapEnabledEQ applies the EQ predicate on the "mind_map_enabled" field.

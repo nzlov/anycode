@@ -15031,6 +15031,7 @@ type SystemConfigurationMutation struct {
 	addagent_max_concurrent    *int
 	agent_writable_roots       *[]string
 	appendagent_writable_roots []string
+	send_shortcut              *string
 	mind_map_enabled           *bool
 	mind_map_mode              *string
 	mind_map_model             *string
@@ -15261,6 +15262,42 @@ func (m *SystemConfigurationMutation) AppendedAgentWritableRoots() ([]string, bo
 func (m *SystemConfigurationMutation) ResetAgentWritableRoots() {
 	m.agent_writable_roots = nil
 	m.appendagent_writable_roots = nil
+}
+
+// SetSendShortcut sets the "send_shortcut" field.
+func (m *SystemConfigurationMutation) SetSendShortcut(s string) {
+	m.send_shortcut = &s
+}
+
+// SendShortcut returns the value of the "send_shortcut" field in the mutation.
+func (m *SystemConfigurationMutation) SendShortcut() (r string, exists bool) {
+	v := m.send_shortcut
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSendShortcut returns the old "send_shortcut" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldSendShortcut(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSendShortcut is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSendShortcut requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSendShortcut: %w", err)
+	}
+	return oldValue.SendShortcut, nil
+}
+
+// ResetSendShortcut resets all changes to the "send_shortcut" field.
+func (m *SystemConfigurationMutation) ResetSendShortcut() {
+	m.send_shortcut = nil
 }
 
 // SetMindMapEnabled sets the "mind_map_enabled" field.
@@ -15805,12 +15842,15 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 16)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
 	if m.agent_writable_roots != nil {
 		fields = append(fields, systemconfiguration.FieldAgentWritableRoots)
+	}
+	if m.send_shortcut != nil {
+		fields = append(fields, systemconfiguration.FieldSendShortcut)
 	}
 	if m.mind_map_enabled != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapEnabled)
@@ -15863,6 +15903,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 		return m.AgentMaxConcurrent()
 	case systemconfiguration.FieldAgentWritableRoots:
 		return m.AgentWritableRoots()
+	case systemconfiguration.FieldSendShortcut:
+		return m.SendShortcut()
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.MindMapEnabled()
 	case systemconfiguration.FieldMindMapMode:
@@ -15902,6 +15944,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 		return m.OldAgentMaxConcurrent(ctx)
 	case systemconfiguration.FieldAgentWritableRoots:
 		return m.OldAgentWritableRoots(ctx)
+	case systemconfiguration.FieldSendShortcut:
+		return m.OldSendShortcut(ctx)
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.OldMindMapEnabled(ctx)
 	case systemconfiguration.FieldMindMapMode:
@@ -15950,6 +15994,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAgentWritableRoots(v)
+		return nil
+	case systemconfiguration.FieldSendShortcut:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSendShortcut(v)
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		v, ok := value.(bool)
@@ -16135,6 +16186,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 		return nil
 	case systemconfiguration.FieldAgentWritableRoots:
 		m.ResetAgentWritableRoots()
+		return nil
+	case systemconfiguration.FieldSendShortcut:
+		m.ResetSendShortcut()
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		m.ResetMindMapEnabled()

@@ -17,6 +17,8 @@ const (
 	FieldAgentMaxConcurrent = "agent_max_concurrent"
 	// FieldAgentWritableRoots holds the string denoting the agent_writable_roots field in the database.
 	FieldAgentWritableRoots = "agent_writable_roots"
+	// FieldSendShortcut holds the string denoting the send_shortcut field in the database.
+	FieldSendShortcut = "send_shortcut"
 	// FieldMindMapEnabled holds the string denoting the mind_map_enabled field in the database.
 	FieldMindMapEnabled = "mind_map_enabled"
 	// FieldMindMapMode holds the string denoting the mind_map_mode field in the database.
@@ -52,6 +54,7 @@ var Columns = []string{
 	FieldID,
 	FieldAgentMaxConcurrent,
 	FieldAgentWritableRoots,
+	FieldSendShortcut,
 	FieldMindMapEnabled,
 	FieldMindMapMode,
 	FieldMindMapModel,
@@ -82,6 +85,10 @@ var (
 	DefaultAgentMaxConcurrent int
 	// DefaultAgentWritableRoots holds the default value on creation for the "agent_writable_roots" field.
 	DefaultAgentWritableRoots []string
+	// DefaultSendShortcut holds the default value on creation for the "send_shortcut" field.
+	DefaultSendShortcut string
+	// SendShortcutValidator is a validator for the "send_shortcut" field. It is called by the builders before save.
+	SendShortcutValidator func(string) error
 	// DefaultMindMapEnabled holds the default value on creation for the "mind_map_enabled" field.
 	DefaultMindMapEnabled bool
 	// DefaultMindMapMode holds the default value on creation for the "mind_map_mode" field.
@@ -129,6 +136,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByAgentMaxConcurrent orders the results by the agent_max_concurrent field.
 func ByAgentMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAgentMaxConcurrent, opts...).ToFunc()
+}
+
+// BySendShortcut orders the results by the send_shortcut field.
+func BySendShortcut(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSendShortcut, opts...).ToFunc()
 }
 
 // ByMindMapEnabled orders the results by the mind_map_enabled field.

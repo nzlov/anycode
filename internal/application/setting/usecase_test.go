@@ -115,15 +115,16 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	service := New(repo, WithConcurrencyLimitChanged(func() { changed++ }))
 
 	got, err := service.GetGeneralSettings(context.Background())
-	if err != nil || got.AgentMaxConcurrent != 2 || len(got.AgentWritableRoots) != 0 {
+	if err != nil || got.AgentMaxConcurrent != 2 || len(got.AgentWritableRoots) != 0 || got.SendShortcut != domain.SendShortcutShiftEnter {
 		t.Fatalf("GetGeneralSettings() = %#v, %v", got, err)
 	}
 	got, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{
 		AgentMaxConcurrent: 4,
 		AgentWritableRoots: []string{" /home/anycode/.cache/go-build ", "/home/anycode/go", "/home/anycode/go"},
+		SendShortcut:       domain.SendShortcutEnter,
 	})
 	wantRoots := []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}
-	if err != nil || got.AgentMaxConcurrent != 4 || !slices.Equal(got.AgentWritableRoots, wantRoots) || !slices.Equal(repo.configuration.AgentWritableRoots, wantRoots) || changed != 1 {
+	if err != nil || got.AgentMaxConcurrent != 4 || got.SendShortcut != domain.SendShortcutEnter || !slices.Equal(got.AgentWritableRoots, wantRoots) || !slices.Equal(repo.configuration.AgentWritableRoots, wantRoots) || repo.configuration.SendShortcut != domain.SendShortcutEnter || changed != 1 {
 		t.Fatalf("UpdateGeneralSettings() = %#v, %v; stored=%#v changed=%d", got, err, repo.configuration, changed)
 	}
 	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 0})
@@ -134,6 +135,8 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"relative/path"}})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"/"}})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, SendShortcut: "space"})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 

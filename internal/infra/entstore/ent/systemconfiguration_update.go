@@ -62,6 +62,20 @@ func (_u *SystemConfigurationUpdate) AppendAgentWritableRoots(v []string) *Syste
 	return _u
 }
 
+// SetSendShortcut sets the "send_shortcut" field.
+func (_u *SystemConfigurationUpdate) SetSendShortcut(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetSendShortcut(v)
+	return _u
+}
+
+// SetNillableSendShortcut sets the "send_shortcut" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableSendShortcut(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetSendShortcut(*v)
+	}
+	return _u
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_u *SystemConfigurationUpdate) SetMindMapEnabled(v bool) *SystemConfigurationUpdate {
 	_u.mutation.SetMindMapEnabled(v)
@@ -293,6 +307,11 @@ func (_u *SystemConfigurationUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SystemConfigurationUpdate) check() error {
+	if v, ok := _u.mutation.SendShortcut(); ok {
+		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
+			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MindMapMode(); ok {
 		if err := systemconfiguration.MindMapModeValidator(v); err != nil {
 			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
@@ -341,6 +360,9 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
 		})
+	}
+	if value, ok := _u.mutation.SendShortcut(); ok {
+		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)
@@ -437,6 +459,20 @@ func (_u *SystemConfigurationUpdateOne) SetAgentWritableRoots(v []string) *Syste
 // AppendAgentWritableRoots appends value to the "agent_writable_roots" field.
 func (_u *SystemConfigurationUpdateOne) AppendAgentWritableRoots(v []string) *SystemConfigurationUpdateOne {
 	_u.mutation.AppendAgentWritableRoots(v)
+	return _u
+}
+
+// SetSendShortcut sets the "send_shortcut" field.
+func (_u *SystemConfigurationUpdateOne) SetSendShortcut(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetSendShortcut(v)
+	return _u
+}
+
+// SetNillableSendShortcut sets the "send_shortcut" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableSendShortcut(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetSendShortcut(*v)
+	}
 	return _u
 }
 
@@ -684,6 +720,11 @@ func (_u *SystemConfigurationUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SystemConfigurationUpdateOne) check() error {
+	if v, ok := _u.mutation.SendShortcut(); ok {
+		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
+			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MindMapMode(); ok {
 		if err := systemconfiguration.MindMapModeValidator(v); err != nil {
 			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
@@ -749,6 +790,9 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
 		})
+	}
+	if value, ok := _u.mutation.SendShortcut(); ok {
+		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

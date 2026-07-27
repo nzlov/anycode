@@ -178,6 +178,7 @@ type FileDiff struct {
 type GeneralSettings struct {
 	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
 	AgentWritableRoots     []string `json:"agentWritableRoots"`
+	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`
 	MindMapMode            string   `json:"mindMapMode"`
 	MindMapModel           string   `json:"mindMapModel"`
@@ -817,6 +818,7 @@ type UpdateAppearanceSettingsInput struct {
 type UpdateGeneralSettingsInput struct {
 	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
 	AgentWritableRoots     []string `json:"agentWritableRoots"`
+	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`
 	MindMapMode            string   `json:"mindMapMode"`
 	MindMapModel           string   `json:"mindMapModel"`

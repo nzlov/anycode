@@ -125,7 +125,6 @@
         @click="queuePromptCompletionRefresh"
         @keyup="onPromptKeyup"
         @keydown="onPromptKeydown"
-        @keydown.shift.enter.prevent="emit('submit')"
         @blur="onPromptBlur"
       />
 
@@ -302,6 +301,8 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from
 import { useQuasar, type QFile, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
+import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
+import { defaultSendShortcut } from '@/services/generalSettings';
 import { filesFromTransfer } from '@/services/promptAttachments';
 import {
   activePromptCompletion,
@@ -375,6 +376,10 @@ const emit = defineEmits<{
 }>();
 
 const $q = useQuasar();
+const generalSettingsInvalidation = useGeneralSettingsInvalidation();
+const sendShortcut = computed(
+  () => generalSettingsInvalidation?.sendShortcut.value ?? defaultSendShortcut,
+);
 const previewOpen = ref(false);
 const previewName = ref('');
 const previewKind = ref<'image' | 'video' | ''>('');
@@ -683,6 +688,14 @@ function onPromptKeydown(event: KeyboardEvent) {
     event.preventDefault();
     closePromptCompletion();
     return;
+  }
+  if (
+    event.key === 'Enter' &&
+    ((sendShortcut.value === 'enter' && !event.shiftKey) ||
+      (sendShortcut.value === 'shift_enter' && event.shiftKey))
+  ) {
+    event.preventDefault();
+    emit('submit');
   }
 }
 

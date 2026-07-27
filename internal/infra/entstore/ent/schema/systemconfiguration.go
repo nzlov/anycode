@@ -19,6 +19,7 @@ func (SystemConfiguration) Fields() []ent.Field {
 		field.JSON("agent_writable_roots", []string{}).
 			Default([]string{}).
 			Annotations(entsql.DefaultExpr("'[]'")),
+		field.String("send_shortcut").NotEmpty().Default("shift_enter"),
 		field.Bool("mind_map_enabled").Default(false),
 		field.String("mind_map_mode").NotEmpty().Default("realtime"),
 		field.String("mind_map_model").Default(""),

@@ -21,6 +21,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 	return setting.SystemConfiguration{
 		AgentMaxConcurrent: row.AgentMaxConcurrent,
 		AgentWritableRoots: append([]string(nil), row.AgentWritableRoots...),
+		SendShortcut:       setting.SendShortcut(row.SendShortcut),
 		MindMap: setting.MindMapConfiguration{
 			Enabled: row.MindMapEnabled, Mode: setting.MindMapMode(row.MindMapMode), Model: row.MindMapModel,
 			ReasoningEffort: row.MindMapReasoningEffort, MaxConcurrent: row.MindMapMaxConcurrent,
@@ -39,6 +40,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 	_, err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetAgentWritableRoots(configuration.AgentWritableRoots).
+		SetSendShortcut(string(configuration.SendShortcut)).
 		SetMindMapEnabled(configuration.MindMap.Enabled).
 		SetMindMapMode(string(configuration.MindMap.Mode)).
 		SetMindMapModel(configuration.MindMap.Model).
@@ -62,6 +64,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 		SetID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetAgentWritableRoots(configuration.AgentWritableRoots).
+		SetSendShortcut(string(configuration.SendShortcut)).
 		SetMindMapEnabled(configuration.MindMap.Enabled).
 		SetMindMapMode(string(configuration.MindMap.Mode)).
 		SetMindMapModel(configuration.MindMap.Model).

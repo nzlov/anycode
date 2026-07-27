@@ -147,6 +147,7 @@ type ComplexityRoot struct {
 		MindMapMode            func(childComplexity int) int
 		MindMapModel           func(childComplexity int) int
 		MindMapReasoningEffort func(childComplexity int) int
+		SendShortcut           func(childComplexity int) int
 	}
 
 	GitBranch struct {
@@ -1262,6 +1263,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.GeneralSettings.MindMapReasoningEffort(childComplexity), true
+	case "GeneralSettings.sendShortcut":
+		if e.ComplexityRoot.GeneralSettings.SendShortcut == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.SendShortcut(childComplexity), true
 
 	case "GitBranch.isCurrent":
 		if e.ComplexityRoot.GitBranch.IsCurrent == nil {
@@ -4438,6 +4445,7 @@ enum AppearanceSolidTheme {
 type GeneralSettings {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
   mindMapModel: String!
@@ -4448,6 +4456,7 @@ type GeneralSettings {
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
   mindMapModel: String!
@@ -7890,6 +7899,35 @@ func (ec *executionContext) fieldContext_GeneralSettings_agentWritableRoots(_ co
 	return fc, nil
 }
 
+func (ec *executionContext) _GeneralSettings_sendShortcut(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_sendShortcut,
+		func(ctx context.Context) (any, error) {
+			return obj.SendShortcut, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_sendShortcut(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GeneralSettings_mindMapEnabled(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8465,7 +8503,10 @@ func (ec *executionContext) _MindMapCard_nodes(ctx context.Context, field graphq
 
 func (ec *executionContext) fieldContext_MindMapCard_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object: "MindMapCard", Field: field, IsMethod: false, IsResolver: false,
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -8501,7 +8542,10 @@ func (ec *executionContext) _MindMapCard_edges(ctx context.Context, field graphq
 
 func (ec *executionContext) fieldContext_MindMapCard_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object: "MindMapCard", Field: field, IsMethod: false, IsResolver: false,
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -8537,7 +8581,10 @@ func (ec *executionContext) _MindMapCard_modifiedNodeIds(ctx context.Context, fi
 
 func (ec *executionContext) fieldContext_MindMapCard_modifiedNodeIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object: "MindMapCard", Field: field, IsMethod: false, IsResolver: false,
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
 		},
@@ -8563,7 +8610,10 @@ func (ec *executionContext) _MindMapCard_deletedNodeIds(ctx context.Context, fie
 
 func (ec *executionContext) fieldContext_MindMapCard_deletedNodeIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object: "MindMapCard", Field: field, IsMethod: false, IsResolver: false,
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
 		},
@@ -9084,6 +9134,8 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
+			case "sendShortcut":
+				return ec.fieldContext_GeneralSettings_sendShortcut(ctx, field)
 			case "mindMapEnabled":
 				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
 			case "mindMapMode":
@@ -12320,6 +12372,8 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
+			case "sendShortcut":
+				return ec.fieldContext_GeneralSettings_sendShortcut(ctx, field)
 			case "mindMapEnabled":
 				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
 			case "mindMapMode":
@@ -25803,7 +25857,7 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "mindMapEnabled", "mindMapMode", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
+	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "sendShortcut", "mindMapEnabled", "mindMapMode", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -25824,6 +25878,13 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 				return it, err
 			}
 			it.AgentWritableRoots = data
+		case "sendShortcut":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sendShortcut"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SendShortcut = data
 		case "mindMapEnabled":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapEnabled"))
 			data, err := ec.unmarshalNBoolean2bool(ctx, v)
@@ -27284,6 +27345,11 @@ func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.Select
 			}
 		case "agentWritableRoots":
 			out.Values[i] = ec._GeneralSettings_agentWritableRoots(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sendShortcut":
+			out.Values[i] = ec._GeneralSettings_sendShortcut(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -32929,16 +32995,33 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	for i := range v {
 		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
 	}
-	for _, item := range ret {
-		if item == graphql.Null {
+
+	for _, e := range ret {
+		if e == graphql.Null {
 			return graphql.Null
 		}
 	}
+
 	return ret
 }
 

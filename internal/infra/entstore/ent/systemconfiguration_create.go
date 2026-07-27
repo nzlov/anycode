@@ -40,6 +40,20 @@ func (_c *SystemConfigurationCreate) SetAgentWritableRoots(v []string) *SystemCo
 	return _c
 }
 
+// SetSendShortcut sets the "send_shortcut" field.
+func (_c *SystemConfigurationCreate) SetSendShortcut(v string) *SystemConfigurationCreate {
+	_c.mutation.SetSendShortcut(v)
+	return _c
+}
+
+// SetNillableSendShortcut sets the "send_shortcut" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableSendShortcut(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetSendShortcut(*v)
+	}
+	return _c
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_c *SystemConfigurationCreate) SetMindMapEnabled(v bool) *SystemConfigurationCreate {
 	_c.mutation.SetMindMapEnabled(v)
@@ -263,6 +277,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultAgentWritableRoots
 		_c.mutation.SetAgentWritableRoots(v)
 	}
+	if _, ok := _c.mutation.SendShortcut(); !ok {
+		v := systemconfiguration.DefaultSendShortcut
+		_c.mutation.SetSendShortcut(v)
+	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		v := systemconfiguration.DefaultMindMapEnabled
 		_c.mutation.SetMindMapEnabled(v)
@@ -317,6 +335,14 @@ func (_c *SystemConfigurationCreate) defaults() {
 func (_c *SystemConfigurationCreate) check() error {
 	if _, ok := _c.mutation.AgentMaxConcurrent(); !ok {
 		return &ValidationError{Name: "agent_max_concurrent", err: errors.New(`ent: missing required field "SystemConfiguration.agent_max_concurrent"`)}
+	}
+	if _, ok := _c.mutation.SendShortcut(); !ok {
+		return &ValidationError{Name: "send_shortcut", err: errors.New(`ent: missing required field "SystemConfiguration.send_shortcut"`)}
+	}
+	if v, ok := _c.mutation.SendShortcut(); ok {
+		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
+			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		return &ValidationError{Name: "mind_map_enabled", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_enabled"`)}
@@ -419,6 +445,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.AgentWritableRoots(); ok {
 		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
 		_node.AgentWritableRoots = value
+	}
+	if value, ok := _c.mutation.SendShortcut(); ok {
+		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
+		_node.SendShortcut = value
 	}
 	if value, ok := _c.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

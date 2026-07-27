@@ -540,6 +540,7 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "agent_max_concurrent", Type: field.TypeInt, Default: 2},
 		{Name: "agent_writable_roots", Type: field.TypeJSON, Default: schema.Expr("'[]'")},
+		{Name: "send_shortcut", Type: field.TypeString, Default: "shift_enter"},
 		{Name: "mind_map_enabled", Type: field.TypeBool, Default: false},
 		{Name: "mind_map_mode", Type: field.TypeString, Default: "realtime"},
 		{Name: "mind_map_model", Type: field.TypeString, Default: ""},

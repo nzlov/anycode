@@ -163,6 +163,7 @@ enum AppearanceSolidTheme {
 type GeneralSettings {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
   mindMapModel: String!
@@ -173,6 +174,7 @@ type GeneralSettings {
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
+  sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
   mindMapModel: String!

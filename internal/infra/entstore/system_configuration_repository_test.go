@@ -24,13 +24,14 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get default system configuration: %v", err)
 	}
-	if configuration.AgentMaxConcurrent != 2 || configuration.BackgroundType != setting.BackgroundTypeBing || configuration.SolidTheme != setting.SolidThemeVermilion || configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
+	if configuration.AgentMaxConcurrent != 2 || configuration.SendShortcut != setting.SendShortcutShiftEnter || configuration.BackgroundType != setting.BackgroundTypeBing || configuration.SolidTheme != setting.SolidThemeVermilion || configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
 		t.Fatalf("default system configuration = %#v", configuration)
 	}
 
 	configuration.BackgroundType = setting.BackgroundTypeImage
 	configuration.AgentMaxConcurrent = 5
 	configuration.AgentWritableRoots = []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}
+	configuration.SendShortcut = setting.SendShortcutEnter
 	configuration.SolidTheme = setting.SolidThemeIndigo
 	configuration.BackgroundMask = 42
 	configuration.WallpaperColorScheme = setting.WallpaperColorSchemeRainbow
@@ -44,7 +45,7 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get saved system configuration: %v", err)
 	}
-	if got.AgentMaxConcurrent != 5 || !slices.Equal(got.AgentWritableRoots, configuration.AgentWritableRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
+	if got.AgentMaxConcurrent != 5 || got.SendShortcut != setting.SendShortcutEnter || !slices.Equal(got.AgentWritableRoots, configuration.AgentWritableRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
 		t.Fatalf("saved system configuration = %#v", got)
 	}
 	max, err := store.Settings().MaxConcurrentAgents(ctx)
@@ -56,7 +57,7 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 		t.Fatalf("UpdateGeneralSettings() error = %v", err)
 	}
 	got, err = store.Settings().GetSystemConfiguration(ctx)
-	if err != nil || got.AgentMaxConcurrent != 6 || !slices.Equal(got.AgentWritableRoots, updatedRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.WallpaperID != "wallpaper-id" {
+	if err != nil || got.AgentMaxConcurrent != 6 || got.SendShortcut != setting.SendShortcutEnter || !slices.Equal(got.AgentWritableRoots, updatedRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.WallpaperID != "wallpaper-id" {
 		t.Fatalf("configuration after focused concurrency update = %#v, %v", got, err)
 	}
 	providedRoots, err := store.Settings().AgentWritableRoots(ctx)
@@ -96,7 +97,7 @@ func TestSystemConfigurationMigrationAddsWritableRootsToExistingRow(t *testing.T
 		t.Fatalf("migrate store: %v", err)
 	}
 	configuration, err := store.Settings().GetSystemConfiguration(ctx)
-	if err != nil || configuration.AgentMaxConcurrent != 3 || len(configuration.AgentWritableRoots) != 0 {
+	if err != nil || configuration.AgentMaxConcurrent != 3 || len(configuration.AgentWritableRoots) != 0 || configuration.SendShortcut != setting.SendShortcutShiftEnter {
 		t.Fatalf("migrated system configuration = %#v, %v", configuration, err)
 	}
 }

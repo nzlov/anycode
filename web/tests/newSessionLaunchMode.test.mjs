@@ -57,8 +57,9 @@ test('successful launches remember the mode without project availability changin
   );
 });
 
-test('Shift+Enter submits the preferred available mode through the shared composer', () => {
-  assert.match(composerSource, /@keydown\.shift\.enter\.prevent="emit\('submit'\)"/);
+test('the configured shortcut submits the preferred available mode through the shared composer', () => {
+  assert.match(composerSource, /sendShortcut\.value === 'enter' && !event\.shiftKey/);
+  assert.match(composerSource, /sendShortcut\.value === 'shift_enter' && event\.shiftKey/);
   assert.match(composerSource, /submit: \[\]/);
   assert.match(codexComposerSource, /@submit="emit\('submit'\)"/);
   assert.match(dialogSource, /@submit="createSession\(preferredAvailableMode\)"/);
