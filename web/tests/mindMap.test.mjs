@@ -176,6 +176,22 @@ test('session detail links to its mind map card and the page applies the route h
   assert.match(page, /activeCardSessionId\.value = requestedCardSessionId/);
 });
 
+test('horizontal sessions expose a live mind map link only after the card has effective changes', () => {
+  const index = readSource('../src/pages/IndexPage.vue');
+  const horizontal = readSource('../src/components/OverviewHorizontalConversation.vue');
+  const service = readSource('../src/services/mindMaps.ts');
+  const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
+
+  assert.match(schema, /type MindMapCard \{[\s\S]*hasChanges: Boolean!/);
+  assert.match(service, /projectMindMapCards\(projectId: \$projectId\) \{ sessionId hasChanges \}/);
+  assert.match(service, /\.filter\(\(card\) => card\.hasChanges\)/);
+  assert.match(index, /:mind-map-updated="mindMapUpdated\(card\)"/);
+  assert.match(index, /subscribeMindMapUpdates\(projectId, '', \{[\s\S]*refreshProjectMindMapAvailability/);
+  assert.match(horizontal, /v-if="mindMapUpdated"[\s\S]*aria-label="打开思维图"/);
+  assert.match(horizontal, /params: \{ projectId: card\.projectId \}/);
+  assert.match(horizontal, /query: \{ card: card\.id \}/);
+});
+
 test('radial layout centers the root, groups connected depths into rings, and curves edges by facing handles', () => {
   const nodes = ['project-root', 'a', 'b', 'c'].map((id) => ({ id }));
   const edges = [

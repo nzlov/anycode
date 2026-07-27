@@ -102,6 +102,7 @@ type CardDTO struct {
 	SessionID       domain.SessionID
 	Requirement     string
 	UpdatedAt       time.Time
+	HasChanges      bool
 	TaskID          domain.TaskID
 	TaskStatus      domain.TaskStatus
 	TaskError       string
@@ -284,7 +285,8 @@ func (s *Service) ListCards(ctx context.Context, projectID domain.ProjectID) ([]
 		nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, domain.Materialize(graph, overlay.Changes))
 		items = append(items, CardDTO{
 			SessionID: overlay.SessionID, Requirement: session.Requirement, UpdatedAt: overlay.UpdatedAt,
-			TaskID: task.ID, TaskStatus: task.Status, TaskError: task.Error,
+			HasChanges: len(overlay.Changes) > 0,
+			TaskID:     task.ID, TaskStatus: task.Status, TaskError: task.Error,
 			Nodes: nodes, Edges: edges, ModifiedNodeIDs: modifiedNodeIDs, DeletedNodeIDs: deletedNodeIDs,
 		})
 		seen[overlay.SessionID] = struct{}{}

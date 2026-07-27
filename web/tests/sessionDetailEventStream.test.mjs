@@ -613,7 +613,10 @@ test('the list has no subscription and pages share the global update lifecycle',
 
   assert.doesNotMatch(sessionsPageSource, /subscribe|startLiveUpdates|stopLiveUpdates/);
   assert.match(overviewSource, /useSessionUpdates\(\{\s*onData: handleSessionUpdate/s);
-  assert.match(overviewSource, /onReconnect: \(\) => void loadOverviewSessions\(\)/);
+  assert.match(
+    overviewSource,
+    /onReconnect: \(\) => \{\s*void loadOverviewSessions\(\);\s*restartMindMapAvailability\(\);/,
+  );
   assert.equal((overviewSource.match(/useSessionUpdates\(\{/g) ?? []).length, 1);
   assert.match(
     updateComposableSource,
@@ -653,7 +656,7 @@ test('overview invalidates late card requests and waiting dialogs across its sub
   );
   assert.match(
     overviewSource,
-    /await loadOverviewSessions\(\);\s*if \(!overviewMounted\) return;\s*startOverviewLiveUpdates\(\);/,
+    /await Promise\.all\(\[loadOverviewSessions\(\), refreshMindMapAvailability\(\)\]\);\s*if \(!overviewMounted\) return;\s*startOverviewLiveUpdates\(\);/,
   );
   assert.match(overviewSource, /cardRefreshRequests\.invalidate\(update\.sessionId\)/);
   assert.match(

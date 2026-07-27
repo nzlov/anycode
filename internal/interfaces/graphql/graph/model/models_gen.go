@@ -244,6 +244,7 @@ type MindMapCard struct {
 	SessionID       string         `json:"sessionId"`
 	Requirement     string         `json:"requirement"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
+	HasChanges      bool           `json:"hasChanges"`
 	TaskID          *string        `json:"taskId,omitempty"`
 	TaskStatus      string         `json:"taskStatus"`
 	TaskError       string         `json:"taskError"`

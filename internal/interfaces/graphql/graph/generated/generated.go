@@ -170,6 +170,7 @@ type ComplexityRoot struct {
 	MindMapCard struct {
 		DeletedNodeIds  func(childComplexity int) int
 		Edges           func(childComplexity int) int
+		HasChanges      func(childComplexity int) int
 		ModifiedNodeIds func(childComplexity int) int
 		Nodes           func(childComplexity int) int
 		Requirement     func(childComplexity int) int
@@ -1333,6 +1334,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MindMapCard.Edges(childComplexity), true
+	case "MindMapCard.hasChanges":
+		if e.ComplexityRoot.MindMapCard.HasChanges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.HasChanges(childComplexity), true
 	case "MindMapCard.modifiedNodeIds":
 		if e.ComplexityRoot.MindMapCard.ModifiedNodeIds == nil {
 			break
@@ -5150,6 +5157,7 @@ type MindMapCard {
   sessionId: ID!
   requirement: String!
   updatedAt: Time!
+  hasChanges: Boolean!
   taskId: ID
   taskStatus: String!
   taskError: String!
@@ -8398,6 +8406,35 @@ func (ec *executionContext) fieldContext_MindMapCard_updatedAt(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _MindMapCard_hasChanges(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_hasChanges,
+		func(ctx context.Context) (any, error) {
+			return obj.HasChanges, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_hasChanges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MindMapCard_taskId(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9762,6 +9799,8 @@ func (ec *executionContext) fieldContext_Mutation_retryMindMapTask(ctx context.C
 				return ec.fieldContext_MindMapCard_requirement(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_MindMapCard_updatedAt(ctx, field)
+			case "hasChanges":
+				return ec.fieldContext_MindMapCard_hasChanges(ctx, field)
 			case "taskId":
 				return ec.fieldContext_MindMapCard_taskId(ctx, field)
 			case "taskStatus":
@@ -12755,6 +12794,8 @@ func (ec *executionContext) fieldContext_Query_projectMindMapCards(ctx context.C
 				return ec.fieldContext_MindMapCard_requirement(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_MindMapCard_updatedAt(ctx, field)
+			case "hasChanges":
+				return ec.fieldContext_MindMapCard_hasChanges(ctx, field)
 			case "taskId":
 				return ec.fieldContext_MindMapCard_taskId(ctx, field)
 			case "taskStatus":
@@ -27566,6 +27607,11 @@ func (ec *executionContext) _MindMapCard(ctx context.Context, sel ast.SelectionS
 			}
 		case "updatedAt":
 			out.Values[i] = ec._MindMapCard_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasChanges":
+			out.Values[i] = ec._MindMapCard_hasChanges(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

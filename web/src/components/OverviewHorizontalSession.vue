@@ -23,9 +23,11 @@
         :priority-loading="priorityLoading"
         :close-loading="closeLoading"
         :mind-map-realtime="mindMapRealtime"
+        :mind-map-updated="mindMapUpdated"
         @set-priority="emit('set-priority', $event)"
         @terminal-opened="emit('terminal-opened', $event)"
         @close="emit('close')"
+        @merge-close="emit('merge-close')"
       />
     </div>
 
@@ -66,6 +68,7 @@ const props = defineProps<{
   priorityLoading?: boolean;
   closeLoading?: boolean;
   mindMapRealtime?: boolean;
+  mindMapUpdated?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -73,6 +76,7 @@ const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
   close: [];
+  'merge-close': [];
 }>();
 
 const desktopSessionMinWidth = 1024;

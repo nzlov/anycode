@@ -36,6 +36,22 @@
           @opened="emit('terminal-opened', $event)"
         />
         <q-btn
+          v-if="mindMapUpdated"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="hub"
+          aria-label="打开思维图"
+          :to="{
+            name: 'project-mind-map',
+            params: { projectId: card.projectId },
+            query: { card: card.id },
+          }"
+        >
+          <q-tooltip>打开思维图</q-tooltip>
+        </q-btn>
+        <q-btn
           flat
           round
           dense
@@ -46,18 +62,21 @@
         >
           <q-tooltip>打开会话详情</q-tooltip>
         </q-btn>
+      </div>
+      <div class="overview-horizontal-conversation__close-actions">
         <q-btn
           v-if="mindMapRealtime && card.availableActions.includes('close')"
           flat
           dense
           class="lane-icon-btn app-icon-btn"
-          color="primary"
-          icon="hub"
-          aria-label="思维图"
-          :to="{ name: 'project-mind-map', params: { projectId: card.projectId }, query: { card: card.id } }"
-        >
-          <q-tooltip>思维图</q-tooltip>
-        </q-btn>
+          color="positive"
+          icon="merge"
+          label="合并思维图并关闭"
+          aria-label="合并思维图并关闭"
+          no-caps
+          :loading="closeLoading"
+          @click="emit('merge-close')"
+        />
         <q-btn
           v-if="card.availableActions.includes('close')"
           flat
@@ -65,12 +84,12 @@
           class="lane-icon-btn app-icon-btn"
           color="negative"
           icon="close"
-          :aria-label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
+          label="关闭"
+          aria-label="关闭"
+          no-caps
           :loading="closeLoading"
           @click="emit('close')"
-        >
-          <q-tooltip>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-tooltip>
-        </q-btn>
+        />
       </div>
     </header>
     <SessionDetailView
@@ -103,12 +122,14 @@ defineProps<{
   priorityLoading?: boolean;
   closeLoading?: boolean;
   mindMapRealtime?: boolean;
+  mindMapUpdated?: boolean;
 }>();
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
   close: [];
+  'merge-close': [];
 }>();
 </script>
 
@@ -137,15 +158,16 @@ const emit = defineEmits<{
 .overview-horizontal-conversation--mobile .overview-horizontal-conversation__header {
   grid-template-areas:
     'badges actions'
-    'identity actions';
+    'identity actions'
+    'close-actions close-actions';
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   padding: 8px 6px 8px 10px;
 }
 
 .overview-horizontal-conversation--desktop .overview-horizontal-conversation__header {
-  grid-template-areas: 'identity badges actions';
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'identity badges actions close-actions';
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 16px;
   padding: 10px 10px 10px 14px;
@@ -182,7 +204,8 @@ const emit = defineEmits<{
 
 .overview-horizontal-conversation__meta,
 .overview-horizontal-conversation__badges,
-.overview-horizontal-conversation__actions {
+.overview-horizontal-conversation__actions,
+.overview-horizontal-conversation__close-actions {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -207,6 +230,14 @@ const emit = defineEmits<{
 .overview-horizontal-conversation__actions {
   flex: 0 0 auto;
   grid-area: actions;
+}
+
+.overview-horizontal-conversation__close-actions {
+  flex: 0 0 auto;
+  grid-area: close-actions;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .overview-horizontal-conversation__detail {

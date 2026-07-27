@@ -161,7 +161,8 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 	}
 	return &model.MindMapCard{
 		SessionID: string(dto.SessionID), Requirement: dto.Requirement, UpdatedAt: dto.UpdatedAt,
-		TaskID: taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
+		HasChanges: dto.HasChanges,
+		TaskID:     taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
 		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs,
 	}
 }

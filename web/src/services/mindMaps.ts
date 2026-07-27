@@ -30,6 +30,7 @@ export interface MindMapCard {
   sessionId: string;
   requirement: string;
   updatedAt: string;
+  hasChanges: boolean;
   taskId?: string | null;
   taskStatus: string;
   taskError: string;
@@ -67,6 +68,7 @@ const cardFields = `
   sessionId
   requirement
   updatedAt
+  hasChanges
   taskId
   taskStatus
   taskError
@@ -101,6 +103,21 @@ export async function listProjectMindMapCards(projectId: string) {
     variables: { projectId },
   });
   return data.projectMindMapCards;
+}
+
+export async function listProjectMindMapUpdatedSessionIds(projectId: string) {
+  const data = await graphqlFetch<
+    { projectMindMapCards: Pick<MindMapCard, 'sessionId' | 'hasChanges'>[] },
+    { projectId: string }
+  >({
+    query: `
+      query ProjectMindMapUpdatedSessionIds($projectId: ID!) {
+        projectMindMapCards(projectId: $projectId) { sessionId hasChanges }
+      }
+    `,
+    variables: { projectId },
+  });
+  return data.projectMindMapCards.filter((card) => card.hasChanges).map((card) => card.sessionId);
 }
 
 export async function updateProjectMindMap(input: {

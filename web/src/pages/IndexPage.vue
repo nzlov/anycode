@@ -54,10 +54,12 @@
           :priority-loading="activePrioritySessionId === card.id"
           :close-loading="activeCloseSessionId === card.id"
           :mind-map-realtime="projectMindMapRealtime(card.projectId) && card.mode !== 'terminal'"
+          :mind-map-updated="mindMapUpdated(card)"
           @update:width="setSessionColumnWidth(card.id, $event)"
           @set-priority="setCardPriority(card, $event)"
           @terminal-opened="refreshOverviewCard"
           @close="closeCard(card)"
+          @merge-close="closeCard(card, true)"
         />
       </div>
     </section>
@@ -522,6 +524,7 @@ import {
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import { listTunnels, type Tunnel } from '@/services/tunnels';
 import { getGeneralSettings, type GeneralSettings } from '@/services/generalSettings';
+import { listProjectMindMapUpdatedSessionIds, subscribeMindMapUpdates } from '@/services/mindMaps';
 import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 
 const route = useRoute();
@@ -566,6 +569,9 @@ const {
 const { projects, loadProjects } = useProjects();
 const generalSettings = ref<GeneralSettings | null>(null);
 const generalSettingsInvalidation = useGeneralSettingsInvalidation();
+const mindMapUpdatedSessionsByProject = ref(new Map<string, Set<string>>());
+const mindMapAvailabilityRevisions = new Map<string, number>();
+const mindMapSubscriptions = new Map<string, { unsubscribe: () => void }>();
 
 if (generalSettingsInvalidation) {
   watch(generalSettingsInvalidation.revision, refreshGeneralSettings);
@@ -658,7 +664,10 @@ let cardClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { start: startOverviewLiveUpdates, stop: stopOverviewLiveUpdates } = useSessionUpdates({
   onData: handleSessionUpdate,
-  onReconnect: () => void loadOverviewSessions(),
+  onReconnect: () => {
+    void loadOverviewSessions();
+    restartMindMapAvailability();
+  },
 });
 const { start: startTunnelUpdates, stop: stopTunnelUpdates } =
   useTunnelUpdates(handleTunnelCountUpdate);
@@ -680,6 +689,7 @@ onUnmounted(() => {
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
   stopTunnelUpdates();
+  stopMindMapSubscriptions();
 });
 
 watch(projectScopeId, (value) => {
@@ -687,9 +697,14 @@ watch(projectScopeId, (value) => {
   void loadOverviewSessions();
 });
 
+watch(isHorizontalView, () => void refreshMindMapAvailability());
+
 watch(
-  () => projects.value.map((project) => project.id).join('\0'),
-  () => pruneHiddenProjectIds(),
+  () => projects.value.map((project) => `${project.id}:${project.mindMapEnabled}`).join('\0'),
+  () => {
+    pruneHiddenProjectIds();
+    void refreshMindMapAvailability();
+  },
 );
 
 watch(questionsDialog, (open) => {
@@ -701,7 +716,7 @@ async function startOverview() {
   await loadProjects();
   generalSettings.value = await settings;
   pruneHiddenProjectIds();
-  await loadOverviewSessions();
+  await Promise.all([loadOverviewSessions(), refreshMindMapAvailability()]);
   if (!overviewMounted) return;
   startOverviewLiveUpdates();
   startTunnelUpdates();
@@ -709,6 +724,7 @@ async function startOverview() {
 
 async function refreshGeneralSettings() {
   generalSettings.value = await getGeneralSettings().catch(() => null);
+  await refreshMindMapAvailability();
 }
 
 async function loadOverviewSessions() {
@@ -730,6 +746,78 @@ function handleTunnelCountUpdate(update: { runningCount: number }) {
 
 function tunnelsForSession(sessionId: string) {
   return tunnels.value.filter((tunnel) => tunnel.sessionId === sessionId);
+}
+
+function mindMapProjectIds() {
+  if (!isHorizontalView.value || !generalSettings.value?.mindMapEnabled) return [];
+  return projects.value.filter((project) => project.mindMapEnabled).map((project) => project.id);
+}
+
+async function refreshMindMapAvailability() {
+  const projectIds = mindMapProjectIds();
+  const enabledProjectIds = new Set(projectIds);
+  const retained = new Map(
+    [...mindMapUpdatedSessionsByProject.value].filter(([projectId]) =>
+      enabledProjectIds.has(projectId),
+    ),
+  );
+  if (retained.size !== mindMapUpdatedSessionsByProject.value.size) {
+    mindMapUpdatedSessionsByProject.value = retained;
+  }
+  syncMindMapSubscriptions(enabledProjectIds);
+  await Promise.all(projectIds.map(refreshProjectMindMapAvailability));
+}
+
+async function refreshProjectMindMapAvailability(projectId: string) {
+  const revision = (mindMapAvailabilityRevisions.get(projectId) ?? 0) + 1;
+  mindMapAvailabilityRevisions.set(projectId, revision);
+  try {
+    const sessionIds = await listProjectMindMapUpdatedSessionIds(projectId);
+    if (
+      !overviewMounted ||
+      mindMapAvailabilityRevisions.get(projectId) !== revision ||
+      !mindMapProjectIds().includes(projectId)
+    ) {
+      return;
+    }
+    const next = new Map(mindMapUpdatedSessionsByProject.value);
+    next.set(projectId, new Set(sessionIds));
+    mindMapUpdatedSessionsByProject.value = next;
+  } catch {
+    // Keep the last successful state until the next query or update event.
+  }
+}
+
+function syncMindMapSubscriptions(projectIds: Set<string>) {
+  for (const [projectId, subscription] of mindMapSubscriptions) {
+    if (projectIds.has(projectId)) continue;
+    subscription.unsubscribe();
+    mindMapSubscriptions.delete(projectId);
+  }
+  if (!overviewMounted) return;
+  for (const projectId of projectIds) {
+    if (mindMapSubscriptions.has(projectId)) continue;
+    mindMapSubscriptions.set(
+      projectId,
+      subscribeMindMapUpdates(projectId, '', {
+        onData: () => void refreshProjectMindMapAvailability(projectId),
+      }),
+    );
+  }
+}
+
+function stopMindMapSubscriptions() {
+  for (const subscription of mindMapSubscriptions.values()) subscription.unsubscribe();
+  mindMapSubscriptions.clear();
+}
+
+function restartMindMapAvailability() {
+  stopMindMapSubscriptions();
+  void refreshMindMapAvailability();
+}
+
+function mindMapUpdated(card: SessionCard) {
+  return mindMapUpdatedSessionsByProject.value.get(card.projectId)?.has(card.id) ?? false;
 }
 
 function readHiddenProjectIds() {

@@ -92,6 +92,11 @@ func TestCardGraphDerivesNodeChangesWithoutExposingDeletedNodesToAgentQueries(t 
 		Enabled: true, Mode: settingdomain.MindMapModeRealtime, MaxConcurrent: 1,
 	}}
 	project, session := saveMindMapTestProjectAndSession(t, store, "session-diff")
+	session.Status = sessiondomain.StatusRunning
+	session.ClosedAt = nil
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatal(err)
+	}
 	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
 	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
 	service.generateID = func() (domain.ChangeID, error) { return "change", nil }
@@ -117,6 +122,13 @@ func TestCardGraphDerivesNodeChangesWithoutExposingDeletedNodesToAgentQueries(t 
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	cards, err := service.ListCards(ctx, domain.ProjectID(project.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || !cards[0].HasChanges {
+		t.Fatalf("card availability = %#v", cards)
 	}
 	changeByID := make(map[domain.NodeID]NodeChangeType, len(cardGraph.Nodes))
 	for _, node := range cardGraph.Nodes {
@@ -155,6 +167,13 @@ func TestActiveAsyncTaskCanFinishAfterGlobalModeIsDisabled(t *testing.T) {
 	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
 	service.now = func() time.Time { return now }
 	service.generateID = func() (domain.ChangeID, error) { return "async-change", nil }
+	cards, err := service.ListCards(ctx, domain.ProjectID(project.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].HasChanges {
+		t.Fatalf("pending card availability = %#v", cards)
+	}
 	settings.configuration.Enabled = false
 	title := "异步整理结果"
 

@@ -361,30 +361,32 @@
                   />
                 </div>
 
-                <q-btn
-                  v-if="mindMapRealtime"
-                  class="full-width q-mt-md app-command-btn"
-                  outline
-                  color="positive"
-                  icon="merge"
-                  label="合并思维图并关闭"
-                  no-caps
-                  :loading="closing"
-                  :disable="!canClose || isClosed || loading || closing"
-                  @click="closeCurrentSession(true)"
-                />
+                <div class="session-detail-close-row q-mt-md">
+                  <q-btn
+                    v-if="mindMapRealtime"
+                    class="session-detail-close-button app-command-btn"
+                    outline
+                    color="positive"
+                    icon="merge"
+                    label="合并思维图并关闭"
+                    no-caps
+                    :loading="closing"
+                    :disable="!canClose || isClosed || loading || closing"
+                    @click="closeCurrentSession(true)"
+                  />
 
-                <q-btn
-                  class="full-width q-mt-md app-command-btn"
-                  outline
-                  color="negative"
-                  icon="close"
-                  :label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
-                  no-caps
-                  :loading="closing"
-                  :disable="!canClose || isClosed || loading || closing"
-                  @click="closeCurrentSession(false)"
-                />
+                  <q-btn
+                    class="session-detail-close-button app-command-btn"
+                    outline
+                    color="negative"
+                    icon="close"
+                    label="关闭"
+                    no-caps
+                    :loading="closing"
+                    :disable="!canClose || isClosed || loading || closing"
+                    @click="closeCurrentSession(false)"
+                  />
+                </div>
 
                 <q-separator spaced />
 
@@ -1652,6 +1654,16 @@ async function scrollEventsToBottom() {
   width: auto;
   min-width: 0;
   flex: 1 1 0;
+}
+
+.session-detail-close-row {
+  display: flex;
+  gap: 8px;
+}
+
+.session-detail-close-button {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .session-tunnel-list {

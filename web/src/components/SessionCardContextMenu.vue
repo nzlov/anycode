@@ -54,7 +54,7 @@
         <q-item-section avatar>
           <q-icon name="close" />
         </q-item-section>
-        <q-item-section>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-item-section>
+        <q-item-section>关闭</q-item-section>
       </q-item>
     </q-list>
   </q-menu>

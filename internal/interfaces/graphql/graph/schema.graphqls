@@ -868,6 +868,7 @@ type MindMapCard {
   sessionId: ID!
   requirement: String!
   updatedAt: Time!
+  hasChanges: Boolean!
   taskId: ID
   taskStatus: String!
   taskError: String!
