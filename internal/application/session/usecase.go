@@ -266,6 +266,13 @@ const (
 	maxSessionIDAttempts = 100
 )
 
+type codexStopMode uint8
+
+const (
+	codexStopGraceful codexStopMode = iota
+	codexStopInterrupt
+)
+
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
 
 type workflowApprovalPostCommitAdvance struct {
@@ -2491,7 +2498,24 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	var dto DTO
 	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
 		var err error
-		dto, err = s.stopSession(ctx, id)
+		dto, err = s.stopSession(ctx, id, codexStopGraceful)
+		return err
+	})
+	if err == nil && (dto.Status == domain.StatusStopped || dto.Status == domain.StatusClosed) && s.tunnels != nil {
+		cleanupCtx, cancel := processCleanupContext(ctx)
+		defer cancel()
+		if cleanupErr := s.tunnels.CloseTunnelsForSession(cleanupCtx, id); cleanupErr != nil {
+			err = fmt.Errorf("close session tunnels: %w", cleanupErr)
+		}
+	}
+	return dto, err
+}
+
+func (s *Service) stopSessionAndWait(ctx context.Context, id domain.ID) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		var err error
+		dto, err = s.stopSession(ctx, id, codexStopInterrupt)
 		return err
 	})
 	if err == nil && dto.Status == domain.StatusStopping {
@@ -2544,7 +2568,7 @@ func (s *Service) waitForStopCompletion(ctx context.Context, id domain.ID) (DTO,
 	}
 }
 
-func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
+func (s *Service) stopSession(ctx context.Context, id domain.ID, mode codexStopMode) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
 	}
@@ -2610,6 +2634,12 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	}
 	cleanupCtx, cancel := processCleanupContext(ctx)
 	defer cancel()
+	if mode == codexStopGraceful && s.hasProcessConsumer(active.ID) {
+		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	}
 	stopErr := s.codex.Stop(cleanupCtx, active.ID)
 	processMissing := errors.Is(stopErr, processdomain.ErrProcessNotFound)
 	if stopErr != nil && !processMissing {
@@ -2724,7 +2754,7 @@ func (s *Service) StopProjectSessions(ctx context.Context, projectID domain.Proj
 			return stopped, err
 		}
 		for _, session := range sessions {
-			if _, err := s.StopSession(ctx, session.ID); err != nil {
+			if _, err := s.stopSessionAndWait(ctx, session.ID); err != nil {
 				return stopped, fmt.Errorf("stop project session %s: %w", session.ID, err)
 			}
 			stopped++
@@ -4820,6 +4850,7 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 		retryCtx = context.Background()
 	}
 	processPersisted := false
+	stopRequested := false
 	continueWorkflow := false
 	transitionAttempted := false
 	var workflowAdvance *domain.WorkflowAdvance
@@ -4831,6 +4862,11 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 		}
 		err := s.withSessionLock(retryCtx, session.ID, func(ctx context.Context) error {
 			if !processPersisted {
+				current, err := s.repo.Find(ctx, session.ID)
+				if err != nil {
+					return fmt.Errorf("find session before process exit: %w", err)
+				}
+				stopRequested = current.Status == domain.StatusStopping
 				if err := s.handleCodexEvent(ctx, session.ID, handle, processdomain.CodexEvent{
 					Type:           processdomain.CodexEventProcessExit,
 					SessionID:      processdomain.SessionID(session.ID),
@@ -4928,6 +4964,13 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 		}
 	}
 	s.scheduleQueueDrain()
+	if stopRequested && s.tunnels != nil {
+		cleanupCtx, cancel := processCleanupContext(retryCtx)
+		if err := s.tunnels.CloseTunnelsForSession(cleanupCtx, session.ID); err != nil {
+			log.Printf("close tunnels after Codex stop: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, err)
+		}
+		cancel()
+	}
 }
 
 func workflowProcessExitPending(status domain.Status) bool {
@@ -5695,7 +5738,7 @@ func (s *Service) applyMergeFailureDecision(ctx context.Context, session domain.
 		})
 		return err
 	case "stop_session":
-		_, err := s.stopSession(ctx, session.ID)
+		_, err := s.stopSession(ctx, session.ID, codexStopGraceful)
 		return err
 	case "fail_node":
 		_, err := s.handleWorkflowNodeFailure(ctx, session, session.ID, &nodeRunID, code, reason, mergeFailureOutputFromMetadata(metadata))
@@ -6913,7 +6956,7 @@ func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DT
 			}
 			return dto, err
 		}
-		if _, err := s.StopSession(ctx, input.SessionID); err != nil {
+		if _, err := s.stopSessionAndWait(ctx, input.SessionID); err != nil {
 			return DTO{}, err
 		}
 	}
