@@ -12329,6 +12329,10 @@ func (s *fakeSessionArtifactStore) InspectArtifact(context.Context, domain.Inspe
 	return domain.SessionFile{}, errors.New("unexpected InspectArtifact call")
 }
 
+func (s *fakeSessionArtifactStore) FindArtifactByContent(context.Context, domain.ID, []byte) (domain.SessionFile, bool, error) {
+	return domain.SessionFile{}, false, nil
+}
+
 func (s *fakeSessionArtifactStore) WriteInlineArtifact(context.Context, domain.WriteInlineArtifactInput) (domain.SessionFile, error) {
 	return domain.SessionFile{}, errors.New("unexpected WriteInlineArtifact call")
 }

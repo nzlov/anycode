@@ -253,6 +253,13 @@ func (s *Service) PublishInlineArtifact(ctx context.Context, input session.Inlin
 	if err := s.validateSessionWritable(ctx, input.SessionID); err != nil {
 		return session.SessionFile{}, err
 	}
+	existing, found, err := s.store.FindArtifactByContent(ctx, input.SessionID, input.Data)
+	if err != nil {
+		return session.SessionFile{}, err
+	}
+	if found {
+		return existing, nil
+	}
 	used, err := s.store.SumArtifactSize(ctx, input.SessionID)
 	if err != nil {
 		return session.SessionFile{}, err

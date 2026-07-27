@@ -705,6 +705,7 @@ type ArtifactStore interface {
 	EnsureArtifactDir(ctx context.Context, sessionID ID) (string, error)
 	ArtifactDir(sessionID ID) string
 	InspectArtifact(ctx context.Context, input InspectArtifactInput) (SessionFile, error)
+	FindArtifactByContent(ctx context.Context, sessionID ID, data []byte) (SessionFile, bool, error)
 	WriteInlineArtifact(ctx context.Context, input WriteInlineArtifactInput) (SessionFile, error)
 	FindArtifact(ctx context.Context, id SessionFileID) (SessionFile, error)
 	ListArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, error)

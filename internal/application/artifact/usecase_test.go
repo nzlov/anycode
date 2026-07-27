@@ -167,6 +167,61 @@ func TestPublishInlineArtifactWritesIntoOutputAndDeduplicatesBySourceKey(t *test
 	}
 }
 
+func TestPublishInlineArtifactReusesExistingContent(t *testing.T) {
+	ctx := context.Background()
+	files := filestore.New(t.TempDir())
+	root, err := files.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("image bytes")
+	namedPath := filepath.Join(root, "generated-image.bin")
+	if err := os.WriteFile(namedPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := New(files)
+	published, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: namedPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetLimits(Limits{MaxSessionBytes: int64(len(data))})
+
+	inline, err := service.PublishInlineArtifact(ctx, session.InlineArtifactRequest{
+		SessionID: "session-1",
+		Data:      data,
+		Filename:  "tool-output.bin",
+		SourceKey: "run-1:event-1:0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inline.ID != published.ID || inline.LogicalPath != published.LogicalPath {
+		t.Fatalf("inline artifact = %#v, want existing %#v", inline, published)
+	}
+	listed, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("artifact list = %#v, %v", listed, err)
+	}
+
+	service.SetLimits(Limits{MaxSessionBytes: int64(2 * len(data))})
+	different, err := service.PublishInlineArtifact(ctx, session.InlineArtifactRequest{
+		SessionID: "session-1",
+		Data:      []byte("other bytes"),
+		Filename:  "different-output.bin",
+		SourceKey: "run-1:event-2:0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if different.ID == published.ID {
+		t.Fatalf("different content reused existing artifact: %#v", different)
+	}
+	listed, err = service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("artifact list after different content = %#v, %v", listed, err)
+	}
+}
+
 func TestListIgnoresPartialAndSymlinkFiles(t *testing.T) {
 	ctx := context.Background()
 	files := filestore.New(t.TempDir())

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	pathpkg "path"
@@ -127,6 +128,66 @@ func (s *Store) WriteInlineArtifact(ctx context.Context, input session.WriteInli
 		return session.SessionFile{}, &Error{Code: classify(err), Path: artifactPath, Err: err}
 	}
 	return s.artifactFromFile(root, input.SessionID, logicalPath)
+}
+
+func (s *Store) FindArtifactByContent(ctx context.Context, sessionID session.ID, data []byte) (session.SessionFile, bool, error) {
+	root, err := s.openArtifactRoot(ctx, sessionID)
+	if errors.Is(err, session.ErrSessionFileNotFound) {
+		return session.SessionFile{}, false, nil
+	}
+	if err != nil {
+		return session.SessionFile{}, false, err
+	}
+	defer root.Close()
+
+	expected := sha256.Sum256(data)
+	var found session.SessionFile
+	err = walkArtifactRoot(ctx, root, func(logicalPath string, info os.FileInfo) error {
+		if info.Size() != int64(len(data)) {
+			return nil
+		}
+		path := filepath.Join(s.ArtifactDir(sessionID), filepath.FromSlash(logicalPath))
+		file, openedInfo, err := openArtifactFile(root, logicalPath, path)
+		if err != nil {
+			return err
+		}
+		hash := sha256.New()
+		_, copyErr := io.Copy(hash, readerWithContext{ctx: ctx, reader: file})
+		if copyErr != nil {
+			return &Error{Code: "read_failed", Path: path, Err: errors.Join(copyErr, file.Close())}
+		}
+		var actual [sha256.Size]byte
+		copy(actual[:], hash.Sum(nil))
+		if actual != expected {
+			if err := file.Close(); err != nil {
+				return &Error{Code: "read_failed", Path: path, Err: err}
+			}
+			return nil
+		}
+		if _, err := file.Seek(0, 0); err != nil {
+			return &Error{Code: "read_failed", Path: path, Err: errors.Join(err, file.Close())}
+		}
+		artifact := s.artifactFromOpenFile(sessionID, logicalPath, path, file, openedInfo)
+		if err := file.Close(); err != nil {
+			return &Error{Code: "read_failed", Path: path, Err: err}
+		}
+		found = artifact
+		if !strings.HasPrefix(logicalPath, "inline/") {
+			return errArtifactFound
+		}
+		return nil
+	})
+	if errors.Is(err, errArtifactFound) {
+		return found, true, nil
+	}
+	if err != nil {
+		var storeErr *Error
+		if errors.As(err, &storeErr) {
+			return session.SessionFile{}, false, err
+		}
+		return session.SessionFile{}, false, &Error{Code: classify(err), Path: s.ArtifactDir(sessionID), Err: err}
+	}
+	return found, found.ID != "", nil
 }
 
 func (s *Store) FindArtifact(ctx context.Context, id session.SessionFileID) (session.SessionFile, error) {
