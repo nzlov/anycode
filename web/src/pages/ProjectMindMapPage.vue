@@ -1,6 +1,6 @@
 <template>
   <q-page class="mind-map-page">
-    <PageToolbar :title="project ? `${project.name} · 思维图` : '项目思维图'" title-icon="hub">
+    <PageToolbar :title="project ? `${project.name} · 思维图` : '项目思维图'">
       <q-btn
         flat
         round

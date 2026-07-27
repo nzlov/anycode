@@ -61,6 +61,7 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(page, /@nodes-initialized="fitGraph"/);
   assert.match(page, /:zoom-on-pinch="true"/);
   assert.match(page, /<div class="mind-map-canvas">/);
+  assert.doesNotMatch(page, /<PageToolbar[^>]*title-icon=/);
   assert.match(page, /flex: 1 1 auto/);
   assert.match(page, /\.mind-map-canvas\s*\{[^}]*touch-action:\s*none/s);
   assert.match(
