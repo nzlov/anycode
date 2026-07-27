@@ -46,7 +46,10 @@ test('one shared class keeps fallback content dialogs compact at the 600px break
     stylesSource,
     /@media \(max-width:\s*599\.98px\)[\s\S]*?\.app-content-dialog\s*{[^}]*width:\s*calc\(100vw - 24px\)\s*!important[^}]*height:\s*auto\s*!important[^}]*max-height:\s*calc\(100dvh - 24px\)\s*!important/s,
   );
-  assert.match(stylesSource, /\.surface-page \.app-content-dialog\s*{[^}]*width:\s*100%[^}]*max-height:\s*none/s);
+  assert.match(
+    stylesSource,
+    /\.surface-page \.app-content-dialog\s*{[^}]*width:\s*100%\s*!important[^}]*max-width:\s*none\s*!important[^}]*max-height:\s*none/s,
+  );
   assert.doesNotMatch(stylesSource, /\.app-content-dialog\s*{[^}]*max-width:\s*\d+px/s);
 });
 

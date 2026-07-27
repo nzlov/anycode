@@ -21,10 +21,19 @@ test('project list page opens settings before workflow configuration and removal
   const remove = source.indexOf('<q-item-section>移除项目</q-item-section>');
 
   assert.ok(settings >= 0 && settings < workflow && workflow < remove);
+  assert.match(source, /<PageToolbar title="项目" \/>/);
+  assert.doesNotMatch(source, /<PageToolbar[^>]*title-icon="folder"/);
   assert.match(source, /openProjectSettings\(project\)/);
   assert.match(source, /fab[\s\S]*aria-label="新增项目"/);
   assert.match(source, /class="project-list-actions__inline"/);
-  assert.match(source, /icon="settings"[\s\S]*icon="account_tree"[\s\S]*icon="playlist_remove"/);
+  assert.match(
+    source,
+    /icon="settings"[\s\S]*icon="account_tree"[\s\S]*v-if="mindMapVisible\(project\)"[\s\S]*icon="hub"[\s\S]*icon="playlist_remove"/,
+  );
+  assert.match(
+    source,
+    /aria-label="`\$\{project\.name\} 思维图`"[\s\S]*openMindMap\(project\.id\)/,
+  );
   assert.match(source, /container-type:\s*inline-size/);
   assert.match(source, /@container \(min-width:\s*720px\)/);
   assert.match(source, /\.project-list-actions__menu\s*\{[\s\S]*display:\s*none/);

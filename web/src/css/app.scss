@@ -261,8 +261,8 @@ a {
 }
 
 .surface-page .app-content-dialog {
-  width: 100%;
-  max-width: none;
+  width: 100% !important;
+  max-width: none !important;
   height: auto !important;
   max-height: none !important;
   box-shadow: none;

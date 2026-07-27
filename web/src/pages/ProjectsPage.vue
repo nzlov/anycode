@@ -1,6 +1,6 @@
 <template>
   <q-page class="surface-page project-list-page">
-    <PageToolbar title="项目" title-icon="folder" />
+    <PageToolbar title="项目" />
 
     <q-card flat bordered class="surface-page__card project-list-card">
       <q-linear-progress v-if="loading" indeterminate color="primary" />
@@ -58,6 +58,18 @@
                   @click.stop="openWorkflowConfig(project.id)"
                 >
                   <q-tooltip>流程配置</q-tooltip>
+                </q-btn>
+                <q-btn
+                  v-if="mindMapVisible(project)"
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  icon="hub"
+                  :aria-label="`${project.name} 思维图`"
+                  @click.stop="openMindMap(project.id)"
+                >
+                  <q-tooltip>思维图</q-tooltip>
                 </q-btn>
                 <q-btn
                   flat
