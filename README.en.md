@@ -6,7 +6,7 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 
 ![AnyCode dashboard preview](docs/assets/anycode-dashboard.png)
 
-[Key capabilities](#key-capabilities) · [Quick start](#quick-start) · [First use](#first-use) · [Configuration](#configuration) · [Data and security](#data-and-security) · [Operations and troubleshooting](#operations-and-troubleshooting)
+[Key capabilities](#key-capabilities) · [Showcase](#showcase) · [Quick start](#quick-start) · [First use](#first-use) · [Configuration](#configuration) · [Data and security](#data-and-security) · [Operations and troubleshooting](#operations-and-troubleshooting)
 
 ## Key capabilities
 
@@ -16,6 +16,26 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 - Let Codex request additional decisions through the App Server's dynamic `questions` tool, while workflows can also pause for manual approval.
 - Let Codex create authenticated Cloudflare quick tunnels for test programs running in the container, manage them from the session or tunnel panel, and see the live running count on the overview.
 - Follow text, reasoning, commands, tool calls, and file changes in real time on the session timeline, and review them after execution completes.
+
+## Showcase
+
+### Mind map
+
+<details>
+<summary>Show image</summary>
+
+![AnyCode mind map](docs/assets/swt.png)
+
+</details>
+
+### Horizontal workspace
+
+<details>
+<summary>Show image</summary>
+
+![AnyCode horizontal workspace](docs/assets/hb.png)
+
+</details>
 
 ## Features
 
