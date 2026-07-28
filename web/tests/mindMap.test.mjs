@@ -277,7 +277,10 @@ test('realtime cards have merge-close while async cards use ordinary close', () 
 
   assert.match(index, /generalSettings\.value\.mindMapMode === 'realtime'/);
   assert.match(menu, /v-if="mindMapRealtime"[\s\S]*合并思维图并关闭/);
-  assert.match(detail, /v-if="mindMapRealtime"[\s\S]*label="合并思维图并关闭"/);
+  assert.match(
+    detail,
+    /v-if="mindMapRealtime"[\s\S]*class="session-detail-close-button app-command-btn app-on-primary"[\s\S]*unelevated[\s\S]*color="primary"[\s\S]*label="合并思维图并关闭"[\s\S]*:loading="closing"[\s\S]*:disable="!canClose \|\| isClosed \|\| loading \|\| closing"/,
+  );
   assert.match(sessions, /reason: 'user_closed' \| 'merged_closed'/);
 });
 

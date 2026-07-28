@@ -364,9 +364,9 @@
                 <div class="session-detail-close-row q-mt-md">
                   <q-btn
                     v-if="mindMapRealtime"
-                    class="session-detail-close-button app-command-btn"
-                    outline
-                    color="positive"
+                    class="session-detail-close-button app-command-btn app-on-primary"
+                    unelevated
+                    color="primary"
                     icon="merge"
                     label="合并思维图并关闭"
                     no-caps
