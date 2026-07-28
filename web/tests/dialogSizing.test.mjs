@@ -7,6 +7,7 @@ function readSource(relativePath) {
 }
 
 const stylesSource = readSource('../src/css/app.scss');
+const quickCommandManagerSource = readSource('../src/components/QuickCommandManager.vue');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
@@ -133,6 +134,23 @@ test('quick command actions stay outside the scrolling list', () => {
   assert.doesNotMatch(
     stylesSource,
     /\.global-settings-panel\s*{[^}]*padding:\s*20px 20px 88px/s,
+  );
+});
+
+test('quick command actions stay aligned and reachable on mobile', () => {
+  assert.match(quickCommandManagerSource, /class="quick-command-item__actions"/);
+  assert.doesNotMatch(quickCommandManagerSource, /class="row no-wrap q-gutter-xs"/);
+  assert.match(
+    stylesSource,
+    /\.quick-command-item__actions\s*{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*gap:\s*4px/s,
+  );
+
+  const smallScreenStyles = stylesSource.slice(
+    stylesSource.indexOf('@media (max-width: 599.98px)'),
+  );
+  assert.match(
+    smallScreenStyles,
+    /\.quick-command-editor\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto[^}]*align-items:\s*start/s,
   );
 });
 

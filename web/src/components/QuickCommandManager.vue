@@ -75,7 +75,7 @@
           <q-item-label class="quick-command-text">{{ command.content }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row no-wrap q-gutter-xs">
+          <div class="quick-command-item__actions">
             <q-btn
               flat
               round

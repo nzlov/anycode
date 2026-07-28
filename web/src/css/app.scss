@@ -1231,6 +1231,13 @@ body.desktop
   min-width: 0;
 }
 
+.quick-command-item__actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
 .quick-command-text {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -2454,11 +2461,13 @@ body.desktop
   }
 
   .quick-command-editor {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
   }
 
   .quick-command-editor__actions {
-    justify-content: flex-end;
+    gap: 4px;
   }
 
   .global-project-list .q-item {
