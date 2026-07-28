@@ -103,6 +103,23 @@ func TestWorkspaceWriteSettingsAppendConfiguredRootsAndArtifact(t *testing.T) {
 	}
 }
 
+func TestUnavailableThreadResumeErrorRequiresMissingRollout(t *testing.T) {
+	if !isUnavailableThreadResumeError(&appServerRequestError{
+		method:  "thread/resume",
+		code:    -32600,
+		message: "no rollout found for thread id thread-missing",
+	}) {
+		t.Fatal("missing rollout should mark the Codex thread unavailable")
+	}
+	if isUnavailableThreadResumeError(&appServerRequestError{
+		method:  "thread/resume",
+		code:    -32600,
+		message: "Selected model is at capacity. Please try a different model.",
+	}) {
+		t.Fatal("capacity errors must keep the existing Codex thread reusable")
+	}
+}
+
 func TestRuntimeCompletesDynamicToolOnOriginalTurn(t *testing.T) {
 	codexHome := t.TempDir()
 	responses := filepath.Join(t.TempDir(), "responses")

@@ -83,6 +83,9 @@ func (c *Client) start(
 			} `json:"thread"`
 		}
 		if err := runtime.request(ctx, "thread/resume", params, &response); err != nil {
+			if isUnavailableThreadResumeError(err) {
+				return process.CodexHandle{}, fmt.Errorf("resume codex thread: %w: %v", process.ErrThreadUnavailable, err)
+			}
 			return process.CodexHandle{}, fmt.Errorf("resume codex thread: %w", err)
 		}
 		if resumed := strings.TrimSpace(response.Thread.ID); resumed != "" {
@@ -126,6 +129,11 @@ func (c *Client) start(
 		runtime.completeRoute(route)
 	}
 	return handle, nil
+}
+
+func isUnavailableThreadResumeError(err error) bool {
+	var requestErr *appServerRequestError
+	return errors.As(err, &requestErr) && requestErr.code == -32600 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(requestErr.message)), "no rollout found for thread id")
 }
 
 type workspaceWriteSettings struct {

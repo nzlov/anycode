@@ -34,6 +34,16 @@ type appServerError struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+type appServerRequestError struct {
+	method  string
+	code    int
+	message string
+}
+
+func (e *appServerRequestError) Error() string {
+	return fmt.Sprintf("app-server %s failed (%d): %s", e.method, e.code, e.message)
+}
+
 type appServerRuntime struct {
 	client *Client
 	cmd    *exec.Cmd
@@ -151,7 +161,7 @@ func (r *appServerRuntime) request(ctx context.Context, method string, params an
 	select {
 	case envelope := <-response:
 		if envelope.Error != nil {
-			return fmt.Errorf("app-server %s failed (%d): %s", method, envelope.Error.Code, envelope.Error.Message)
+			return &appServerRequestError{method: method, code: envelope.Error.Code, message: envelope.Error.Message}
 		}
 		if result == nil || len(envelope.Result) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Result), []byte("null")) {
 			return nil

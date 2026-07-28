@@ -2625,12 +2625,14 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID, mode codexStopM
 		}
 		return s.stopSessionWithoutActiveProcess(cleanupCtx, session, stopReason, true)
 	}
-	now := s.now()
-	if err := transitionSession(&session, domain.StatusStopping, now); err != nil {
-		return DTO{}, err
-	}
-	if err := s.markProcessStoppingWithSessionEvent(ctx, active.ID, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
-		return DTO{}, err
+	if session.Status != domain.StatusStopping {
+		now := s.now()
+		if err := transitionSession(&session, domain.StatusStopping, now); err != nil {
+			return DTO{}, err
+		}
+		if err := s.markProcessStoppingWithSessionEvent(ctx, active.ID, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
+			return DTO{}, err
+		}
 	}
 	cleanupCtx, cancel := processCleanupContext(ctx)
 	defer cancel()
@@ -3950,7 +3952,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	developerInstructions := joinPromptParts(anyCodeDeveloperInstructions(session, artifactDir), mindMapGuidance)
 	if options.resumeCodexSessionID != "" {
-		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
+		handle, resumeErr := s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:          runID,
 			SessionID:             processdomain.SessionID(session.ID),
 			CodexSessionID:        options.resumeCodexSessionID,
@@ -3967,6 +3969,13 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			FastMode:              session.Config.FastMode,
 			DynamicTools:          mindMapTools,
 		})
+		if resumeErr == nil {
+			return handle, nil
+		}
+		if !errors.Is(resumeErr, processdomain.ErrThreadUnavailable) || action != processdomain.CodexActionTurn {
+			return processdomain.CodexHandle{}, resumeErr
+		}
+		prompt = strings.TrimSpace(options.fallbackPrompt)
 	}
 	files, err := s.listSessionAttachments(ctx, session.ID)
 	if err != nil {
@@ -4214,7 +4223,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 		prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 	} else if options.resumeCodexSessionID != "" {
 		if session.Mode != domain.ModeWorkflow && basePrompt == "" && len(pendingIDs) == 0 {
-			basePrompt = strings.TrimSpace(session.Requirement)
+			basePrompt = "continue"
 		}
 		prompt = joinPromptParts(basePrompt, pendingPrompt)
 	} else if session.Mode != domain.ModeWorkflow {

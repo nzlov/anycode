@@ -7648,7 +7648,7 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 	}
 }
 
-func TestStopSessionWaitsForCodexConsumerToExitNaturally(t *testing.T) {
+func TestStopSessionRepeatedRequestStillWaitsForCodexConsumerToExitNaturally(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -7700,6 +7700,13 @@ func TestStopSessionWaitsForCodexConsumerToExitNaturally(t *testing.T) {
 	}
 	if got := repo.sessions["session-1"]; got.Status != domain.StatusStopping {
 		t.Fatalf("session before Codex exit = %#v", got)
+	}
+	stopping, err = service.StopSession(ctx, "session-1")
+	if err != nil || stopping.Status != domain.StatusStopping {
+		t.Fatalf("second StopSession() = %#v, %v", stopping, err)
+	}
+	if codex.stoppedID != "" {
+		t.Fatalf("second StopSession() interrupted Codex process %q", codex.stoppedID)
 	}
 	stream <- processdomain.CodexEvent{
 		EventID:        "late-message",
@@ -8817,8 +8824,89 @@ func TestExecuteSessionResumesWithoutPendingPrompt(t *testing.T) {
 	if err != nil || started != 1 {
 		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
 	}
-	if !codex.resumeCalled || codexInputText(codex.resumeInput.Input) != "implement session" {
+	if !codex.resumeCalled || codexInputText(codex.resumeInput.Input) != "continue" {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
+	}
+}
+
+func TestExecuteSessionRetriesCapacityFailureOnSameThreadWithContinuePrompt(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "implement session",
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{resumeErr: errors.New("Selected model is at capacity. Please try a different model.")}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
+	ids := []domain.ID{"process-run-1", "process-run-2"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.ExecuteSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err == nil {
+		t.Fatal("ExecuteSession() expected capacity error")
+	}
+	if got := repo.sessions["session-1"]; got.Status != domain.StatusResumeFailed || got.CodexSessionID != "codex-session-1" {
+		t.Fatalf("session after capacity error = %#v", got)
+	}
+	if codex.startCalled || codexInputText(codex.resumeInput.Input) != "continue" {
+		t.Fatalf("Codex calls after capacity error: resume=%#v start=%#v", codex.resumeInput, codex.startInput)
+	}
+
+	codex.resumeErr = nil
+	codex.resumeHandle = processdomain.CodexHandle{CodexSessionID: "codex-session-1"}
+	got, err := service.ExecuteSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("ExecuteSession() retry error = %v", err)
+	}
+	if got.Status != domain.StatusRunning || got.CodexSessionID != "codex-session-1" {
+		t.Fatalf("ExecuteSession() retry = %#v", got)
+	}
+	if codex.startCalled || codexInputText(codex.resumeInput.Input) != "continue" {
+		t.Fatalf("Codex retry calls: resume=%#v start=%#v", codex.resumeInput, codex.startInput)
+	}
+}
+
+func TestExecuteSessionStartsNewThreadOnlyWhenResumeThreadIsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "implement session",
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-old",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{
+		resumeErr:   processdomain.ErrThreadUnavailable,
+		startHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-new"},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	got, err := service.ExecuteSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("ExecuteSession() error = %v", err)
+	}
+	if got.Status != domain.StatusRunning || got.CodexSessionID != "codex-session-new" {
+		t.Fatalf("ExecuteSession() = %#v", got)
+	}
+	if !codex.resumeCalled || codexInputText(codex.resumeInput.Input) != "continue" {
+		t.Fatalf("Codex resume input = %#v", codex.resumeInput)
+	}
+	if !codex.startCalled || codexInputText(codex.startInput.Input) != rebuiltPromptNotice+"\n\n原始需求：\nimplement session" {
+		t.Fatalf("Codex fallback start input = %#v", codex.startInput)
 	}
 }
 
