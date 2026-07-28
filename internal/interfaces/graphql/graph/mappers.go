@@ -189,6 +189,20 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 	}
 }
 
+// GLUE: GraphQL uses nullable session IDs while the application uses an empty domain ID for main-graph matches.
+func mapMindMapSearchResult(dto mindmapapp.ProjectSearchResultDTO) *model.MindMapSearchResult {
+	matches := make([]*model.MindMapSearchMatch, 0, len(dto.Matches))
+	for _, match := range dto.Matches {
+		var sessionID *string
+		if match.SessionID != "" {
+			value := string(match.SessionID)
+			sessionID = &value
+		}
+		matches = append(matches, &model.MindMapSearchMatch{NodeID: string(match.NodeID), SessionID: sessionID})
+	}
+	return &model.MindMapSearchResult{ProjectID: string(dto.ProjectID), Query: dto.Query, Matches: matches}
+}
+
 // GLUE: GraphQL owns transport models while mindmap owns node file references; remove when gqlgen can bind the domain value directly.
 func mapMindMapNodeFiles(files []mindmapdomain.NodeFile) []*model.MindMapNodeFile {
 	result := make([]*model.MindMapNodeFile, len(files))

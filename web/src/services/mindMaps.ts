@@ -54,6 +54,12 @@ export interface MindMapUpdate {
   updatedAt: string;
 }
 
+export interface MindMapSearchResult {
+  projectId: string;
+  query: string;
+  matches: Array<{ nodeId: string; sessionId?: string | null }>;
+}
+
 interface MindMapGraphPage extends MindMapGraph {
   nextNodeCursor?: string | null;
   nextEdgeCursor?: string | null;
@@ -155,6 +161,26 @@ export async function listProjectMindMapCards(projectId: string) {
     variables: { projectId },
   });
   return data.projectMindMapCards;
+}
+
+export async function searchProjectMindMap(projectId: string, query: string) {
+  const input = { projectId, query };
+  const data = await graphqlFetch<
+    { searchProjectMindMap: MindMapSearchResult },
+    { input: typeof input }
+  >({
+    query: `
+      query SearchProjectMindMap($input: SearchMindMapInput!) {
+        searchProjectMindMap(input: $input) {
+          projectId
+          query
+          matches { nodeId sessionId }
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return data.searchProjectMindMap;
 }
 
 export async function listProjectMindMapUpdatedSessionIds(projectId: string) {

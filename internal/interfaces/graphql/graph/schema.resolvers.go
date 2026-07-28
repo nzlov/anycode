@@ -791,6 +791,20 @@ func (r *queryResolver) ProjectMindMapCards(ctx context.Context, projectID strin
 	return items, nil
 }
 
+// SearchProjectMindMap is the resolver for the searchProjectMindMap field.
+func (r *queryResolver) SearchProjectMindMap(ctx context.Context, input model.SearchMindMapInput) (*model.MindMapSearchResult, error) {
+	if r.UseCases.MindMaps == nil {
+		return nil, missingUseCase("mind maps")
+	}
+	dto, err := r.UseCases.MindMaps.Search(ctx, mindmapapp.SearchInput{
+		ProjectID: mindmapdomain.ProjectID(input.ProjectID), Query: input.Query,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapMindMapSearchResult(dto), nil
+}
+
 // Sessions is the resolver for the sessions field.
 func (r *queryResolver) Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error) {
 	if r.UseCases.Sessions == nil {

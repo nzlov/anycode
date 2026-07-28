@@ -87,6 +87,30 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(service, /mutation RetryMindMapTask/);
 });
 
+test('mind map search matches agent-visible node fields and highlights only matching nodes', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+  const service = readSource('../src/services/mindMaps.ts');
+  const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
+
+  assert.match(page, /v-model="searchQuery"[\s\S]*placeholder="模拟 Agent 搜索节点"/);
+  assert.match(page, /aria-label="搜索思维图节点"/);
+  assert.match(page, /\{\{ searchMatchNodeIds\.size \}\} 个/);
+  assert.match(page, /searchProjectMindMap\(requestedProjectId, query\)/);
+  assert.match(page, /requestRevision !== searchRequestRevision/);
+  assert.match(
+    page,
+    /match\.sessionId \? cardDisplayId\(match\.sessionId, match\.nodeId\) : match\.nodeId/,
+  );
+  assert.match(page, /hasSearch\.value\s*\? searchMatchNodeIds\.value/);
+  assert.match(page, /'mind-map-node--search-match'/);
+  assert.match(page, /\.mind-map-node--search-match \.mind-map-node-content/);
+  assert.match(page, /width: min\(360px, calc\(100% - 24px\)\)/);
+  assert.match(service, /query SearchProjectMindMap/);
+  assert.match(service, /matches \{ nodeId sessionId \}/);
+  assert.match(schema, /searchProjectMindMap\(input: SearchMindMapInput!\): MindMapSearchResult!/);
+  assert.doesNotMatch(page, /searchMindMapNodes/);
+});
+
 test('mind map node long-press menu edits in a dialog and confirms cascading deletion', () => {
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
 

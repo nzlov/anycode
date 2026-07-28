@@ -77,6 +77,25 @@
     </div>
 
     <div class="mind-map-canvas">
+      <div class="mind-map-search">
+        <q-input
+          v-model="searchQuery"
+          dense
+          outlined
+          clearable
+          debounce="200"
+          :loading="searchLoading"
+          placeholder="模拟 Agent 搜索节点"
+          aria-label="搜索思维图节点"
+        >
+          <template #prepend><q-icon name="search" /></template>
+          <template v-if="hasSearch" #append>
+            <span class="mind-map-search__count" aria-live="polite">
+              {{ searchMatchNodeIds.size }} 个
+            </span>
+          </template>
+        </q-input>
+      </div>
       <VueFlow
         id="project-mind-map-flow"
         v-model:nodes="flowNodes"
@@ -286,7 +305,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Background } from '@vue-flow/background';
@@ -310,6 +329,7 @@ import {
   getProjectMindMap,
   listProjectMindMapCards,
   retryMindMapTask,
+  searchProjectMindMap,
   subscribeMindMapUpdates,
   updateProjectMindMap,
   type MindMapCard,
@@ -349,6 +369,9 @@ const mainGraph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updat
 const cards = ref<MindMapCard[]>([]);
 const activeCardSessionId = ref('');
 let routeCardHighlightApplied = false;
+const searchQuery = ref('');
+const searchLoading = ref(false);
+const searchMatchNodeIds = ref<Set<string>>(new Set());
 const selectedNodeId = ref('');
 const infoNodeId = ref('');
 const menuNodeId = ref('');
@@ -362,6 +385,7 @@ const nodeFiles = ref<MindMapNodeFile[]>([]);
 const handleSides = ['top', 'right', 'bottom', 'left'] as const;
 let graphRequestRevision = 0;
 let cardRequestRevision = 0;
+let searchRequestRevision = 0;
 let subscriptionRevision = 0;
 let mindMapSubscription: { unsubscribe: () => void } | null = null;
 let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -375,6 +399,7 @@ const graph = computed<DisplayMindMapGraph>(() => combineMindMaps(mainGraph.valu
 const radialLayout = computed(() =>
   buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
 );
+const hasSearch = computed(() => Boolean(searchQuery.value?.trim()));
 const directlyRelatedNodeIds = computed(() => {
   const related = new Set<string>();
   if (!selectedNodeId.value) return related;
@@ -431,13 +456,21 @@ const activeCardElementIds = computed(() => {
   return { nodeIds, edgeIds };
 });
 const highlightedNodeIds = computed(() =>
-  selectedNodeId.value ? directlyRelatedNodeIds.value : activeCardElementIds.value.nodeIds,
+  hasSearch.value
+    ? searchMatchNodeIds.value
+    : selectedNodeId.value
+      ? directlyRelatedNodeIds.value
+      : activeCardElementIds.value.nodeIds,
 );
 const highlightedEdgeIds = computed(() =>
-  selectedNodeId.value ? directlyRelatedEdgeIds.value : activeCardElementIds.value.edgeIds,
+  hasSearch.value
+    ? new Set<string>()
+    : selectedNodeId.value
+      ? directlyRelatedEdgeIds.value
+      : activeCardElementIds.value.edgeIds,
 );
 const hasElementHighlight = computed(() =>
-  Boolean(selectedNodeId.value || activeCardElementIds.value.nodeIds.size),
+  Boolean(hasSearch.value || selectedNodeId.value || activeCardElementIds.value.nodeIds.size),
 );
 const deletingNode = computed(() =>
   graph.value.nodes.find((node) => node.id === deletingNodeId.value),
@@ -481,6 +514,7 @@ const flowNodes = computed({
         'mind-map-node--added': node.changeType === 'added',
         'mind-map-node--modified': node.changeType === 'modified',
         'mind-map-node--deleted': node.changeType === 'deleted',
+        'mind-map-node--search-match': hasSearch.value && searchMatchNodeIds.value.has(node.id),
         'mind-map-node--related':
           Boolean(selectedNodeId.value) &&
           node.id !== selectedNodeId.value &&
@@ -589,10 +623,13 @@ onMounted(async () => {
   startMindMapSubscription();
 });
 
+watch(searchQuery, () => void runMindMapSearch());
+
 onBeforeUnmount(() => {
   disposed = true;
   graphRequestRevision += 1;
   cardRequestRevision += 1;
+  searchRequestRevision += 1;
   stopMindMapSubscription();
   if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
 });
@@ -653,6 +690,7 @@ async function refreshMindMap() {
         ...cards.value.map((card) => card.updatedAt),
       ].reduce((latest, value) => (value > latest ? value : latest), '');
     } while (refreshPending);
+    if (hasSearch.value) await runMindMapSearch();
     fitGraph();
   })();
   try {
@@ -719,6 +757,41 @@ async function applyOperations(operations: MindMapOperation[], sessionId = '') {
 
 function fitGraph() {
   requestAnimationFrame(() => void fitView({ padding: 0.2 }));
+}
+
+async function runMindMapSearch() {
+  const query = searchQuery.value?.trim() ?? '';
+  const requestedProjectId = projectId.value;
+  const requestRevision = ++searchRequestRevision;
+  if (!query) {
+    searchMatchNodeIds.value = new Set();
+    searchLoading.value = false;
+    return;
+  }
+  searchLoading.value = true;
+  try {
+    const result = await searchProjectMindMap(requestedProjectId, query);
+    if (
+      disposed ||
+      requestRevision !== searchRequestRevision ||
+      requestedProjectId !== projectId.value ||
+      query !== searchQuery.value?.trim()
+    ) {
+      return;
+    }
+    searchMatchNodeIds.value = new Set(
+      result.matches.map((match) =>
+        match.sessionId ? cardDisplayId(match.sessionId, match.nodeId) : match.nodeId,
+      ),
+    );
+  } catch {
+    if (requestRevision === searchRequestRevision) {
+      searchMatchNodeIds.value = new Set();
+      $q.notify({ type: 'negative', message: '搜索思维图失败' });
+    }
+  } finally {
+    if (requestRevision === searchRequestRevision) searchLoading.value = false;
+  }
 }
 
 function selectNode({ node }: NodeMouseEvent) {
@@ -1031,6 +1104,23 @@ function taskStatusColor(status: string) {
   touch-action: none;
 }
 
+.mind-map-search {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  width: min(360px, calc(100% - 24px));
+  border-radius: 4px;
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-card);
+}
+
+.mind-map-search__count {
+  color: var(--ac-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .mind-map-canvas :deep(.vue-flow) {
   position: absolute;
   inset: 0;
@@ -1147,6 +1237,13 @@ function taskStatusColor(status: string) {
 .mind-map-canvas :deep(.mind-map-node--related .mind-map-node-content) {
   border-color: var(--q-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 14%, transparent);
+}
+
+.mind-map-canvas :deep(.mind-map-node--search-match .mind-map-node-content) {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--q-primary) 32%, transparent),
+    0 0 18px color-mix(in srgb, var(--q-primary) 24%, transparent),
+    var(--ac-shadow-card);
 }
 
 .mind-map-canvas :deep(.mind-map-node--added .mind-map-node-content) {

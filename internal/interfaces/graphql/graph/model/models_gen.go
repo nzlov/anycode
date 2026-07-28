@@ -314,6 +314,17 @@ type MindMapPageInput struct {
 	PageSize     int     `json:"pageSize"`
 }
 
+type MindMapSearchMatch struct {
+	NodeID    string  `json:"nodeId"`
+	SessionID *string `json:"sessionId,omitempty"`
+}
+
+type MindMapSearchResult struct {
+	ProjectID string                `json:"projectId"`
+	Query     string                `json:"query"`
+	Matches   []*MindMapSearchMatch `json:"matches"`
+}
+
 type MindMapUpdateEvent struct {
 	ProjectID string    `json:"projectId"`
 	SessionID *string   `json:"sessionId,omitempty"`
@@ -468,6 +479,11 @@ type SaveWorkflowDefinitionInput struct {
 	ProjectID string              `json:"projectId"`
 	Name      string              `json:"name"`
 	Graph     *WorkflowGraphInput `json:"graph"`
+}
+
+type SearchMindMapInput struct {
+	ProjectID string `json:"projectId"`
+	Query     string `json:"query"`
 }
 
 type Session struct {

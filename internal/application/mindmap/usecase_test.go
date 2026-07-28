@@ -267,6 +267,53 @@ func TestSearchGraphMatchesContentAndReturnsOneHopRelationships(t *testing.T) {
 	}
 }
 
+func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime, MaxConcurrent: 1,
+	}}
+	project, session := saveMindMapTestProjectAndSession(t, store, "session-search")
+	session.Status = sessiondomain.StatusRunning
+	session.ClosedAt = nil
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	changeIndex := 0
+	service.generateID = func() (domain.ChangeID, error) {
+		changeIndex++
+		return domain.ChangeID(fmt.Sprintf("search-change-%d", changeIndex)), nil
+	}
+	mainTitle, cardTitle := "Shared Search", "Card Search"
+	if _, err := service.Update(ctx, UpdateInput{ProjectID: domain.ProjectID(project.ID), Operations: []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: "main-node", Title: &mainTitle,
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID),
+		Operations: []OperationInput{{Kind: domain.ChangeUpsertNode, ID: "card-node", Title: &cardTitle}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	mainResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "shared search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mainResult.Matches) != 1 || mainResult.Matches[0].NodeID != "main-node" || mainResult.Matches[0].SessionID != "" {
+		t.Fatalf("main search result = %#v", mainResult)
+	}
+	cardResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "card search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cardResult.Matches) != 1 || cardResult.Matches[0].NodeID != "card-node" || cardResult.Matches[0].SessionID != domain.SessionID(session.ID) {
+		t.Fatalf("card search result = %#v", cardResult)
+	}
+}
+
 func TestCardDeltaContainsOnlyAddedNodesAndTheirRelationships(t *testing.T) {
 	base := domain.Graph{
 		Nodes: []domain.Node{

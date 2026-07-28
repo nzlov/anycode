@@ -12,6 +12,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -23,6 +24,7 @@ import (
 	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
+	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
@@ -47,6 +49,39 @@ func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
 	if len(files) != 1 || files[0].ID != "artifact-1" {
 		t.Fatalf("session files = %#v", files)
 	}
+}
+
+func TestQuerySearchProjectMindMapMapsScopedMatches(t *testing.T) {
+	mindMaps := &fakeMindMapUseCase{result: mindmapapp.ProjectSearchResultDTO{
+		ProjectID: "project-1", Query: "agent search",
+		Matches: []mindmapapp.ProjectSearchMatchDTO{
+			{NodeID: "main-node"},
+			{NodeID: "card-node", SessionID: "session-1"},
+		},
+	}}
+	result, err := NewResolver(UseCases{MindMaps: mindMaps}).Query().SearchProjectMindMap(
+		context.Background(), model.SearchMindMapInput{ProjectID: "project-1", Query: "agent search"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mindMaps.input.ProjectID != mindmapdomain.ProjectID("project-1") || mindMaps.input.Query != "agent search" {
+		t.Fatalf("search input = %#v", mindMaps.input)
+	}
+	if len(result.Matches) != 2 || result.Matches[0].SessionID != nil || result.Matches[1].SessionID == nil || *result.Matches[1].SessionID != "session-1" {
+		t.Fatalf("search result = %#v", result)
+	}
+}
+
+type fakeMindMapUseCase struct {
+	mindmapapp.UseCase
+	input  mindmapapp.SearchInput
+	result mindmapapp.ProjectSearchResultDTO
+}
+
+func (f *fakeMindMapUseCase) Search(_ context.Context, input mindmapapp.SearchInput) (mindmapapp.ProjectSearchResultDTO, error) {
+	f.input = input
+	return f.result, nil
 }
 
 func TestSubscriptionTunnelUpdatesForwardsRunningCount(t *testing.T) {

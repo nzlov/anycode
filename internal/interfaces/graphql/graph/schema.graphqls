@@ -17,6 +17,7 @@ type Query {
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   projectMindMap(input: MindMapPageInput!): MindMapGraphPage!
   projectMindMapCards(projectId: ID!): [MindMapCard!]!
+  searchProjectMindMap(input: SearchMindMapInput!): MindMapSearchResult!
   sessions(input: ListSessionsInput): SessionCardPage!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
@@ -896,6 +897,22 @@ type MindMapCard {
   edges: [MindMapEdge!]!
   modifiedNodeIds: [ID!]!
   deletedNodeIds: [ID!]!
+}
+
+input SearchMindMapInput {
+  projectId: ID!
+  query: String!
+}
+
+type MindMapSearchResult {
+  projectId: ID!
+  query: String!
+  matches: [MindMapSearchMatch!]!
+}
+
+type MindMapSearchMatch {
+  nodeId: ID!
+  sessionId: ID
 }
 
 input UpdateMindMapInput {

@@ -22,6 +22,7 @@ type UseCase interface {
 	Get(ctx context.Context, input GetInput) (GraphDTO, error)
 	GetPage(ctx context.Context, input GetPageInput) (GraphPageDTO, error)
 	ListCards(ctx context.Context, projectID domain.ProjectID) ([]CardDTO, error)
+	Search(ctx context.Context, input SearchInput) (ProjectSearchResultDTO, error)
 	Update(ctx context.Context, input UpdateInput) (GraphDTO, error)
 	Apply(ctx context.Context, input UpdateInput) (GraphDTO, error)
 	GetForSession(ctx context.Context, sessionID domain.SessionID) (GraphDTO, error)
@@ -52,6 +53,11 @@ type UpdateInput struct {
 	ProjectID  domain.ProjectID
 	SessionID  domain.SessionID
 	Operations []OperationInput
+}
+
+type SearchInput struct {
+	ProjectID domain.ProjectID
+	Query     string
 }
 
 type OperationInput struct {
@@ -121,6 +127,17 @@ type SearchResultDTO struct {
 type NodeMatchDTO struct {
 	Node          NodeDTO
 	MatchedFields []string
+}
+
+type ProjectSearchResultDTO struct {
+	ProjectID domain.ProjectID
+	Query     string
+	Matches   []ProjectSearchMatchDTO
+}
+
+type ProjectSearchMatchDTO struct {
+	NodeID    domain.NodeID
+	SessionID domain.SessionID
 }
 
 type CardDTO struct {
@@ -460,6 +477,36 @@ func (s *Service) ListCards(ctx context.Context, projectID domain.ProjectID) ([]
 	return items, nil
 }
 
+func (s *Service) Search(ctx context.Context, input SearchInput) (ProjectSearchResultDTO, error) {
+	query, err := validateSearchQuery(input.Query)
+	if err != nil {
+		return ProjectSearchResultDTO{}, err
+	}
+	graph, err := s.Get(ctx, GetInput{ProjectID: input.ProjectID})
+	if err != nil {
+		return ProjectSearchResultDTO{}, err
+	}
+	cards, err := s.ListCards(ctx, input.ProjectID)
+	if err != nil {
+		return ProjectSearchResultDTO{}, err
+	}
+	result := ProjectSearchResultDTO{ProjectID: input.ProjectID, Query: query}
+	appendMatches := func(nodes []NodeDTO, sessionID domain.SessionID) {
+		if len(nodes) == 0 {
+			return
+		}
+		matches := searchGraph(GraphDTO{ProjectID: input.ProjectID, SessionID: sessionID, Nodes: nodes}, query, len(nodes))
+		for _, match := range matches.Matches {
+			result.Matches = append(result.Matches, ProjectSearchMatchDTO{NodeID: match.Node.ID, SessionID: sessionID})
+		}
+	}
+	appendMatches(graph.Nodes, "")
+	for _, card := range cards {
+		appendMatches(card.Nodes, card.SessionID)
+	}
+	return result, nil
+}
+
 func (s *Service) RetryTask(ctx context.Context, taskID domain.TaskID) (CardDTO, error) {
 	configuration, err := s.settings.MindMapConfiguration(ctx)
 	if err != nil {
@@ -666,12 +713,9 @@ func (s *Service) getForProcess(ctx context.Context, processRunID string, sessio
 }
 
 func (s *Service) SearchForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, query string, limit int) (SearchResultDTO, error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return SearchResultDTO{}, errors.New("mind map search query is required")
-	}
-	if len(query) > 500 {
-		return SearchResultDTO{}, errors.New("mind map search query is too long")
+	query, err := validateSearchQuery(query)
+	if err != nil {
+		return SearchResultDTO{}, err
 	}
 	if limit == 0 {
 		limit = 20
@@ -684,6 +728,17 @@ func (s *Service) SearchForProcess(ctx context.Context, processRunID string, ses
 		return SearchResultDTO{}, err
 	}
 	return searchGraph(graph, query, limit), nil
+}
+
+func validateSearchQuery(query string) (string, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", errors.New("mind map search query is required")
+	}
+	if len(query) > 500 {
+		return "", errors.New("mind map search query is too long")
+	}
+	return query, nil
 }
 
 func (s *Service) UpdateForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error) {
