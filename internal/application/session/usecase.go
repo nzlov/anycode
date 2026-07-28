@@ -2498,7 +2498,7 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	var dto DTO
 	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
 		var err error
-		dto, err = s.stopSession(ctx, id, codexStopGraceful)
+		dto, err = s.stopSession(ctx, id, codexStopInterrupt)
 		return err
 	})
 	if err == nil && (dto.Status == domain.StatusStopped || dto.Status == domain.StatusClosed) && s.tunnels != nil {

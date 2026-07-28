@@ -7648,7 +7648,7 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 	}
 }
 
-func TestStopSessionRepeatedRequestStillWaitsForCodexConsumerToExitNaturally(t *testing.T) {
+func TestStopSessionInterruptsTurnThenWaitsForCodexConsumerExit(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -7695,18 +7695,11 @@ func TestStopSessionRepeatedRequestStillWaitsForCodexConsumerToExitNaturally(t *
 	if err != nil || stopping.Status != domain.StatusStopping {
 		t.Fatalf("StopSession() = %#v, %v", stopping, err)
 	}
-	if codex.stoppedID != "" {
-		t.Fatalf("StopSession() interrupted Codex process %q", codex.stoppedID)
+	if codex.stoppedID != "process-run-1" {
+		t.Fatalf("StopSession() did not interrupt Codex process: %q", codex.stoppedID)
 	}
 	if got := repo.sessions["session-1"]; got.Status != domain.StatusStopping {
 		t.Fatalf("session before Codex exit = %#v", got)
-	}
-	stopping, err = service.StopSession(ctx, "session-1")
-	if err != nil || stopping.Status != domain.StatusStopping {
-		t.Fatalf("second StopSession() = %#v, %v", stopping, err)
-	}
-	if codex.stoppedID != "" {
-		t.Fatalf("second StopSession() interrupted Codex process %q", codex.stoppedID)
 	}
 	stream <- processdomain.CodexEvent{
 		EventID:        "late-message",
@@ -7770,8 +7763,8 @@ func TestStopWorkflowSessionSettlesAfterConsumerExit(t *testing.T) {
 	if err != nil || stopping.Status != domain.StatusStopping {
 		t.Fatalf("StopSession() = %#v, %v", stopping, err)
 	}
-	if codex.stoppedID != "" {
-		t.Fatalf("StopSession() interrupted Codex process %q", codex.stoppedID)
+	if codex.stoppedID != "process-run-1" {
+		t.Fatalf("StopSession() did not interrupt Codex process: %q", codex.stoppedID)
 	}
 	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendInflight || promptAppend.DispatchedProcessRunID != "process-run-1" {
 		t.Fatalf("prompt append before Codex exit = %#v", promptAppend)
@@ -10787,7 +10780,7 @@ func TestStopSessionCancelsPendingQuestions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StopSession() error = %v", err)
 	}
-	if got.Status != domain.StatusStopping || codex.stoppedID != "" {
+	if got.Status != domain.StatusStopping || codex.stoppedID != "process-run-1" {
 		t.Fatalf("StopSession() = %#v, interrupted process = %q", got, codex.stoppedID)
 	}
 	if questions.cancelledSessionID != "session-1" || questions.cancelReason != "session stopped" {
@@ -10905,8 +10898,9 @@ func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning}
 	processes.active = processdomain.Run{ID: "process-run-2", SessionID: "session-1", Status: processdomain.StatusRunning}
 	processes.hasActive = true
+	var stopOnce sync.Once
 	codex.stopHook = func(context.Context, processdomain.RunID) error {
-		close(resumeStream)
+		stopOnce.Do(func() { close(resumeStream) })
 		return nil
 	}
 	lockedBeforeStop := len(locker.ids)
@@ -10916,8 +10910,8 @@ func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 	if len(locker.ids) <= lockedBeforeStop {
 		t.Fatalf("StopSession() did not use locker: %#v", locker.ids)
 	}
-	if codex.stoppedID != "" {
-		t.Fatalf("StopSession() interrupted Codex process %q", codex.stoppedID)
+	if codex.stoppedID != "process-run-2" {
+		t.Fatalf("StopSession() did not interrupt Codex process: %q", codex.stoppedID)
 	}
 	lockedBeforeClose := len(locker.ids)
 	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err != nil {
