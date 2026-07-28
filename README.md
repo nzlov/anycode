@@ -112,10 +112,10 @@ mkdir -p data workspaces
 
 需要由 AnyCode 管理的项目应位于 `ANYCODE_WORKSPACES_DIR` 指向的宿主机目录中。进入界面后，应使用对应的容器路径（默认是 `/workspaces/<项目目录>`）添加项目，而不是宿主机绝对路径。
 
-### 2. 构建镜像并登录 Codex
+### 2. 拉取镜像并登录 Codex
 
 ```bash
-docker compose build
+docker compose pull
 docker compose run --rm anycode codex login --device-auth
 docker compose run --rm anycode codex login status
 ```
@@ -169,7 +169,7 @@ curl --fail http://127.0.0.1:8080/healthz
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | 本地 Turso/libSQL 数据库路径，也可改为 `libsql://` 云数据库地址。 |
 | `TURSO_AUTH_TOKEN` | 空 | 使用远程 Turso 数据库时的认证 token。 |
 
-Turso 缓存与镜像构建代理变量可在 [`.env.example`](.env.example) 中查看；产物大小限制、Playwright 和 Chromium 配置可在 [`compose.yml`](compose.yml) 中查看。
+Turso 缓存变量可在 [`.env.example`](.env.example) 中查看；产物大小限制、Playwright 和 Chromium 配置可在 [`compose.yml`](compose.yml) 中查看。
 
 ## 数据与安全
 
@@ -191,10 +191,11 @@ docker compose ps
 docker compose logs -f anycode
 ```
 
-重新构建并启动当前代码：
+拉取最新镜像并启动：
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 停止服务：
@@ -209,12 +210,12 @@ docker compose down
 
 - Compose 提示必须设置 `ANYCODE_ACCESS_KEY`：确认仓库根目录存在 `.env`，且该值不是空字符串。
 - 页面提示访问密钥无效：输入 `.env` 中的原始值，不要添加 `Bearer ` 前缀。
-- 服务启动失败并出现 `probe codex cli`：先运行 `docker compose run --rm anycode codex login status` 检查凭据；凭据有效时，查看容器日志并重新构建镜像，确认镜像内 Codex CLI 完整且版本兼容。
-- 会话执行时返回 Codex 认证错误：重新执行“构建镜像并登录 Codex”中的任一登录命令，再确认 `codex login status`。
+- 服务启动失败并出现 `probe codex cli`：先运行 `docker compose run --rm anycode codex login status` 检查凭据；凭据有效时，查看容器日志并重新拉取镜像，确认镜像内 Codex CLI 完整且版本兼容。
+- 会话执行时返回 Codex 认证错误：重新执行“拉取镜像并登录 Codex”中的任一登录命令，再确认 `codex login status`。
 - 无法添加或写入项目：确认宿主机目录已挂载到 `/workspaces`，并允许 UID/GID `1000` 读写。
 - 本地数据库或附件写入失败：确认 `ANYCODE_HOST_DATA_DIR` 有可用空间且允许容器用户写入。
 - 使用远程 Turso 失败：同时核对 `TURSO_DATABASE_URL`、`TURSO_AUTH_TOKEN` 和容器网络连接。
-- 镜像构建下载失败：根据网络环境在 `.env` 中配置 `PACMAN_MIRROR`、`NPM_MIRROR` 或 `GOPROXY` 后重新构建。
+- 镜像拉取失败：确认当前网络可以访问 `ghcr.io`，然后重新执行 `docker compose pull`。
 
 ## 许可证
 

@@ -1,11 +1,6 @@
 services:
   anycode:
-    build:
-      context: .
-      args:
-        PACMAN_MIRROR: ${PACMAN_MIRROR:-}
-        NPM_MIRROR: ${NPM_MIRROR:-}
-        GOPROXY: ${GOPROXY:-}
+    image: ghcr.io/nzlov/anycode:latest
     environment:
       ANYCODE_ACCESS_KEY: ${ANYCODE_ACCESS_KEY:?set ANYCODE_ACCESS_KEY}
       ANYCODE_HTTP_ADDR: :${ANYCODE_HTTP_PORT:-8080}

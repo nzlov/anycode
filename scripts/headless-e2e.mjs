@@ -278,6 +278,8 @@ async function startDocker() {
   await writeFile(overrideFile, [
     'services:',
     '  anycode:',
+    '    build:',
+    '      context: .',
     '    volumes:',
     `      - ${codexHome}:/root/.codex`,
     '',

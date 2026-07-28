@@ -112,10 +112,10 @@ mkdir -p data workspaces
 
 Projects managed by AnyCode should be located in the host directory specified by `ANYCODE_WORKSPACES_DIR`. In the UI, add a project using its corresponding container path (by default, `/workspaces/<project-directory>`) rather than its absolute host path.
 
-### 2. Build the image and sign in to Codex
+### 2. Pull the image and sign in to Codex
 
 ```bash
-docker compose build
+docker compose pull
 docker compose run --rm anycode codex login --device-auth
 docker compose run --rm anycode codex login status
 ```
@@ -169,7 +169,7 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | Local Turso/libSQL database path. This can also be a `libsql://` cloud database URL. |
 | `TURSO_AUTH_TOKEN` | Empty | Authentication token for a remote Turso database. |
 
-See [`.env.example`](.env.example) for Turso caching and image-build proxy variables. See [`compose.yml`](compose.yml) for artifact size limits and Playwright and Chromium configuration.
+See [`.env.example`](.env.example) for Turso caching variables. See [`compose.yml`](compose.yml) for artifact size limits and Playwright and Chromium configuration.
 
 ## Data and security
 
@@ -191,10 +191,11 @@ docker compose ps
 docker compose logs -f anycode
 ```
 
-Rebuild and start the current code:
+Pull the latest image and start the service:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Stop the service:
@@ -209,12 +210,12 @@ Common issues:
 
 - Compose reports that `ANYCODE_ACCESS_KEY` must be set: confirm that `.env` exists in the repository root and that its value is not empty.
 - The page reports an invalid access key: enter the raw value from `.env` without a `Bearer ` prefix.
-- The service fails to start with `probe codex cli`: run `docker compose run --rm anycode codex login status` to check the credentials. If they are valid, inspect the container logs and rebuild the image to ensure the bundled Codex CLI is complete and compatible.
-- A session returns a Codex authentication error: repeat one of the login commands under "Build the image and sign in to Codex," then confirm the result with `codex login status`.
+- The service fails to start with `probe codex cli`: run `docker compose run --rm anycode codex login status` to check the credentials. If they are valid, inspect the container logs and pull the image again to ensure the bundled Codex CLI is complete and compatible.
+- A session returns a Codex authentication error: repeat one of the login commands under "Pull the image and sign in to Codex," then confirm the result with `codex login status`.
 - A project cannot be added or written: confirm that the host directory is mounted at `/workspaces` and is writable by UID/GID `1000`.
 - The local database or attachments cannot be written: confirm that `ANYCODE_HOST_DATA_DIR` has available space and is writable by the container user.
 - A remote Turso connection fails: verify `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and the container's network connectivity.
-- Image-build downloads fail: configure `PACMAN_MIRROR`, `NPM_MIRROR`, or `GOPROXY` in `.env` for your network environment, then rebuild.
+- Image pulls fail: confirm that the current network can reach `ghcr.io`, then run `docker compose pull` again.
 
 ## License
 
