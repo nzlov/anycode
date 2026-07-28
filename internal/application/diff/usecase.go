@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
@@ -18,6 +20,27 @@ type UseCase interface {
 	CountSessionChangedFiles(ctx context.Context, sessionID session.ID) (int, error)
 	GetBranchDiff(ctx context.Context, input BranchDiffInput) (SessionDiffDTO, error)
 	GetCommitHistory(ctx context.Context, input CommitHistoryInput) (CommitHistoryDTO, error)
+	OpenSessionDiffFile(ctx context.Context, input OpenSessionDiffFileInput) (FileStream, error)
+}
+
+var (
+	ErrDiffFileNotFound       = errors.New("changed file not found")
+	ErrDiffFileVersionMissing = errors.New("changed file version is unavailable")
+	ErrDiffFileNotMedia       = errors.New("changed file is not previewable media")
+)
+
+type OpenSessionDiffFileInput struct {
+	SessionID session.ID
+	FilePath  string
+	Version   gitdiff.FileVersion
+}
+
+type FileStream struct {
+	Filename string
+	MimeType string
+	Size     int64
+	Reader   io.ReadCloser
+	Seeker   io.ReadSeeker
 }
 
 type SessionDiffInput struct {
@@ -184,6 +207,84 @@ func (s *Service) CountSessionChangedFiles(ctx context.Context, sessionID sessio
 		return 0, apperror.New(apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "session diff is unavailable").WithRetryable(true)
 	}
 	return len(diff.Files), nil
+}
+
+func (s *Service) OpenSessionDiffFile(ctx context.Context, input OpenSessionDiffFileInput) (FileStream, error) {
+	if s == nil || s.sessions == nil || s.projects == nil || s.diff == nil {
+		return FileStream{}, errors.New("diff usecase is unavailable")
+	}
+	filePath := filepath.ToSlash(filepath.Clean(strings.TrimSpace(input.FilePath)))
+	if input.SessionID == "" || filePath == "." || strings.HasPrefix(filePath, "../") || input.Version != gitdiff.FileVersionOld && input.Version != gitdiff.FileVersionNew {
+		return FileStream{}, ErrDiffFileNotFound
+	}
+	sess, err := s.sessions.Find(ctx, input.SessionID)
+	if err != nil {
+		return FileStream{}, ErrDiffFileNotFound
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(sess.ProjectID))
+	if err != nil || !project.IsGit {
+		return FileStream{}, ErrDiffFileNotFound
+	}
+	diffInput, ok, err := s.resolveSessionDiffInput(ctx, sess, project)
+	if err != nil {
+		return FileStream{}, err
+	}
+	if !ok {
+		return FileStream{}, ErrDiffFileNotFound
+	}
+	files, err := s.diff.ChangedFiles(ctx, diffInput)
+	if err != nil {
+		return FileStream{}, err
+	}
+	file, found := changedFile(files, filePath)
+	if !found {
+		return FileStream{}, ErrDiffFileNotFound
+	}
+	if (input.Version == gitdiff.FileVersionOld && file.Status == "added") || (input.Version == gitdiff.FileVersionNew && file.Status == "deleted") {
+		return FileStream{}, ErrDiffFileVersionMissing
+	}
+	contentPort, ok := s.diff.(gitdiff.FileContentPort)
+	if !ok {
+		return FileStream{}, errors.New("diff file content port is unavailable")
+	}
+	versionPath := file.Path
+	if input.Version == gitdiff.FileVersionOld && file.OldPath != "" {
+		versionPath = file.OldPath
+	}
+	content, err := contentPort.OpenFileContent(ctx, gitdiff.FileContentInput{DiffInput: diffInput, FilePath: versionPath, Version: input.Version})
+	if err != nil {
+		if errors.Is(err, gitdiff.ErrFileVersionMissing) {
+			return FileStream{}, ErrDiffFileVersionMissing
+		}
+		return FileStream{}, err
+	}
+	if !previewableMediaType(content.MimeType) {
+		content.Reader.Close()
+		return FileStream{}, ErrDiffFileNotMedia
+	}
+	return FileStream{Filename: content.Filename, MimeType: content.MimeType, Size: content.Size, Reader: content.Reader, Seeker: content.Seeker}, nil
+}
+
+func changedFile(files []gitdiff.DiffFile, path string) (gitdiff.DiffFile, bool) {
+	for _, file := range files {
+		if file.Path == path {
+			return file, true
+		}
+	}
+	return gitdiff.DiffFile{}, false
+}
+
+func previewableMediaType(mimeType string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") {
+		return true
+	}
+	switch mimeType {
+	case "image/gif", "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (SessionDiffDTO, error) {

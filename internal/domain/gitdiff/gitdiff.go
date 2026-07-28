@@ -3,10 +3,12 @@ package gitdiff
 import (
 	"context"
 	"errors"
+	"io"
 )
 
 var (
 	ErrSessionDiffInvariant = errors.New("session diff invariant violation")
+	ErrFileVersionMissing   = errors.New("diff file version is unavailable")
 )
 
 type SessionID string
@@ -21,9 +23,31 @@ type Worktree struct {
 
 type DiffFile struct {
 	Path      string
+	OldPath   string
 	Status    string
 	Additions int
 	Deletions int
+}
+
+type FileVersion string
+
+const (
+	FileVersionOld FileVersion = "old"
+	FileVersionNew FileVersion = "new"
+)
+
+type FileContentInput struct {
+	DiffInput
+	FilePath string
+	Version  FileVersion
+}
+
+type FileContent struct {
+	Filename string
+	MimeType string
+	Size     int64
+	Reader   io.ReadCloser
+	Seeker   io.ReadSeeker
 }
 
 type DiffHunk struct {
@@ -146,4 +170,8 @@ type DiffPort interface {
 	FileDiff(ctx context.Context, input FileDiffInput) (FileDiff, error)
 	RangeDiff(ctx context.Context, input RangeDiffInput) (SessionDiff, error)
 	CommitHistory(ctx context.Context, input CommitHistoryInput) ([]CommitRecord, error)
+}
+
+type FileContentPort interface {
+	OpenFileContent(ctx context.Context, input FileContentInput) (FileContent, error)
 }

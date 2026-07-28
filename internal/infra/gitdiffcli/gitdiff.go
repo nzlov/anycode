@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -424,6 +427,65 @@ func (c *Client) FileDiff(ctx context.Context, input gitdiff.FileDiffInput) (git
 	return gitdiff.FileDiff{File: gitdiff.DiffFile{Path: input.FilePath}, Hunks: trimDiffHunks(parseUnifiedDiff(out), contextBefore, contextAfter)}, nil
 }
 
+func (c *Client) OpenFileContent(ctx context.Context, input gitdiff.FileContentInput) (gitdiff.FileContent, error) {
+	filePath := filepath.Clean(strings.TrimSpace(input.FilePath))
+	if filePath == "." || filepath.IsAbs(filePath) || filePath == ".." || strings.HasPrefix(filePath, ".."+string(filepath.Separator)) {
+		return gitdiff.FileContent{}, gitdiff.ErrFileVersionMissing
+	}
+
+	var body []byte
+	var err error
+	switch input.Version {
+	case gitdiff.FileVersionOld:
+		baseRef, resolveErr := c.diffBaseRef(ctx, input.DiffInput)
+		if resolveErr != nil {
+			return gitdiff.FileContent{}, resolveErr
+		}
+		body, err = c.runBytes(ctx, input.WorktreePath, "show", baseRef+":"+filePath)
+	case gitdiff.FileVersionNew:
+		if headRef := strings.TrimSpace(input.HeadRef); headRef != "" {
+			body, err = c.runBytes(ctx, input.WorktreePath, "show", headRef+":"+filePath)
+		} else {
+			body, err = readWorktreeFile(input.WorktreePath, filePath)
+		}
+	default:
+		return gitdiff.FileContent{}, gitdiff.ErrFileVersionMissing
+	}
+	if err != nil {
+		return gitdiff.FileContent{}, err
+	}
+	reader := bytes.NewReader(body)
+	return gitdiff.FileContent{
+		Filename: filepath.Base(filePath),
+		MimeType: detectFileContentType(filePath, body),
+		Size:     int64(len(body)),
+		Reader:   io.NopCloser(reader),
+		Seeker:   reader,
+	}, nil
+}
+
+func readWorktreeFile(worktreePath string, filePath string) ([]byte, error) {
+	fullPath := filepath.Join(worktreePath, filePath)
+	info, err := os.Lstat(fullPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, gitdiff.ErrFileVersionMissing
+	}
+	return os.ReadFile(fullPath)
+}
+
+func detectFileContentType(filePath string, body []byte) string {
+	detected := strings.ToLower(http.DetectContentType(body))
+	if detected != "application/octet-stream" {
+		return detected
+	}
+	if value := mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath))); value != "" {
+		if mediaType, _, err := mime.ParseMediaType(value); err == nil {
+			return strings.ToLower(mediaType)
+		}
+	}
+	return detected
+}
+
 func (c *Client) RangeDiff(ctx context.Context, input gitdiff.RangeDiffInput) (gitdiff.SessionDiff, error) {
 	diffInput := gitdiff.DiffInput{
 		WorktreePath: input.RepoPath,
@@ -524,6 +586,9 @@ func untrackedFileDiff(worktreePath string, filePath string) ([]gitdiff.DiffHunk
 	if err != nil {
 		return nil, err
 	}
+	if isMediaContent(filePath, body) || bytes.IndexByte(body, 0) >= 0 {
+		return []gitdiff.DiffHunk{}, nil
+	}
 	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
 	if len(lines) == 1 && lines[0] == "" {
 		lines = []string{}
@@ -538,6 +603,11 @@ func untrackedFileDiff(worktreePath string, filePath string) ([]gitdiff.DiffHunk
 		NewStart: 1,
 		Lines:    diffLines,
 	}}, nil
+}
+
+func isMediaContent(filePath string, body []byte) bool {
+	mimeType := detectFileContentType(filePath, body)
+	return strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/")
 }
 
 func countFileLines(path string) int {
@@ -566,8 +636,13 @@ func probeDiffContext(before int, after int) int {
 }
 
 func (c *Client) run(ctx context.Context, path string, args ...string) (string, error) {
+	out, err := c.runBytes(ctx, path, args...)
+	return string(out), err
+}
+
+func (c *Client) runBytes(ctx context.Context, path string, args ...string) ([]byte, error) {
 	if strings.TrimSpace(path) == "" {
-		return "", errors.New("git diff path is required")
+		return nil, errors.New("git diff path is required")
 	}
 	gitBin := c.gitBin
 	if gitBin == "" {
@@ -580,7 +655,7 @@ func (c *Client) run(ctx context.Context, path string, args ...string) (string, 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", &Error{
+		return nil, &Error{
 			Code:   classify(err, stderr.String()),
 			Path:   path,
 			Args:   allArgs,
@@ -588,7 +663,7 @@ func (c *Client) run(ctx context.Context, path string, args ...string) (string, 
 			Err:    err,
 		}
 	}
-	return stdout.String(), nil
+	return stdout.Bytes(), nil
 }
 
 type lineCount struct {
@@ -637,10 +712,12 @@ func parseNameStatus(out string) []gitdiff.DiffFile {
 		}
 		path := fields[i]
 		i++
+		oldPath := ""
 		if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
 			if i >= len(fields) {
 				break
 			}
+			oldPath = path
 			path = fields[i]
 			i++
 		}
@@ -648,8 +725,9 @@ func parseNameStatus(out string) []gitdiff.DiffFile {
 			continue
 		}
 		files = append(files, gitdiff.DiffFile{
-			Path:   path,
-			Status: statusName(status),
+			Path:    path,
+			OldPath: oldPath,
+			Status:  statusName(status),
 		})
 	}
 	return files

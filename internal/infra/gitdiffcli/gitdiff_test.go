@@ -3,6 +3,7 @@ package gitdiffcli
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -437,6 +438,58 @@ func TestChangedFilesAndFileDiff(t *testing.T) {
 	}
 }
 
+func TestOpenFileContentReturnsOldAndNewMediaVersions(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	oldBody := "\x89PNG\r\n\x1a\nold"
+	newBody := "\x89PNG\r\n\x1a\nnew"
+	writeFile(t, repo, "preview.png", oldBody)
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	writeFile(t, repo, "preview.png", newBody)
+
+	client := New("")
+	input := gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"}
+	oldContent, err := client.OpenFileContent(ctx, gitdiff.FileContentInput{DiffInput: input, FilePath: "preview.png", Version: gitdiff.FileVersionOld})
+	if err != nil {
+		t.Fatalf("OpenFileContent(old) error = %v", err)
+	}
+	defer oldContent.Reader.Close()
+	oldBytes, _ := io.ReadAll(oldContent.Reader)
+	if string(oldBytes) != oldBody || oldContent.MimeType != "image/png" {
+		t.Fatalf("old content = %q, %q", oldBytes, oldContent.MimeType)
+	}
+
+	newContent, err := client.OpenFileContent(ctx, gitdiff.FileContentInput{DiffInput: input, FilePath: "preview.png", Version: gitdiff.FileVersionNew})
+	if err != nil {
+		t.Fatalf("OpenFileContent(new) error = %v", err)
+	}
+	defer newContent.Reader.Close()
+	newBytes, _ := io.ReadAll(newContent.Reader)
+	if string(newBytes) != newBody || newContent.MimeType != "image/png" {
+		t.Fatalf("new content = %q, %q", newBytes, newContent.MimeType)
+	}
+}
+
+func TestUntrackedMediaDoesNotBecomeTextDiff(t *testing.T) {
+	repo := initRepo(t)
+	writeFile(t, repo, "README.md", "initial\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	writeFile(t, repo, "preview.png", "\x89PNG\r\n\x1a\nmedia")
+
+	got, err := New("").FileDiff(context.Background(), gitdiff.FileDiffInput{
+		DiffInput: gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:  "preview.png",
+	})
+	if err != nil {
+		t.Fatalf("FileDiff(untracked media) error = %v", err)
+	}
+	if len(got.Hunks) != 0 {
+		t.Fatalf("FileDiff(untracked media) hunks = %#v", got.Hunks)
+	}
+}
+
 func TestChangedFilesPreservesNonASCIIAndSpecialPaths(t *testing.T) {
 	ctx := context.Background()
 	repo := initRepo(t)
@@ -467,7 +520,7 @@ func TestChangedFilesPreservesNonASCIIAndSpecialPaths(t *testing.T) {
 	if tracked := findFile(files, trackedPath); tracked.Path != trackedPath || tracked.Status != "modified" || tracked.Additions != 1 || tracked.Deletions != 1 {
 		t.Fatalf("tracked file = %#v", tracked)
 	}
-	if renamed := findFile(files, newPath); renamed.Path != newPath || renamed.Status != "renamed" {
+	if renamed := findFile(files, newPath); renamed.Path != newPath || renamed.OldPath != oldPath || renamed.Status != "renamed" {
 		t.Fatalf("renamed file = %#v", renamed)
 	}
 	if untracked := findFile(files, untrackedPath); untracked.Path != untrackedPath || untracked.Status != "added" || untracked.Additions != 2 {

@@ -19,9 +19,11 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
+	"github.com/nzlov/anycode/internal/domain/gitdiff"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -36,6 +38,7 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	graphqlHandler  http.Handler
 	attachments     attachmentapp.UseCase
+	diff            diffapp.UseCase
 	settings        settingapp.UseCase
 	artifacts       artifactapp.UseCase
 	sessions        sessionapp.UseCase
@@ -52,6 +55,7 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
 		opts.sessions = useCases.Sessions
 		opts.artifacts = useCases.Artifacts
+		opts.diff = useCases.Diff
 		opts.settings = useCases.Settings
 	}
 }
@@ -100,6 +104,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("POST /files/{id}/preview-token", bearerAuth(cfg.AccessKey, attachmentHandler.previewToken(previewTokens)))
 	mux.Handle("GET /files/{id}/preview", filePreviewAuth(cfg.AccessKey, previewTokens, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
+	mux.Handle("GET /api/sessions/{id}/diff-media", bearerAuth(cfg.AccessKey, diffMediaHandler{useCase: opts.diff, previewMaxBytes: attachmentHandler.previewMaxBytes}))
 	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveAppearanceWallpaper(w, r, opts.settings)
 	})))
@@ -112,6 +117,53 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("/", newPWAHandler())
 
 	return mux
+}
+
+type diffMediaHandler struct {
+	useCase         diffapp.UseCase
+	previewMaxBytes int64
+}
+
+func (h diffMediaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.useCase == nil {
+		writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "diff service unavailable").WithRetryable(true))
+		return
+	}
+	stream, err := h.useCase.OpenSessionDiffFile(r.Context(), diffapp.OpenSessionDiffFileInput{
+		SessionID: sessiondomain.ID(r.PathValue("id")),
+		FilePath:  r.URL.Query().Get("path"),
+		Version:   gitdiff.FileVersion(strings.TrimSpace(r.URL.Query().Get("version"))),
+	})
+	if err != nil {
+		writeDiffMediaError(w, err)
+		return
+	}
+	defer stream.Reader.Close()
+	if stream.Size > h.previewMaxBytes {
+		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeDiffUnavailable, apperror.CategoryValidationError, "media file is too large to preview"))
+		return
+	}
+	w.Header().Set("Content-Type", stream.MimeType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": stream.Filename}))
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if stream.Seeker != nil {
+		http.ServeContent(w, r, stream.Filename, time.Time{}, stream.Seeker)
+		return
+	}
+	_, _ = io.Copy(w, stream.Reader)
+}
+
+func writeDiffMediaError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, diffapp.ErrDiffFileNotFound), errors.Is(err, diffapp.ErrDiffFileVersionMissing):
+		writeApplicationError(w, http.StatusNotFound, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "diff media version not found"))
+	case errors.Is(err, diffapp.ErrDiffFileNotMedia):
+		writeApplicationError(w, http.StatusUnsupportedMediaType, apperror.New(apperror.CodeDiffUnavailable, apperror.CategoryValidationError, "changed file is not previewable media"))
+	default:
+		writeApplicationError(w, http.StatusInternalServerError, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "diff media unavailable").WithRetryable(true))
+	}
 }
 
 func serveAppearanceWallpaper(w http.ResponseWriter, r *http.Request, settings settingapp.UseCase) {

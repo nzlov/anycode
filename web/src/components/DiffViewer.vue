@@ -35,8 +35,28 @@
           <q-badge outline :color="fileColor(file.status)" :label="file.status" />
         </div>
       </q-card-section>
-      <q-separator v-if="showFileHeaders && !isCollapsed(file.path) && fileDiffFor(file.path)" />
-      <q-card-section v-if="!isCollapsed(file.path) && fileDiffFor(file.path)" class="diff-code">
+      <q-separator
+        v-if="
+          showFileHeaders &&
+          !isCollapsed(file.path) &&
+          (fileDiffFor(file.path) || mediaPreviewFor(file.path))
+        "
+      />
+      <q-card-section
+        v-if="!isCollapsed(file.path) && mediaPreviewFor(file.path)"
+        class="diff-media"
+      >
+        <DiffMediaPreview
+          :session-id="mediaPreviewFor(file.path)!.sessionId"
+          :file-path="mediaPreviewFor(file.path)!.filePath"
+          :status="file.status"
+          :kind="mediaPreviewFor(file.path)!.kind"
+        />
+      </q-card-section>
+      <q-card-section
+        v-else-if="!isCollapsed(file.path) && fileDiffFor(file.path)"
+        class="diff-code"
+      >
         <template
           v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
           :key="`${file.path}:${hunk.id}`"
@@ -80,7 +100,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import DiffMediaPreview from '@/components/DiffMediaPreview.vue';
 import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
+import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
 
 const props = withDefaults(
   defineProps<{
@@ -90,6 +112,7 @@ const props = withDefaults(
     showFileHeaders?: boolean;
     collapsedPaths?: string[];
     loadingPaths?: string[];
+    mediaPreviews?: Record<string, DiffMediaPreviewTarget>;
   }>(),
   {
     files: () => [],
@@ -97,6 +120,7 @@ const props = withDefaults(
     showFileHeaders: true,
     collapsedPaths: () => [],
     loadingPaths: () => [],
+    mediaPreviews: () => ({}),
   },
 );
 
@@ -114,6 +138,10 @@ const fileDiffsByPath = computed(
 
 function fileDiffFor(filePath: string) {
   return fileDiffsByPath.value.get(filePath);
+}
+
+function mediaPreviewFor(filePath: string) {
+  return props.mediaPreviews[filePath];
 }
 
 function isLoading(filePath: string) {
@@ -215,6 +243,10 @@ function lineClass(kind: DiffLineKind) {
   padding: 0;
   border-radius: 0 0 var(--ac-radius) var(--ac-radius);
   background: var(--ac-diff-bg);
+}
+
+.diff-media {
+  padding: 16px;
 }
 
 .diff-line {

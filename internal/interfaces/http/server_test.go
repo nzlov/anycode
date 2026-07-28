@@ -16,10 +16,12 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/nzlov/anycode/internal/application/apperror"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
+	"github.com/nzlov/anycode/internal/domain/gitdiff"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -380,6 +382,34 @@ func TestAttachmentPreviewRequiresBearer(t *testing.T) {
 	}
 }
 
+func TestDiffMediaPreviewRequiresBearerAndStreamsVersion(t *testing.T) {
+	useCase := &fakeDiffMediaUseCase{stream: diffapp.FileStream{
+		Filename: "preview.png",
+		MimeType: "image/png",
+		Size:     3,
+		Reader:   io.NopCloser(strings.NewReader("png")),
+	}}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Diff: useCase}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sessions/session-1/diff-media?path=images%2Fpreview.png&version=old", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || useCase.calls != 0 {
+		t.Fatalf("unauthorized response = %d, calls = %d", rec.Code, useCase.calls)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/sessions/session-1/diff-media?path=images%2Fpreview.png&version=old", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "png" || rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("preview response = status:%d type:%q body:%q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+	}
+	if useCase.input.SessionID != "session-1" || useCase.input.FilePath != "images/preview.png" || useCase.input.Version != gitdiff.FileVersionOld {
+		t.Fatalf("OpenSessionDiffFile input = %#v", useCase.input)
+	}
+}
+
 func TestAttachmentPreviewStreamsContent(t *testing.T) {
 	useCase := &fakeAttachmentUseCase{
 		stream: attachmentapp.Stream{
@@ -643,6 +673,20 @@ type fakeAttachmentUseCase struct {
 	calls      int
 	openedID   sessiondomain.AttachmentID
 	openedMode attachmentapp.OpenMode
+}
+
+type fakeDiffMediaUseCase struct {
+	diffapp.UseCase
+	stream diffapp.FileStream
+	input  diffapp.OpenSessionDiffFileInput
+	err    error
+	calls  int
+}
+
+func (u *fakeDiffMediaUseCase) OpenSessionDiffFile(_ context.Context, input diffapp.OpenSessionDiffFileInput) (diffapp.FileStream, error) {
+	u.calls++
+	u.input = input
+	return u.stream, u.err
 }
 
 func (u *fakeAttachmentUseCase) StageAttachment(context.Context, attachmentapp.StageAttachmentInput) (attachmentapp.AttachmentDTO, error) {

@@ -179,6 +179,7 @@
           :show-file-headers="showFileHeaders"
           :collapsed-paths="collapseState.collapsedPaths"
           :loading-paths="fileLoadingPaths"
+          :media-previews="mediaPreviews"
           @expand="expandDiff"
           @toggle-collapse="toggleFileCollapsed"
         >
@@ -238,6 +239,8 @@ import type {
   SessionDiff,
 } from '@/services/diff';
 import { listSessions } from '@/services/sessions';
+import { diffMediaKind } from '@/services/diffMediaModel';
+import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
 
 const props = withDefaults(
   defineProps<{
@@ -315,6 +318,20 @@ const visibleDiffs = computed<FileDiff[]>(() => {
 const visibleFiles = computed<DiffFile[]>(() =>
   metadataFirst.value && diff.value?.available ? diff.value.files : [],
 );
+const mediaPreviews = computed<Record<string, DiffMediaPreviewTarget>>(() => {
+  const previews: Record<string, DiffMediaPreviewTarget> = {};
+  for (const file of diff.value?.files ?? []) {
+    const filePath = filePathWithoutPrefix(file.path);
+    const kind = diffMediaKind(filePath);
+    if (!kind) continue;
+    const sessionId =
+      props.target.kind === 'session'
+        ? props.target.sessionId
+        : sessionPrefixMap.value[sessionPrefix(file.path)];
+    if (sessionId) previews[file.path] = { sessionId, filePath, kind };
+  }
+  return previews;
+});
 const hasVisibleFiles = computed(
   () => visibleFiles.value.length > 0 || visibleDiffs.value.length > 0,
 );

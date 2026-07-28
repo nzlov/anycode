@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,6 +42,60 @@ func TestCountSessionChangedFilesUsesSessionDiffSource(t *testing.T) {
 	}
 	if calls := diffPort.changedFileCallCount("/worktrees/changed"); calls != 1 {
 		t.Fatalf("ChangedFiles changed calls = %d, want 1", calls)
+	}
+}
+
+func TestOpenSessionDiffFileValidatesChangeAndReturnsMediaVersion(t *testing.T) {
+	diffPort := &fakeMediaDiffPort{
+		fakeDiffPort: fakeDiffPort{files: []gitdiff.DiffFile{{Path: "new.png", OldPath: "old.png", Status: "renamed"}}},
+		content: gitdiff.FileContent{
+			Filename: "old.png",
+			MimeType: "image/png",
+			Size:     3,
+			Reader:   io.NopCloser(strings.NewReader("png")),
+		},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main", WorktreeBaseCommit: "base"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		diffPort,
+	)
+
+	stream, err := service.OpenSessionDiffFile(context.Background(), OpenSessionDiffFileInput{
+		SessionID: "session-1",
+		FilePath:  "new.png",
+		Version:   gitdiff.FileVersionOld,
+	})
+	if err != nil {
+		t.Fatalf("OpenSessionDiffFile() error = %v", err)
+	}
+	defer stream.Reader.Close()
+	if diffPort.openInput.FilePath != "old.png" || diffPort.openInput.Version != gitdiff.FileVersionOld {
+		t.Fatalf("OpenFileContent input = %#v", diffPort.openInput)
+	}
+	if stream.MimeType != "image/png" || stream.Size != 3 {
+		t.Fatalf("stream = %#v", stream)
+	}
+}
+
+func TestOpenSessionDiffFileRejectsMissingAndNonMediaVersions(t *testing.T) {
+	diffPort := &fakeMediaDiffPort{
+		fakeDiffPort: fakeDiffPort{files: []gitdiff.DiffFile{{Path: "added.png", Status: "added"}, {Path: "notes.txt", Status: "modified"}}},
+		content:      gitdiff.FileContent{Filename: "notes.txt", MimeType: "text/plain", Reader: io.NopCloser(strings.NewReader("text"))},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main", WorktreeBaseCommit: "base"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		diffPort,
+	)
+
+	_, err := service.OpenSessionDiffFile(context.Background(), OpenSessionDiffFileInput{SessionID: "session-1", FilePath: "added.png", Version: gitdiff.FileVersionOld})
+	if !errors.Is(err, ErrDiffFileVersionMissing) {
+		t.Fatalf("added old version error = %v", err)
+	}
+	_, err = service.OpenSessionDiffFile(context.Background(), OpenSessionDiffFileInput{SessionID: "session-1", FilePath: "notes.txt", Version: gitdiff.FileVersionNew})
+	if !errors.Is(err, ErrDiffFileNotMedia) {
+		t.Fatalf("text version error = %v", err)
 	}
 }
 
@@ -984,6 +1040,18 @@ type fakeDiffPort struct {
 	lastCommitHeadRef       string
 	lastContextBefore       int
 	lastContextAfter        int
+}
+
+type fakeMediaDiffPort struct {
+	fakeDiffPort
+	content   gitdiff.FileContent
+	openInput gitdiff.FileContentInput
+	err       error
+}
+
+func (p *fakeMediaDiffPort) OpenFileContent(_ context.Context, input gitdiff.FileContentInput) (gitdiff.FileContent, error) {
+	p.openInput = input
+	return p.content, p.err
 }
 
 func (p *fakeDiffPort) CurrentBranch(context.Context, string) (string, error) {
