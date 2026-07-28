@@ -12355,8 +12355,8 @@ func (s *fakeSessionArtifactStore) FindArtifact(_ context.Context, id domain.Ses
 	return artifact, nil
 }
 
-func (s *fakeSessionArtifactStore) ListArtifacts(context.Context, domain.ArtifactQuery) ([]domain.SessionFile, error) {
-	return nil, nil
+func (s *fakeSessionArtifactStore) ListArtifacts(context.Context, domain.ArtifactQuery) ([]domain.SessionFile, int, error) {
+	return nil, 0, nil
 }
 
 func (s *fakeSessionArtifactStore) ResolveArtifacts(context.Context, domain.ID, []string) ([]domain.SessionFile, error) {

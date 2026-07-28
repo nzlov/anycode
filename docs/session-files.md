@@ -60,7 +60,9 @@ inside the output directory remain available through the directory catalog.
 ## Preview and security
 
 - File preview and download use authenticated `/files/<id>/preview` and `/files/<id>/download`
-  endpoints. The access key is sent as a Bearer header and is never placed in a URL.
+  endpoints. The access key is sent as a Bearer header and is never placed in a URL. Browser image
+  previews first exchange that Bearer credential at `/files/<id>/preview-token`, then load the image
+  directly with a one-minute token restricted to that file's preview operation.
 - Preview supports safe raster images, PDF, browser-supported audio/video, and escaped text.
   SVG is not rendered inline. Archives and unknown files are download-only and are never extracted.
 - Text preview is limited to 1 MiB in the UI. Image preview rejects PNG/JPEG/GIF dimensions above

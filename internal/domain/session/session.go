@@ -708,7 +708,7 @@ type ArtifactStore interface {
 	FindArtifactByContent(ctx context.Context, sessionID ID, data []byte) (SessionFile, bool, error)
 	WriteInlineArtifact(ctx context.Context, input WriteInlineArtifactInput) (SessionFile, error)
 	FindArtifact(ctx context.Context, id SessionFileID) (SessionFile, error)
-	ListArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, error)
+	ListArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, int, error)
 	ResolveArtifacts(ctx context.Context, sessionID ID, logicalPaths []string) ([]SessionFile, error)
 	SumArtifactSize(ctx context.Context, sessionID ID) (int64, error)
 	CountArtifacts(ctx context.Context, sessionID ID) (int, error)

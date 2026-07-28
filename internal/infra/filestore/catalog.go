@@ -19,7 +19,16 @@ import (
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
-const artifactIDPrefix = "artifact."
+const (
+	artifactIDPrefix   = "artifact."
+	artifactIDV2Prefix = "artifact.v2."
+)
+
+type artifactReference struct {
+	sessionID    session.ID
+	logicalPath  string
+	legacyDigest string
+}
 
 func (s *Store) InspectArtifact(ctx context.Context, input session.InspectArtifactInput) (session.SessionFile, error) {
 	if err := ctx.Err(); err != nil {
@@ -191,25 +200,27 @@ func (s *Store) FindArtifactByContent(ctx context.Context, sessionID session.ID,
 }
 
 func (s *Store) FindArtifact(ctx context.Context, id session.SessionFileID) (session.SessionFile, error) {
-	sessionID, digest, ok := decodeArtifactID(id)
+	reference, ok := decodeArtifactID(id)
 	if !ok {
 		return session.SessionFile{}, session.ErrSessionFileNotFound
 	}
-	root, err := s.openArtifactRoot(ctx, sessionID)
+	root, err := s.openArtifactRoot(ctx, reference.sessionID)
 	if err != nil {
 		return session.SessionFile{}, err
 	}
 	defer root.Close()
-	logicalPath, err := findArtifactPath(ctx, root, digest)
+	logicalPath, err := resolveArtifactPath(ctx, root, reference)
 	if err != nil {
 		return session.SessionFile{}, err
 	}
-	return s.artifactFromFile(root, sessionID, logicalPath)
+	return s.artifactFromFile(root, reference.sessionID, logicalPath)
 }
 
-func (s *Store) ListArtifacts(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error) {
+func (s *Store) ListArtifacts(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, int, error) {
 	artifacts := make([]session.SessionFile, 0)
+	total := 0
 	err := s.walkArtifacts(ctx, query.SessionID, func(root *os.Root, logicalPath string, _ os.FileInfo) error {
+		total++
 		artifact, err := s.artifactFromFile(root, query.SessionID, logicalPath)
 		if err != nil {
 			return err
@@ -228,7 +239,7 @@ func (s *Store) ListArtifacts(ctx context.Context, query session.ArtifactQuery) 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	sort.Slice(artifacts, func(i, j int) bool {
 		switch query.Sort {
@@ -254,7 +265,7 @@ func (s *Store) ListArtifacts(ctx context.Context, query session.ArtifactQuery) 
 			return artifacts[i].CreatedAt.After(artifacts[j].CreatedAt)
 		}
 	})
-	return artifacts, nil
+	return artifacts, total, nil
 }
 
 func (s *Store) ResolveArtifacts(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error) {
@@ -340,20 +351,20 @@ func (s *Store) WatchArtifactDir(ctx context.Context, sessionID session.ID) (<-c
 }
 
 func (s *Store) DeleteArtifact(ctx context.Context, id session.SessionFileID) (session.SessionFile, error) {
-	sessionID, digest, ok := decodeArtifactID(id)
+	reference, ok := decodeArtifactID(id)
 	if !ok {
 		return session.SessionFile{}, session.ErrSessionFileNotFound
 	}
-	root, err := s.openArtifactRoot(ctx, sessionID)
+	root, err := s.openArtifactRoot(ctx, reference.sessionID)
 	if err != nil {
 		return session.SessionFile{}, err
 	}
 	defer root.Close()
-	logicalPath, err := findArtifactPath(ctx, root, digest)
+	logicalPath, err := resolveArtifactPath(ctx, root, reference)
 	if err != nil {
 		return session.SessionFile{}, err
 	}
-	artifact, err := s.artifactFromFile(root, sessionID, logicalPath)
+	artifact, err := s.artifactFromFile(root, reference.sessionID, logicalPath)
 	if err != nil {
 		return session.SessionFile{}, err
 	}
@@ -369,25 +380,25 @@ func (s *Store) DeleteArtifact(ctx context.Context, id session.SessionFileID) (s
 }
 
 func (s *Store) OpenArtifact(ctx context.Context, id session.SessionFileID) (session.AttachmentStream, error) {
-	sessionID, digest, ok := decodeArtifactID(id)
+	reference, ok := decodeArtifactID(id)
 	if !ok {
 		return session.AttachmentStream{}, session.ErrSessionFileNotFound
 	}
-	root, err := s.openArtifactRoot(ctx, sessionID)
+	root, err := s.openArtifactRoot(ctx, reference.sessionID)
 	if err != nil {
 		return session.AttachmentStream{}, err
 	}
 	defer root.Close()
-	logicalPath, err := findArtifactPath(ctx, root, digest)
+	logicalPath, err := resolveArtifactPath(ctx, root, reference)
 	if err != nil {
 		return session.AttachmentStream{}, err
 	}
-	path := filepath.Join(s.ArtifactDir(sessionID), filepath.FromSlash(logicalPath))
+	path := filepath.Join(s.ArtifactDir(reference.sessionID), filepath.FromSlash(logicalPath))
 	file, info, err := openArtifactFile(root, logicalPath, path)
 	if err != nil {
 		return session.AttachmentStream{}, err
 	}
-	artifact := s.artifactFromOpenFile(sessionID, logicalPath, path, file, info)
+	artifact := s.artifactFromOpenFile(reference.sessionID, logicalPath, path, file, info)
 	if _, err := file.Seek(0, 0); err != nil {
 		_ = file.Close()
 		return session.AttachmentStream{}, &Error{Code: classify(err), Path: path, Err: err}
@@ -684,6 +695,13 @@ func findArtifactPath(ctx context.Context, root *os.Root, digest string) (string
 	return "", session.ErrSessionFileNotFound
 }
 
+func resolveArtifactPath(ctx context.Context, root *os.Root, reference artifactReference) (string, error) {
+	if reference.logicalPath != "" {
+		return reference.logicalPath, nil
+	}
+	return findArtifactPath(ctx, root, reference.legacyDigest)
+}
+
 func (s *Store) walkArtifacts(ctx context.Context, sessionID session.ID, visit func(root *os.Root, logicalPath string, info os.FileInfo) error) error {
 	root, err := s.openArtifactRoot(ctx, sessionID)
 	if errors.Is(err, session.ErrSessionFileNotFound) {
@@ -826,26 +844,42 @@ func (s *Store) sessionInputDir(sessionID session.ID, sourceType session.Attachm
 
 func encodeArtifactID(sessionID session.ID, logicalPath string) session.SessionFileID {
 	encodedSession := base64.RawURLEncoding.EncodeToString([]byte(sessionID))
-	return session.SessionFileID(artifactIDPrefix + encodedSession + "." + artifactPathDigest(logicalPath))
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(logicalPath))
+	return session.SessionFileID(artifactIDV2Prefix + encodedSession + "." + encodedPath)
 }
 
-func decodeArtifactID(id session.SessionFileID) (session.ID, string, bool) {
+func decodeArtifactID(id session.SessionFileID) (artifactReference, bool) {
+	if strings.HasPrefix(string(id), artifactIDV2Prefix) {
+		value := strings.TrimPrefix(string(id), artifactIDV2Prefix)
+		parts := strings.SplitN(value, ".", 2)
+		if len(parts) != 2 {
+			return artifactReference{}, false
+		}
+		sessionID, sessionErr := base64.RawURLEncoding.DecodeString(parts[0])
+		logicalPath, pathErr := base64.RawURLEncoding.DecodeString(parts[1])
+		normalizedPath, normalizeErr := normalizeArtifactPath(string(logicalPath))
+		if sessionErr != nil || cleanPathComponent(string(sessionID)) != string(sessionID) || pathErr != nil || normalizeErr != nil || normalizedPath != string(logicalPath) {
+			return artifactReference{}, false
+		}
+		return artifactReference{sessionID: session.ID(sessionID), logicalPath: normalizedPath}, true
+	}
+
 	value := strings.TrimPrefix(string(id), artifactIDPrefix)
 	if value == string(id) {
-		return "", "", false
+		return artifactReference{}, false
 	}
 	parts := strings.SplitN(value, ".", 2)
 	if len(parts) != 2 || len(parts[1]) != sha256.Size*2 {
-		return "", "", false
+		return artifactReference{}, false
 	}
 	sessionID, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil || cleanPathComponent(string(sessionID)) != string(sessionID) {
-		return "", "", false
+		return artifactReference{}, false
 	}
 	if _, err := hex.DecodeString(parts[1]); err != nil {
-		return "", "", false
+		return artifactReference{}, false
 	}
-	return session.ID(sessionID), parts[1], true
+	return artifactReference{sessionID: session.ID(sessionID), legacyDigest: parts[1]}, true
 }
 
 func artifactPathDigest(logicalPath string) string {

@@ -3,6 +3,7 @@ package filestore
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"hash/crc32"
@@ -348,6 +349,53 @@ func TestOpenAndDeleteArtifactUseRootedOutputPaths(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Dir(path)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty artifact directory still exists: %v", err)
+	}
+}
+
+func TestArtifactIDResolvesDirectPathAndKeepsLegacyCompatibility(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logicalPath := "reports/result.txt"
+	path := filepath.Join(outputDir, filepath.FromSlash(logicalPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("result"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{SessionID: "session-1", SourcePath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference, ok := decodeArtifactID(artifact.ID)
+	if !ok || reference.sessionID != "session-1" || reference.logicalPath != logicalPath || reference.legacyDigest != "" {
+		t.Fatalf("decoded v2 artifact ID = %#v, ok=%v", reference, ok)
+	}
+	found, err := store.FindArtifact(ctx, artifact.ID)
+	if err != nil || found.LogicalPath != logicalPath {
+		t.Fatalf("FindArtifact(v2) = %#v, %v", found, err)
+	}
+
+	encodedSession := base64.RawURLEncoding.EncodeToString([]byte("session-1"))
+	legacyID := session.SessionFileID(artifactIDPrefix + encodedSession + "." + artifactPathDigest(logicalPath))
+	found, err = store.FindArtifact(ctx, legacyID)
+	if err != nil || found.LogicalPath != logicalPath {
+		t.Fatalf("FindArtifact(legacy) = %#v, %v", found, err)
+	}
+}
+
+func TestArtifactIDRejectsUnsafeDirectPath(t *testing.T) {
+	encodedSession := base64.RawURLEncoding.EncodeToString([]byte("session-1"))
+	for _, logicalPath := range []string{"../outside.txt", "/absolute.txt", "reports//result.txt", `reports\result.txt`} {
+		encodedPath := base64.RawURLEncoding.EncodeToString([]byte(logicalPath))
+		id := session.SessionFileID(artifactIDV2Prefix + encodedSession + "." + encodedPath)
+		if reference, ok := decodeArtifactID(id); ok {
+			t.Fatalf("decodeArtifactID(%q) = %#v, want invalid", logicalPath, reference)
+		}
 	}
 }
 

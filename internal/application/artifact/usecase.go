@@ -130,15 +130,11 @@ func (s *Service) List(ctx context.Context, query session.ArtifactQuery) ([]sess
 	if s == nil || s.store == nil {
 		return nil, errors.New("artifact usecase is not configured")
 	}
-	artifacts, err := s.store.ListArtifacts(ctx, query)
+	artifacts, count, err := s.store.ListArtifacts(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	if s.sessions != nil && query.SessionID != "" {
-		count, err := s.store.CountArtifacts(ctx, query.SessionID)
-		if err != nil {
-			return nil, err
-		}
 		if err := s.sessions.UpdateArtifactCount(ctx, query.SessionID, count); err != nil {
 			return nil, err
 		}

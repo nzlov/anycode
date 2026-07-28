@@ -98,12 +98,34 @@ export async function fetchSessionFile(
 ) {
   const url = mode === 'preview' ? file.previewUrl : file.downloadUrl;
   if (!url) throw new Error('当前文件不支持预览');
-  const headers = new Headers();
-  const accessKey = getGraphQLAccessKey();
-  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  const headers = sessionFileHeaders();
   const response = await fetch(url, { headers, signal: signal ?? null });
   if (!response.ok) throw new Error(`读取文件失败：HTTP ${response.status}`);
   return response.blob();
+}
+
+export async function requestSessionFilePreviewURL(
+  file: SessionFilePreviewData,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(`/files/${encodeURIComponent(file.id)}/preview-token`, {
+    method: 'POST',
+    headers: sessionFileHeaders(),
+    signal: signal ?? null,
+  });
+  if (!response.ok) throw new Error(`获取文件预览凭据失败：HTTP ${response.status}`);
+  const payload = (await response.json()) as { url?: unknown };
+  if (typeof payload.url !== 'string' || !payload.url.startsWith('/files/')) {
+    throw new Error('文件预览凭据响应无效');
+  }
+  return payload.url;
+}
+
+function sessionFileHeaders() {
+  const headers = new Headers();
+  const accessKey = getGraphQLAccessKey();
+  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  return headers;
 }
 
 export async function downloadSessionFile(file: SessionFileAccess) {

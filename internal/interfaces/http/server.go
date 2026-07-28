@@ -96,7 +96,9 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
 	mux.Handle("GET /api/terminals/{id}/ws", newTerminalWebSocketHandler(opts.sessions, opts.terminal, cfg.AccessKey))
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
-	mux.Handle("GET /files/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
+	previewTokens := newFilePreviewTokens(cfg.AccessKey)
+	mux.Handle("POST /files/{id}/preview-token", bearerAuth(cfg.AccessKey, attachmentHandler.previewToken(previewTokens)))
+	mux.Handle("GET /files/{id}/preview", filePreviewAuth(cfg.AccessKey, previewTokens, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
 	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveAppearanceWallpaper(w, r, opts.settings)
@@ -280,6 +282,10 @@ func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode at
 	if mode == attachmentapp.OpenPreview && stream.Size > h.previewMaxBytes {
 		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "file is too large to preview"))
 		return
+	}
+	if mode == attachmentapp.OpenPreview && r.URL.Query().Has("token") {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 	}
 
 	if stream.MimeType != "" {

@@ -1,9 +1,8 @@
 <template>
   <div class="session-file-preview">
-    <q-spinner v-if="loading" color="primary" size="32px" />
-    <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
+    <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
     <div
-      v-else-if="file?.previewKind === 'image' && objectURL"
+      v-else-if="file?.previewKind === 'image' && imageURL"
       ref="zoomSurface"
       class="session-file-preview__zoom-surface"
       :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
@@ -14,12 +13,16 @@
     >
       <img
         ref="mediaElement"
-        :src="objectURL"
+        :src="imageURL"
         :alt="file.filename"
         class="session-file-preview__image"
         :style="mediaTransform"
+        @load="finishImageLoad($event)"
+        @error="failImageLoad($event)"
       />
+      <q-spinner v-if="loading" class="session-file-preview__loading" color="primary" size="32px" />
     </div>
+    <q-spinner v-else-if="loading" color="primary" size="32px" />
     <iframe
       v-else-if="file?.previewKind === 'pdf' && objectURL"
       :src="objectURL"
@@ -63,7 +66,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-import { fetchSessionFile, type SessionFilePreviewData } from '@/services/sessionFiles';
+import {
+  fetchSessionFile,
+  requestSessionFilePreviewURL,
+  type SessionFilePreviewData,
+} from '@/services/sessionFiles';
 
 const props = withDefaults(
   defineProps<{ file: SessionFilePreviewData | null; zoomable?: boolean }>(),
@@ -71,6 +78,7 @@ const props = withDefaults(
 );
 const loading = ref(false);
 const error = ref('');
+const imageURL = ref('');
 const objectURL = ref('');
 const text = ref('');
 const scale = ref(1);
@@ -101,21 +109,27 @@ async function load(file: SessionFilePreviewData | null) {
   const request = new AbortController();
   controller = request;
   loading.value = true;
+  let waitForImage = false;
   try {
+    if (file.previewKind === 'image') {
+      const url = await requestSessionFilePreviewURL(file, request.signal);
+      if (controller !== request || props.file?.id !== file.id) return;
+      imageURL.value = url;
+      waitForImage = true;
+      return;
+    }
     const blob = await fetchSessionFile(file, 'preview', request.signal);
     if (controller !== request || props.file?.id !== file.id) return;
     if (file.previewKind === 'text') {
       const content = await blob.text();
       if (controller === request && props.file?.id === file.id) text.value = content;
-    } else {
-      objectURL.value = URL.createObjectURL(blob);
-    }
+    } else objectURL.value = URL.createObjectURL(blob);
   } catch (err) {
     if (!isAbortError(err) && controller === request) {
       error.value = errorMessage(err, '预览文件失败');
     }
   } finally {
-    if (controller === request) {
+    if (controller === request && !waitForImage) {
       controller = null;
       loading.value = false;
     }
@@ -127,10 +141,24 @@ function clear() {
   controller = null;
   loading.value = false;
   if (objectURL.value) URL.revokeObjectURL(objectURL.value);
+  imageURL.value = '';
   objectURL.value = '';
   text.value = '';
   error.value = '';
   resetZoom();
+}
+
+function finishImageLoad(event: Event) {
+  if (event.currentTarget !== mediaElement.value) return;
+  controller = null;
+  loading.value = false;
+}
+
+function failImageLoad(event: Event) {
+  if (event.currentTarget !== mediaElement.value) return;
+  controller = null;
+  loading.value = false;
+  error.value = '预览图片失败';
 }
 
 function startGesture(event: PointerEvent) {
@@ -253,11 +281,20 @@ onBeforeUnmount(clear);
 }
 
 .session-file-preview__zoom-surface {
+  position: relative;
   display: grid;
   width: 100%;
   height: 100%;
   place-items: center;
   overflow: hidden;
+}
+
+.session-file-preview__loading {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .session-file-preview__zoom-surface--enabled {
