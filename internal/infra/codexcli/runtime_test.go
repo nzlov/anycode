@@ -710,7 +710,7 @@ func TestQuestionsDynamicToolDescriptionMatchesOptionalOptions(t *testing.T) {
 		t.Fatal("questions dynamic tool is missing")
 	}
 	description, _ := tools[0]["description"].(string)
-	if !strings.Contains(description, "300000 ms") || !strings.Contains(description, "durable storage") || !strings.Contains(description, "options are optional") {
+	if !strings.Contains(description, "300000 ms") || !strings.Contains(description, "current turn is still active") || !strings.Contains(description, "turn exits before questions completes") || !strings.Contains(description, "durable storage") || !strings.Contains(description, "options are optional") {
 		t.Fatalf("questions description = %q", description)
 	}
 	inputSchema := tools[0]["inputSchema"].(map[string]any)
