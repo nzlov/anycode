@@ -21,6 +21,7 @@ COPY internal/interfaces/http/static/ /src/internal/interfaces/http/static/
 RUN npm run build
 
 FROM base AS build
+ARG ANYCODE_VERSION=dev
 RUN pacman -Syu --noconfirm --needed ca-certificates go git \
   && pacman -Scc --noconfirm
 WORKDIR /src
@@ -29,7 +30,7 @@ RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY --from=web /src/internal/interfaces/http/static/pwa ./internal/interfaces/http/static/pwa
-RUN go build -o /out/anycode ./cmd/anycode
+RUN go build -ldflags "-X main.version=${ANYCODE_VERSION}" -o /out/anycode ./cmd/anycode
 
 FROM base
 ARG ANYCODE_UID=1000

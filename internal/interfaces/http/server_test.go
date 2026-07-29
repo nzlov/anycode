@@ -47,6 +47,34 @@ func TestAPIHealthzBearerAuth(t *testing.T) {
 	}
 }
 
+func TestAPIVersionReturnsInjectedBuildVersion(t *testing.T) {
+	handler := NewHandler(
+		config.Config{AccessKey: "secret"},
+		WithBuildVersion("v1.2.3"),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/version", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("version without bearer status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/version", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("version status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("version content type = %q", rec.Header().Get("Content-Type"))
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"version":"v1.2.3"}` {
+		t.Fatalf("version body = %q", rec.Body.String())
+	}
+}
+
 func TestGraphQLAllowsLocalDevelopmentWithoutAccessKey(t *testing.T) {
 	handler := NewHandler(config.Config{}, WithGraphQLUseCases(graph.UseCases{}))
 

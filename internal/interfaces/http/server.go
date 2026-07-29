@@ -46,6 +46,7 @@ type handlerOptions struct {
 	accessKey       string
 	playground      bool
 	previewMaxBytes int64
+	buildVersion    string
 }
 
 func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
@@ -84,11 +85,18 @@ func WithTerminalRuntime(runtime terminaldomain.Runtime) HandlerOption {
 	}
 }
 
+func WithBuildVersion(version string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.buildVersion = strings.TrimSpace(version)
+	}
+}
+
 func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		graphqlHandler:  http.HandlerFunc(graphqlNotConfigured),
 		accessKey:       cfg.AccessKey,
 		previewMaxBytes: cfg.ArtifactPreviewMaxBytes,
+		buildVersion:    "dev",
 	}
 	for _, option := range options {
 		option(&opts)
@@ -97,6 +105,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("GET /api/healthz", bearerAuth(cfg.AccessKey, http.HandlerFunc(healthz)))
+	mux.Handle("GET /api/version", bearerAuth(cfg.AccessKey, buildVersionHandler(opts.buildVersion)))
 	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
 	mux.Handle("GET /api/terminals/{id}/ws", newTerminalWebSocketHandler(opts.sessions, opts.terminal, cfg.AccessKey))
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
@@ -227,6 +236,19 @@ func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Ha
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func buildVersionHandler(version string) http.Handler {
+	if version == "" {
+		version = "dev"
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(struct {
+			Version string `json:"version"`
+		}{Version: version})
+	})
 }
 
 func graphqlAuth(accessKey string, next http.Handler) http.Handler {

@@ -51,6 +51,8 @@ import (
 const databaseStartupTimeout = 30 * time.Second
 const artifactReconcileInterval = 6 * time.Hour
 
+var version = "dev"
+
 func main() {
 	cfg, err := config.LoadFromEnv()
 	if err != nil {
@@ -100,7 +102,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithPlayground()),
+		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithBuildVersion(version), httpinterface.WithPlayground()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -108,7 +110,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen on %s: %s", cfg.HTTPAddr, err.Error())
 	}
-	log.Printf("anycode listening on %s", cfg.HTTPAddr)
+	log.Printf("anycode listening on %s (version=%s)", cfg.HTTPAddr, version)
 	useCases.Sessions.StartWorktreeCleanupCoordinator()
 	go func() {
 		if err := drainQueuedSessions(context.Background(), useCases.Sessions); err != nil {

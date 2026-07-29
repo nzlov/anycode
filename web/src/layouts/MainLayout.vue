@@ -89,6 +89,13 @@
           <q-tooltip>{{ isOverviewHorizontalView ? '卡片视图' : '横向视图' }}</q-tooltip>
         </q-btn>
         <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
+          <q-badge
+            v-if="availableRelease"
+            floating
+            rounded
+            color="negative"
+            aria-label="有新版本"
+          />
           <q-menu>
             <q-list dense class="app-touch-list">
               <q-item v-close-popup clickable @click="openSettings">
@@ -111,6 +118,30 @@
                   <q-icon :name="mode.icon" />
                 </q-item-section>
                 <q-item-section>{{ mode.label }}</q-item-section>
+              </q-item>
+              <q-separator />
+              <q-item
+                v-if="availableRelease"
+                v-close-popup
+                clickable
+                @click="updateDialogOpen = true"
+              >
+                <q-item-section avatar>
+                  <q-icon name="new_releases" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>发现新版本 {{ availableRelease.version }}</q-item-label>
+                  <q-item-label caption>当前版本 {{ currentVersion }}</q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item v-else>
+                <q-item-section avatar>
+                  <q-icon name="info" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>当前版本</q-item-label>
+                  <q-item-label caption>{{ currentVersion }}</q-item-label>
+                </q-item-section>
               </q-item>
               <q-separator />
               <q-item
@@ -157,6 +188,48 @@
     />
     <TunnelManagerDialog v-if="applicationReady && !$q.screen.lt.sm" v-model="tunnelDialogOpen" />
 
+    <q-dialog v-if="availableRelease" v-model="updateDialogOpen">
+      <q-card class="update-dialog app-content-dialog">
+        <q-card-section class="row items-start no-wrap">
+          <div class="col">
+            <div class="text-subtitle1 text-weight-bold">{{ availableRelease.name }}</div>
+            <div class="text-caption text-secondary">
+              {{ availableRelease.version }} · 当前 {{ currentVersion }}
+              <template v-if="availableReleasePublishedAt">
+                · {{ availableReleasePublishedAt }}
+              </template>
+            </div>
+          </div>
+          <q-btn
+            v-close-popup
+            flat
+            round
+            dense
+            class="app-icon-btn"
+            icon="close"
+            aria-label="关闭更新内容"
+          />
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="update-dialog__body">
+          <MarkdownContent :text="availableRelease.body" />
+        </q-card-section>
+        <q-separator />
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            no-caps
+            color="primary"
+            icon-right="open_in_new"
+            label="查看 GitHub Release"
+            :href="availableRelease.url"
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-dialog v-if="applicationReady" v-model="logoutDialogOpen">
       <q-card class="confirm-dialog">
         <q-card-section>
@@ -200,6 +273,7 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
+import MarkdownContent from '@/components/MarkdownContent.vue';
 import { provideGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import TunnelManagerDialog from '@/components/TunnelManagerDialog.vue';
@@ -207,6 +281,7 @@ import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
+import { getAppVersionStatus, type AppRelease } from '@/services/appVersion';
 import { disablePushNotifications } from '@/services/pushNotifications';
 
 const $q = useQuasar();
@@ -217,6 +292,9 @@ const settingsDialogOpen = ref(false);
 provideGeneralSettingsInvalidation();
 const tunnelDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
+const updateDialogOpen = ref(false);
+const currentVersion = ref('dev');
+const availableRelease = ref<AppRelease | null>(null);
 const runningTunnelCount = ref(0);
 const { themeMode, themeModes } = useThemeMode();
 const { overviewViewMode } = useOverviewViewMode();
@@ -248,6 +326,12 @@ const sessionsRoute = computed(() => {
     ? { name: 'sessions', query: { projectId, scope: 'closed' } }
     : { name: 'sessions', query: { scope: 'closed' } };
 });
+const availableReleasePublishedAt = computed(() => {
+  if (!availableRelease.value?.publishedAt) return '';
+  const publishedAt = new Date(availableRelease.value.publishedAt);
+  if (Number.isNaN(publishedAt.getTime())) return '';
+  return publishedAt.toLocaleDateString();
+});
 
 onMounted(() => {
   void loadProjects()
@@ -255,6 +339,12 @@ onMounted(() => {
     .finally(() => {
       checkingProjects.value = false;
     });
+  void getAppVersionStatus()
+    .then((status) => {
+      currentVersion.value = status.currentVersion;
+      availableRelease.value = status.availableRelease;
+    })
+    .catch(() => undefined);
 });
 
 watch(
@@ -335,3 +425,16 @@ async function logout() {
   await router.replace({ name: 'login' });
 }
 </script>
+
+<style scoped>
+.update-dialog {
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.update-dialog__body {
+  overflow-y: auto;
+}
+</style>
