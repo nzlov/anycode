@@ -84,17 +84,21 @@
 
 - Docker Engine
 - Docker Compose 插件（使用 `docker compose` 命令）
+- `curl`
 - x86-64（`linux/amd64`）宿主机；当前官方 Arch Linux 基础镜像仅提供 amd64
 - 可用于 Codex 的 ChatGPT 账号或 OpenAI API key
 
-以下命令均在 AnyCode 仓库根目录执行。
+无需克隆仓库；启动只需要 `compose.yml` 和 `.env.example`。
 
-### 1. 配置环境
+### 1. 下载部署文件并配置环境
 
-复制示例配置：
+创建部署目录并下载必要文件：
 
 ```bash
-cp .env.example .env
+mkdir -p anycode
+cd anycode
+curl -fsSL -o compose.yml https://raw.githubusercontent.com/nzlov/anycode/master/compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/nzlov/anycode/master/.env.example
 ```
 
 编辑 `.env`，至少把下面的默认值替换为足够长且随机的访问密钥：
@@ -103,7 +107,7 @@ cp .env.example .env
 ANYCODE_ACCESS_KEY=replace-with-a-long-random-secret
 ```
 
-不要原样使用示例值，也不要提交生成后的 `.env`。
+不要原样使用示例值。
 
 默认配置把 `./data` 挂载为容器用户目录，把 `./workspaces` 挂载到容器的 `/workspaces`：
 
@@ -128,7 +132,7 @@ printf '%s' "$OPENAI_API_KEY" | docker compose run --rm -T anycode codex login -
 docker compose run --rm anycode codex login status
 ```
 
-Codex 凭据写入容器的 `/home/anycode/.codex`，并由 `ANYCODE_HOST_DATA_DIR` 对应的宿主机目录持久化。不要提交或共享该目录。
+Codex 凭据写入容器的 `/home/anycode/.codex`，并由 `ANYCODE_HOST_DATA_DIR` 对应的宿主机目录持久化。不要共享该目录。
 
 ### 3. 启动服务
 
@@ -211,7 +215,7 @@ docker compose down
 
 常见问题：
 
-- Compose 提示必须设置 `ANYCODE_ACCESS_KEY`：确认仓库根目录存在 `.env`，且该值不是空字符串。
+- Compose 提示必须设置 `ANYCODE_ACCESS_KEY`：确认部署目录存在 `.env`，且该值不是空字符串。
 - 页面提示访问密钥无效：输入 `.env` 中的原始值，不要添加 `Bearer ` 前缀。
 - 服务启动失败并出现 `probe codex cli`：先运行 `docker compose run --rm anycode codex login status` 检查凭据；凭据有效时，查看容器日志并重新拉取镜像，确认镜像内 Codex CLI 完整且版本兼容。
 - 会话执行时返回 Codex 认证错误：重新执行“拉取镜像并登录 Codex”中的任一登录命令，再确认 `codex login status`。

@@ -84,17 +84,21 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 
 - Docker Engine
 - Docker Compose plugin (using the `docker compose` command)
+- `curl`
 - An x86-64 (`linux/amd64`) host; the current official Arch Linux base image is amd64-only
 - A ChatGPT account or OpenAI API key that can be used with Codex
 
-Run the following commands from the AnyCode repository root.
+You do not need to clone the repository; startup only requires `compose.yml` and `.env.example`.
 
-### 1. Configure the environment
+### 1. Download the deployment files and configure the environment
 
-Copy the example configuration:
+Create a deployment directory and download the required files:
 
 ```bash
-cp .env.example .env
+mkdir -p anycode
+cd anycode
+curl -fsSL -o compose.yml https://raw.githubusercontent.com/nzlov/anycode/master/compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/nzlov/anycode/master/.env.example
 ```
 
 Edit `.env` and, at minimum, replace the value below with a sufficiently long, random access key:
@@ -103,7 +107,7 @@ Edit `.env` and, at minimum, replace the value below with a sufficiently long, r
 ANYCODE_ACCESS_KEY=replace-with-a-long-random-secret
 ```
 
-Do not use the example value as-is, and do not commit the generated `.env` file.
+Do not use the example value as-is.
 
 By default, `./data` is mounted as the container user's home directory and `./workspaces` is mounted at `/workspaces` inside the container:
 
@@ -128,7 +132,7 @@ printf '%s' "$OPENAI_API_KEY" | docker compose run --rm -T anycode codex login -
 docker compose run --rm anycode codex login status
 ```
 
-Codex credentials are written to `/home/anycode/.codex` in the container and persisted in the host directory configured by `ANYCODE_HOST_DATA_DIR`. Do not commit or share this directory.
+Codex credentials are written to `/home/anycode/.codex` in the container and persisted in the host directory configured by `ANYCODE_HOST_DATA_DIR`. Do not share this directory.
 
 ### 3. Start the service
 
@@ -211,7 +215,7 @@ docker compose down
 
 Common issues:
 
-- Compose reports that `ANYCODE_ACCESS_KEY` must be set: confirm that `.env` exists in the repository root and that its value is not empty.
+- Compose reports that `ANYCODE_ACCESS_KEY` must be set: confirm that `.env` exists in the deployment directory and that its value is not empty.
 - The page reports an invalid access key: enter the raw value from `.env` without a `Bearer ` prefix.
 - The service fails to start with `probe codex cli`: run `docker compose run --rm anycode codex login status` to check the credentials. If they are valid, inspect the container logs and pull the image again to ensure the bundled Codex CLI is complete and compatible.
 - A session returns a Codex authentication error: repeat one of the login commands under "Pull the image and sign in to Codex," then confirm the result with `codex login status`.
