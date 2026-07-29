@@ -3,6 +3,7 @@ services:
     image: ghcr.io/nzlov/anycode:latest
     environment:
       ANYCODE_ACCESS_KEY: ${ANYCODE_ACCESS_KEY:?set ANYCODE_ACCESS_KEY}
+      ANYCODE_EXTRA_PACKAGES: ${ANYCODE_EXTRA_PACKAGES:-}
       ANYCODE_HTTP_ADDR: :${ANYCODE_HTTP_PORT:-8080}
       ANYCODE_DATA_DIR: ${ANYCODE_DATA_DIR:-/home/anycode/.anycode}
       CLOUDFLARED_BIN: ${CLOUDFLARED_BIN:-cloudflared}
