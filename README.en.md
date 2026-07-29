@@ -84,6 +84,7 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 
 - Docker Engine
 - Docker Compose plugin (using the `docker compose` command)
+- An x86-64 (`linux/amd64`) host; the current official Arch Linux base image is amd64-only
 - A ChatGPT account or OpenAI API key that can be used with Codex
 
 Run the following commands from the AnyCode repository root.

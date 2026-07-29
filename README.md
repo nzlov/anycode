@@ -84,6 +84,7 @@
 
 - Docker Engine
 - Docker Compose 插件（使用 `docker compose` 命令）
+- x86-64（`linux/amd64`）宿主机；当前官方 Arch Linux 基础镜像仅提供 amd64
 - 可用于 Codex 的 ChatGPT 账号或 OpenAI API key
 
 以下命令均在 AnyCode 仓库根目录执行。
