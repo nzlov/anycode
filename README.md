@@ -83,7 +83,7 @@
 ### 前置条件
 
 - Docker Engine
-- Docker Compose 插件（使用 `docker compose` 命令）
+- Docker Compose 插件 2.20 或更高版本（使用 `docker compose` 命令）
 - `curl`
 - x86-64（`linux/amd64`）宿主机；当前官方 Arch Linux 基础镜像仅提供 amd64
 - 可用于 Codex 的 ChatGPT 账号或 OpenAI API key
@@ -141,6 +141,16 @@ docker compose up -d
 docker compose ps
 ```
 
+默认使用本地 Turso 数据库。要改用 Compose 内置 PostgreSQL，请在 `.env` 中设置非默认密码并启用 profile：
+
+```dotenv
+COMPOSE_PROFILES=postgres
+POSTGRES_PASSWORD=replace-with-a-strong-password
+DATABASE_URL=postgres://anycode:replace-with-a-strong-password@postgres:5432/anycode?sslmode=disable
+```
+
+然后照常运行 `docker compose up -d`。PostgreSQL 数据默认保存在 `./postgres-data`。
+
 使用默认端口时，健康检查地址为：
 
 ```bash
@@ -172,8 +182,10 @@ curl --fail http://127.0.0.1:8080/healthz
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | 容器内数据库、附件、产物以及 AnyCode 创建的 worktree 目录。通常无需修改。 |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | 挂载到容器 `/workspaces` 的宿主机项目目录。 |
 | `CLOUDFLARED_BIN` | `cloudflared` | Cloudflare 临时隧道客户端命令；官方镜像已内置。 |
+| `DATABASE_URL` | 空 | 数据库切换入口；支持 `postgres://`、`postgresql://`、`libsql://`、`https://` 和本地 Turso 路径。为空时回退到 `TURSO_DATABASE_URL`。 |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | 本地 Turso/libSQL 数据库路径，也可改为 `libsql://` 云数据库地址。 |
 | `TURSO_AUTH_TOKEN` | 空 | 使用远程 Turso 数据库时的认证 token。 |
+| `POSTGRES_HOST_DATA_DIR` | `./postgres-data` | Compose PostgreSQL profile 的宿主机数据目录。 |
 
 Turso 缓存变量可在 [`.env.example`](.env.example) 中查看；产物大小限制、Playwright 和 Chromium 配置可在 [`compose.yml`](compose.yml) 中查看。
 
@@ -222,6 +234,7 @@ docker compose down
 - 无法添加或写入项目：确认宿主机目录已挂载到 `/workspaces`，并允许 UID/GID `1000` 读写。
 - 本地数据库或附件写入失败：确认 `ANYCODE_HOST_DATA_DIR` 有可用空间且允许容器用户写入。
 - 使用远程 Turso 失败：同时核对 `TURSO_DATABASE_URL`、`TURSO_AUTH_TOKEN` 和容器网络连接。
+- 使用 PostgreSQL 失败：核对 `DATABASE_URL`、PostgreSQL profile、账号密码和 `docker compose logs postgres`。
 - 镜像拉取失败：确认当前网络可以访问 `ghcr.io`，然后重新执行 `docker compose pull`。
 
 ## 许可证

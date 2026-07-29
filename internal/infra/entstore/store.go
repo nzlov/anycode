@@ -14,6 +14,7 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nzlov/anycode/internal/application/port"
 	"github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/mindmap"
@@ -28,8 +29,9 @@ import (
 )
 
 const (
-	tursoDriverName  = "turso"
-	libsqlDriverName = "libsql"
+	tursoDriverName    = "turso"
+	libsqlDriverName   = "libsql"
+	postgresDriverName = "pgx"
 )
 
 type OpenOptions struct {
@@ -39,9 +41,10 @@ type OpenOptions struct {
 }
 
 type Store struct {
-	client  *ent.Client
-	db      *sql.DB
-	dataDir string
+	client      *ent.Client
+	db          *sql.DB
+	dialectName string
+	dataDir     string
 }
 
 type databaseTarget struct {
@@ -53,8 +56,12 @@ type databaseTarget struct {
 var _ port.UnitOfWork = (*Store)(nil)
 
 func OpenFromEnv(ctx context.Context) (*Store, error) {
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if databaseURL == "" {
+		databaseURL = os.Getenv("TURSO_DATABASE_URL")
+	}
 	return Open(ctx, OpenOptions{
-		DatabaseURL: os.Getenv("TURSO_DATABASE_URL"),
+		DatabaseURL: databaseURL,
 		AuthToken:   os.Getenv("TURSO_AUTH_TOKEN"),
 		DataDir:     os.Getenv("ANYCODE_DATA_DIR"),
 	})
@@ -77,20 +84,31 @@ func Open(ctx context.Context, opts OpenOptions) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	dialectName := dialect.SQLite
+	if target.DriverName == postgresDriverName {
+		dialectName = dialect.Postgres
+	} else {
+		db.SetMaxOpenConns(1)
+	}
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	if dialectName == dialect.SQLite {
+		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("enable foreign keys: %w", err)
+		}
 	}
-	drv := newImmediateTransactionDriver(db)
+	drv := dialect.Driver(entsql.OpenDB(dialectName, db))
+	if dialectName == dialect.SQLite {
+		drv = newImmediateTransactionDriver(db)
+	}
 	return &Store{
-		client:  ent.NewClient(ent.Driver(drv)),
-		db:      db,
-		dataDir: dataDir,
+		client:      ent.NewClient(ent.Driver(drv)),
+		db:          db,
+		dialectName: dialectName,
+		dataDir:     dataDir,
 	}, nil
 }
 
@@ -157,8 +175,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return errors.New("entstore: nil store")
 	}
-	if err := s.dropRemovedStorage(ctx); err != nil {
-		return err
+	if s.dialectName == dialect.SQLite {
+		if err := s.dropRemovedStorage(ctx); err != nil {
+			return err
+		}
 	}
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
@@ -166,6 +186,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.migrateWorkflowApprovalOutputFields(ctx); err != nil {
 		return err
 	}
+	if s.dialectName == dialect.SQLite {
+		if err := s.migrateLegacySQLiteData(ctx); err != nil {
+			return err
+		}
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS process_runs_one_active_per_session
+		ON process_runs(session_id)
+		WHERE status IN ('starting', 'running', 'waiting_user', 'stopping')`); err != nil {
+		return fmt.Errorf("create active process run uniqueness index: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) migrateLegacySQLiteData(ctx context.Context) error {
 	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
 		SET queue_initial_start = CASE
@@ -199,11 +233,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	); err != nil {
 		return fmt.Errorf("collapse duplicate active process runs: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS process_runs_one_active_per_session
-		ON process_runs(session_id)
-		WHERE status IN ('starting', 'running', 'waiting_user', 'stopping')`); err != nil {
-		return fmt.Errorf("create active process run uniqueness index: %w", err)
-	}
 	return nil
 }
 
@@ -216,7 +245,7 @@ func (s *Store) dropRemovedStorage(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	statements := make([]string, 0, 3)
+	statements := make([]string, 0, 4)
 	if legacyNodeRuns {
 		statements = append(statements, `DROP TABLE node_runs`)
 	}
@@ -224,6 +253,7 @@ func (s *Store) dropRemovedStorage(ctx context.Context) error {
 		`DROP TABLE IF EXISTS workflow_runs`,
 		`DROP TABLE IF EXISTS codex_transcript_sources`,
 		`DROP TABLE IF EXISTS session_attachments`,
+		`DROP TABLE IF EXISTS question_batches`,
 	)
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -596,6 +626,12 @@ func databaseTargetForOptions(opts OpenOptions) (databaseTarget, error) {
 			DatabaseURL: parsed.String(),
 			AuthToken:   opts.AuthToken,
 		}, nil
+	case "postgres", "postgresql":
+		if parsed.Host == "" {
+			return databaseTarget{}, errors.New("entstore: PostgreSQL database URL host is required")
+		}
+		parsed.Scheme = scheme
+		return databaseTarget{DriverName: postgresDriverName, DatabaseURL: parsed.String()}, nil
 	case "http":
 		return databaseTarget{}, errors.New("entstore: insecure http database URL is not supported; use libsql:// or https://")
 	default:
@@ -616,6 +652,8 @@ func openDatabase(target databaseTarget) (*sql.DB, error) {
 			return nil, err
 		}
 		return sql.Open(tursoDriverName, target.DatabaseURL)
+	case postgresDriverName:
+		return sql.Open(postgresDriverName, target.DatabaseURL)
 	default:
 		return nil, fmt.Errorf("unsupported database driver %q", target.DriverName)
 	}

@@ -4230,8 +4230,8 @@ func TestCleanupSessionsDeletesFilteredHistoryAndCodexSessions(t *testing.T) {
 	if count != 1 || !slices.Equal(purger.ids, []domain.ID{"old"}) {
 		t.Fatalf("CleanupSessions() = %d, ids = %#v", count, purger.ids)
 	}
-	if !files.deletedSessions["attachment-1"] {
-		t.Fatal("session attachment was not deleted")
+	if !files.deletedFileSessions[old.ID] {
+		t.Fatal("session attachment files were not deleted")
 	}
 	if !slices.Equal(codex.deletedThreads, []string{"codex-current"}) {
 		t.Fatalf("deleted Codex threads = %#v", codex.deletedThreads)
@@ -12373,6 +12373,7 @@ func (r *fakeRepository) DeleteStagedAttachment(_ context.Context, id domain.Sta
 type fakeAttachmentStore struct {
 	promoted                            map[domain.StagedAttachmentID]bool
 	deletedSessions                     map[domain.SessionAttachmentID]bool
+	deletedFileSessions                 map[domain.ID]bool
 	sessionAttachments                  map[domain.SessionAttachmentID]domain.SessionAttachment
 	lastPromptAppendAttachmentSessionID domain.ID
 	lastPromptAppendAttachmentID        string
@@ -12517,9 +12518,10 @@ func (s *fakeSessionArtifactStore) DeleteArtifactOutputDirectory(context.Context
 
 func newFakeAttachmentStore() *fakeAttachmentStore {
 	return &fakeAttachmentStore{
-		promoted:           map[domain.StagedAttachmentID]bool{},
-		deletedSessions:    map[domain.SessionAttachmentID]bool{},
-		sessionAttachments: map[domain.SessionAttachmentID]domain.SessionAttachment{},
+		promoted:            map[domain.StagedAttachmentID]bool{},
+		deletedSessions:     map[domain.SessionAttachmentID]bool{},
+		deletedFileSessions: map[domain.ID]bool{},
+		sessionAttachments:  map[domain.SessionAttachmentID]domain.SessionAttachment{},
 	}
 }
 
@@ -12561,6 +12563,19 @@ func (s *fakeAttachmentStore) DeleteSession(ctx context.Context, id domain.Sessi
 	}
 	s.deletedSessions[id] = true
 	delete(s.sessionAttachments, id)
+	return nil
+}
+
+func (s *fakeAttachmentStore) DeleteSessionFiles(ctx context.Context, sessionID domain.ID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.deletedFileSessions[sessionID] = true
+	for id, attachment := range s.sessionAttachments {
+		if attachment.SessionID == sessionID {
+			delete(s.sessionAttachments, id)
+		}
+	}
 	return nil
 }
 

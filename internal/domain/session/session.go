@@ -686,6 +686,7 @@ type AttachmentStore interface {
 	ListSessionAttachments(ctx context.Context, sessionID ID) ([]SessionAttachment, error)
 	ListPromptAppendAttachments(ctx context.Context, sessionID ID, appendID string) ([]SessionAttachment, error)
 	DeleteSession(ctx context.Context, id SessionAttachmentID) error
+	DeleteSessionFiles(ctx context.Context, sessionID ID) error
 	Open(ctx context.Context, path string) (AttachmentStream, error)
 }
 

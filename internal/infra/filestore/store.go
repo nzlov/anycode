@@ -171,6 +171,14 @@ func (s *Store) DeleteSession(ctx context.Context, id session.SessionFileID) err
 	return removeDir(filepath.Dir(file.Path))
 }
 
+func (s *Store) DeleteSessionFiles(ctx context.Context, sessionID session.ID) error {
+	if err := ctx.Err(); err != nil {
+		return &Error{Code: "canceled", Err: err}
+	}
+	path := filepath.Join(s.attachmentsRoot(), "sessions", safeSessionPathComponent(sessionID))
+	return removeDir(path)
+}
+
 func (s *Store) Open(ctx context.Context, path string) (session.AttachmentStream, error) {
 	if err := ctx.Err(); err != nil {
 		return session.AttachmentStream{}, &Error{Code: "canceled", Path: path, Err: err}

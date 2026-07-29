@@ -13,7 +13,7 @@ type Config struct {
 	DataDir                 string
 	CodexBin                string
 	CloudflaredBin          string
-	TursoDatabaseURL        string
+	DatabaseURL             string
 	TursoAuthToken          string
 	ArtifactMaxFileBytes    int64
 	ArtifactMaxSessionBytes int64
@@ -47,7 +47,7 @@ func LoadFromEnv() (Config, error) {
 		DataDir:                 envOrDefault("ANYCODE_DATA_DIR", "./data"),
 		CodexBin:                envOrDefault("CODEX_BIN", "codex"),
 		CloudflaredBin:          envOrDefault("CLOUDFLARED_BIN", "cloudflared"),
-		TursoDatabaseURL:        os.Getenv("TURSO_DATABASE_URL"),
+		DatabaseURL:             firstEnv("DATABASE_URL", "TURSO_DATABASE_URL"),
 		TursoAuthToken:          os.Getenv("TURSO_AUTH_TOKEN"),
 		ArtifactMaxFileBytes:    maxFile,
 		ArtifactMaxSessionBytes: maxSession,
@@ -74,4 +74,13 @@ func envOrDefault(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }

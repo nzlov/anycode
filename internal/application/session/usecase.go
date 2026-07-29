@@ -8295,14 +8295,8 @@ func (s *Service) listCleanupCandidates(ctx context.Context, query domain.ListQu
 
 func (s *Service) deleteSessionFiles(ctx context.Context, sessionID domain.ID) error {
 	if s.files != nil {
-		attachments, err := s.files.ListSessionAttachments(ctx, sessionID)
-		if err != nil {
-			return fmt.Errorf("list session attachments for cleanup: %w", err)
-		}
-		for _, attachment := range attachments {
-			if err := s.files.DeleteSession(ctx, attachment.ID); err != nil {
-				return fmt.Errorf("delete session attachment %s: %w", attachment.ID, err)
-			}
+		if err := s.files.DeleteSessionFiles(ctx, sessionID); err != nil {
+			return fmt.Errorf("delete session attachment files: %w", err)
 		}
 	}
 	if s.artifacts != nil {

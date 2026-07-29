@@ -83,7 +83,7 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 ### Prerequisites
 
 - Docker Engine
-- Docker Compose plugin (using the `docker compose` command)
+- Docker Compose plugin 2.20 or later (using the `docker compose` command)
 - `curl`
 - An x86-64 (`linux/amd64`) host; the current official Arch Linux base image is amd64-only
 - A ChatGPT account or OpenAI API key that can be used with Codex
@@ -141,6 +141,16 @@ docker compose up -d
 docker compose ps
 ```
 
+The default is a local Turso database. To use the bundled PostgreSQL service, set a non-default password and enable its profile in `.env`:
+
+```dotenv
+COMPOSE_PROFILES=postgres
+POSTGRES_PASSWORD=replace-with-a-strong-password
+DATABASE_URL=postgres://anycode:replace-with-a-strong-password@postgres:5432/anycode?sslmode=disable
+```
+
+Then run `docker compose up -d` as usual. PostgreSQL data is stored in `./postgres-data` by default.
+
 With the default port, the health-check endpoint is:
 
 ```bash
@@ -172,8 +182,10 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | Container directory for the database, attachments, artifacts, and worktrees created by AnyCode. This usually does not need to be changed. |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | Host project directory mounted at `/workspaces` in the container. |
 | `CLOUDFLARED_BIN` | `cloudflared` | Cloudflare quick-tunnel client command. It is included in the official image. |
+| `DATABASE_URL` | Empty | Database switch. Supports `postgres://`, `postgresql://`, `libsql://`, `https://`, and local Turso paths. Falls back to `TURSO_DATABASE_URL` when empty. |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | Local Turso/libSQL database path. This can also be a `libsql://` cloud database URL. |
 | `TURSO_AUTH_TOKEN` | Empty | Authentication token for a remote Turso database. |
+| `POSTGRES_HOST_DATA_DIR` | `./postgres-data` | Host data directory for the Compose PostgreSQL profile. |
 
 See [`.env.example`](.env.example) for Turso caching variables. See [`compose.yml`](compose.yml) for artifact size limits and Playwright and Chromium configuration.
 
@@ -222,6 +234,7 @@ Common issues:
 - A project cannot be added or written: confirm that the host directory is mounted at `/workspaces` and is writable by UID/GID `1000`.
 - The local database or attachments cannot be written: confirm that `ANYCODE_HOST_DATA_DIR` has available space and is writable by the container user.
 - A remote Turso connection fails: verify `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and the container's network connectivity.
+- A PostgreSQL connection fails: verify `DATABASE_URL`, the PostgreSQL profile, credentials, and `docker compose logs postgres`.
 - Image pulls fail: confirm that the current network can reach `ghcr.io`, then run `docker compose pull` again.
 
 ## License

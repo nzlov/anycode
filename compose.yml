@@ -12,11 +12,16 @@ services:
       ANYCODE_ARTIFACT_PREVIEW_MAX_BYTES: ${ANYCODE_ARTIFACT_PREVIEW_MAX_BYTES:-134217728}
       PLAYWRIGHT_MCP_BIN: ${PLAYWRIGHT_MCP_BIN:-playwright-mcp}
       CHROMIUM_BIN: ${CHROMIUM_BIN:-/usr/bin/chromium}
+      DATABASE_URL: ${DATABASE_URL:-}
       TURSO_DATABASE_URL: ${TURSO_DATABASE_URL:-/home/anycode/.anycode/anycode.turso.db}
       TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-}
       TURSO_GO_CACHE_DIR: ${TURSO_GO_CACHE_DIR:-/home/anycode/.anycode/turso-cache}
     ports:
       - "${ANYCODE_HTTP_PORT:-8080}:${ANYCODE_HTTP_PORT:-8080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
     cap_add:
       - SYS_ADMIN
     security_opt:
@@ -25,3 +30,19 @@ services:
     volumes:
       - ${ANYCODE_WORKSPACES_DIR:-./workspaces}:/workspaces
       - ${ANYCODE_HOST_DATA_DIR:-./data}:/home/anycode
+
+  postgres:
+    image: postgres:17-alpine
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-anycode}
+      POSTGRES_USER: ${POSTGRES_USER:-anycode}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-anycode} -d ${POSTGRES_DB:-anycode}"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      - ${POSTGRES_HOST_DATA_DIR:-./postgres-data}:/var/lib/postgresql/data

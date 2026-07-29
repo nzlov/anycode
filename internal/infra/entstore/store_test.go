@@ -73,8 +73,25 @@ func TestDatabaseTargetForOptions(t *testing.T) {
 			wantErr: "insecure http database URL is not supported",
 		},
 		{
+			name:       "postgres URL uses pgx",
+			opts:       OpenOptions{DatabaseURL: "postgres://database.example/anycode?sslmode=require"},
+			wantDriver: postgresDriverName,
+			wantURL:    "postgres://database.example/anycode?sslmode=require",
+		},
+		{
+			name:       "postgresql URL uses pgx",
+			opts:       OpenOptions{DatabaseURL: "POSTGRESQL://database.example/anycode"},
+			wantDriver: postgresDriverName,
+			wantURL:    "postgresql://database.example/anycode",
+		},
+		{
+			name:    "postgres URL requires host",
+			opts:    OpenOptions{DatabaseURL: "postgres:///anycode"},
+			wantErr: "PostgreSQL database URL host is required",
+		},
+		{
 			name:    "unknown scheme is rejected",
-			opts:    OpenOptions{DatabaseURL: "postgres://database.example/anycode"},
+			opts:    OpenOptions{DatabaseURL: "mysql://database.example/anycode"},
 			wantErr: "unsupported database URL scheme",
 		},
 	}
@@ -206,6 +223,34 @@ func TestMigrateRemovesSessionAttachmentsAndPreservesInputFiles(t *testing.T) {
 		if err != nil || string(body) != want {
 			t.Fatalf("outside file %q = %q, %v", path, body, err)
 		}
+	}
+}
+
+func TestMigrateRemovesLegacyQuestionBatches(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("create current schema: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `CREATE TABLE question_batches (
+		id text PRIMARY KEY,
+		session_id text NOT NULL
+	)`); err != nil {
+		t.Fatalf("create legacy question batches: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO question_batches (id, session_id) VALUES ('batch-1', 'session-1')`); err != nil {
+		t.Fatalf("insert legacy question batch: %v", err)
+	}
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	if exists, err := store.tableExists(ctx, "question_batches"); err != nil || exists {
+		t.Fatalf("question_batches exists = %v, error = %v", exists, err)
 	}
 }
 

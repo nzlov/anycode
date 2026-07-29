@@ -62,7 +62,7 @@ func main() {
 	databaseCtx, cancelDatabase := context.WithTimeout(ctx, databaseStartupTimeout)
 
 	store, err := entstore.Open(databaseCtx, entstore.OpenOptions{
-		DatabaseURL: cfg.TursoDatabaseURL,
+		DatabaseURL: cfg.DatabaseURL,
 		AuthToken:   cfg.TursoAuthToken,
 		DataDir:     cfg.DataDir,
 	})

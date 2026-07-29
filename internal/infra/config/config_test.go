@@ -49,6 +49,30 @@ func TestLoadFromEnvReadsArtifactLimits(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvReadsDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://database.example/anycode")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://legacy.example/anycode")
+	got, err := LoadFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DatabaseURL != "postgres://database.example/anycode" {
+		t.Fatalf("DatabaseURL = %q", got.DatabaseURL)
+	}
+}
+
+func TestLoadFromEnvFallsBackToLegacyTursoDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://legacy.example/anycode")
+	got, err := LoadFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DatabaseURL != "libsql://legacy.example/anycode" {
+		t.Fatalf("DatabaseURL = %q", got.DatabaseURL)
+	}
+}
+
 func TestLoadFromEnvRejectsInvalidArtifactLimits(t *testing.T) {
 	tests := []struct {
 		name    string

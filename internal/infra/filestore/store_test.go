@@ -703,6 +703,12 @@ func TestStageOpenPromoteAndDelete(t *testing.T) {
 	if _, err := os.Stat(attachment.Path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("session file still exists: %v", err)
 	}
+	if err := store.DeleteSessionFiles(context.Background(), attachment.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(store.attachmentsRoot(), "sessions", "session-1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("session input directory still exists: %v", err)
+	}
 }
 
 func TestDeleteStaged(t *testing.T) {

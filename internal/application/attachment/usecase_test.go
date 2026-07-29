@@ -160,6 +160,15 @@ func (s *fakeStore) DeleteSession(_ context.Context, id domain.SessionAttachment
 	return nil
 }
 
+func (s *fakeStore) DeleteSessionFiles(_ context.Context, sessionID domain.ID) error {
+	for id, attachment := range s.sessions {
+		if attachment.SessionID == sessionID {
+			delete(s.sessions, id)
+		}
+	}
+	return nil
+}
+
 func (s *fakeStore) FindSessionFile(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
 	attachment, ok := s.sessions[id]
 	if !ok {
