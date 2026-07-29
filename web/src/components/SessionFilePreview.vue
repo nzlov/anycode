@@ -53,6 +53,12 @@
       class="session-file-preview__audio"
       controls
     />
+    <ModelFilePreview
+      v-else-if="file?.previewKind === 'model' && objectURL"
+      :src="objectURL"
+      :filename="file.filename"
+      class="session-file-preview__model"
+    />
     <pre v-else-if="file?.previewKind === 'text'" class="session-file-preview__text">{{
       text
     }}</pre>
@@ -64,13 +70,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 
 import {
   fetchSessionFile,
   requestSessionFilePreviewURL,
   type SessionFilePreviewData,
 } from '@/services/sessionFiles';
+
+const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
 const props = withDefaults(
   defineProps<{ file: SessionFilePreviewData | null; zoomable?: boolean }>(),
@@ -309,6 +317,10 @@ onBeforeUnmount(clear);
 
 .session-file-preview__audio {
   width: min(100%, 520px);
+}
+
+.session-file-preview__model {
+  min-height: 68vh;
 }
 
 .session-file-preview__text {

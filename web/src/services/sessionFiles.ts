@@ -1,6 +1,7 @@
 import { getGraphQLAccessKey, graphqlFetch } from '@/services/graphqlClient';
 
-export type SessionFilePreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'none';
+export type SessionFilePreviewKind =
+  'image' | 'pdf' | 'video' | 'audio' | 'model' | 'text' | 'none';
 
 export interface SessionFile {
   id: string;

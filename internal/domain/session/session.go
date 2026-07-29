@@ -51,6 +51,7 @@ const (
 	ArtifactKindPDF     ArtifactKind = "pdf"
 	ArtifactKindVideo   ArtifactKind = "video"
 	ArtifactKindAudio   ArtifactKind = "audio"
+	ArtifactKindModel   ArtifactKind = "model"
 	ArtifactKindArchive ArtifactKind = "archive"
 	ArtifactKindText    ArtifactKind = "text"
 	ArtifactKindFile    ArtifactKind = "file"
@@ -63,6 +64,7 @@ const (
 	PreviewKindPDF   PreviewKind = "pdf"
 	PreviewKindVideo PreviewKind = "video"
 	PreviewKindAudio PreviewKind = "audio"
+	PreviewKindModel PreviewKind = "model"
 	PreviewKindText  PreviewKind = "text"
 	PreviewKindNone  PreviewKind = "none"
 )

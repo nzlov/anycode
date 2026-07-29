@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/infra/filetype"
 )
 
 const DefaultArtifactMaxBytes int64 = 512 << 20
@@ -470,6 +471,10 @@ func detectAttachmentMimeType(path string, filename string) string {
 }
 
 func detectMimeType(reader io.Reader, filename string) string {
+	byExtension := resolveMimeType(filename, "")
+	if filetype.IsModelMIMEType(byExtension) {
+		return byExtension
+	}
 	detected := "application/octet-stream"
 	hasSample := false
 	if reader != nil {
@@ -483,7 +488,6 @@ func detectMimeType(reader io.Reader, filename string) string {
 			}
 		}
 	}
-	byExtension := resolveMimeType(filename, "")
 	if detected == "text/plain; charset=utf-8" {
 		if isTextMimeType(byExtension) {
 			return byExtension
@@ -516,6 +520,8 @@ func classifyArtifact(mimeType string) (session.ArtifactKind, session.PreviewKin
 		return session.ArtifactKindVideo, session.PreviewKindVideo
 	case strings.HasPrefix(mimeType, "audio/"):
 		return session.ArtifactKindAudio, session.PreviewKindAudio
+	case filetype.IsModelMIMEType(mimeType):
+		return session.ArtifactKindModel, session.PreviewKindModel
 	case isTextMimeType(mimeType):
 		return session.ArtifactKindText, session.PreviewKindText
 	case mimeType == "application/zip" || mimeType == "application/x-tar" || mimeType == "application/gzip" || mimeType == "application/x-7z-compressed" || mimeType == "application/x-rar-compressed":
@@ -557,6 +563,9 @@ func cleanFilename(filename string) string {
 }
 
 func resolveMimeType(filename string, provided string) string {
+	if modelMimeType := filetype.ModelMIMEType(filename); modelMimeType != "" {
+		return modelMimeType
+	}
 	if provided != "" {
 		return provided
 	}

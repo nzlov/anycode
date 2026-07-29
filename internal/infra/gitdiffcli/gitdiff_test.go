@@ -471,6 +471,26 @@ func TestOpenFileContentReturnsOldAndNewMediaVersions(t *testing.T) {
 	}
 }
 
+func TestDetectFileContentTypeRecognizesModelExtensions(t *testing.T) {
+	tests := []struct {
+		filename string
+		want     string
+	}{
+		{filename: "scene.glb", want: "model/gltf-binary"},
+		{filename: "scene.gltf", want: "model/gltf+json"},
+		{filename: "mesh.obj", want: "model/obj"},
+		{filename: "mesh.stl", want: "model/stl"},
+		{filename: "print.3mf", want: "model/3mf"},
+	}
+	for _, test := range tests {
+		t.Run(test.filename, func(t *testing.T) {
+			if got := detectFileContentType(test.filename, []byte("model data")); got != test.want {
+				t.Fatalf("detectFileContentType() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestUntrackedMediaDoesNotBecomeTextDiff(t *testing.T) {
 	repo := initRepo(t)
 	writeFile(t, repo, "README.md", "initial\n")

@@ -263,6 +263,7 @@ const kindOptions = [
   { label: 'PDF', value: 'pdf' },
   { label: '视频', value: 'video' },
   { label: '音频', value: 'audio' },
+  { label: '3D 模型', value: 'model' },
   { label: '压缩包', value: 'archive' },
   { label: '文本', value: 'text' },
   { label: '其他文件', value: 'file' },
@@ -419,6 +420,7 @@ function fileIcon(file: SessionFile) {
     pdf: 'picture_as_pdf',
     video: 'movie',
     audio: 'audio_file',
+    model: 'view_in_ar',
     archive: 'folder_zip',
     text: 'description',
   };

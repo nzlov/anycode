@@ -96,6 +96,8 @@ func TestPreviewable(t *testing.T) {
 		{"text/plain", true},
 		{"application/yaml", true},
 		{"application/problem+json", true},
+		{"model/gltf-binary", true},
+		{"model/3mf", true},
 		{"image/svg+xml", false},
 		{"application/octet-stream", false},
 	}
@@ -118,6 +120,24 @@ func TestDetectMimeTypeDoesNotTrustPreviewableExtension(t *testing.T) {
 	}
 }
 
+func TestDetectMimeTypeRecognizesModelExtensions(t *testing.T) {
+	tests := []struct {
+		filename string
+		want     string
+	}{
+		{"scene.glb", "model/gltf-binary"},
+		{"scene.gltf", "model/gltf+json"},
+		{"mesh.obj", "model/obj"},
+		{"mesh.stl", "model/stl"},
+		{"print.3mf", "model/3mf"},
+	}
+	for _, test := range tests {
+		if got := detectMimeType(strings.NewReader("model data"), test.filename); got != test.want {
+			t.Fatalf("detectMimeType(%q) = %q, want %q", test.filename, got, test.want)
+		}
+	}
+}
+
 func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 	tests := []struct {
 		mime    string
@@ -134,6 +154,11 @@ func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 		{"application/toml", session.ArtifactKindText, session.PreviewKindText},
 		{"application/xml", session.ArtifactKindText, session.PreviewKindText},
 		{"application/problem+json", session.ArtifactKindText, session.PreviewKindText},
+		{"model/gltf-binary", session.ArtifactKindModel, session.PreviewKindModel},
+		{"model/gltf+json", session.ArtifactKindModel, session.PreviewKindModel},
+		{"model/obj", session.ArtifactKindModel, session.PreviewKindModel},
+		{"model/stl", session.ArtifactKindModel, session.PreviewKindModel},
+		{"model/3mf", session.ArtifactKindModel, session.PreviewKindModel},
 		{"application/octet-stream", session.ArtifactKindFile, session.PreviewKindNone},
 		{"image/svg+xml", session.ArtifactKindImage, session.PreviewKindNone},
 		{"image/bmp", session.ArtifactKindImage, session.PreviewKindNone},

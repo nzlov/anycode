@@ -99,6 +99,14 @@ func TestOpenSessionDiffFileRejectsMissingAndNonMediaVersions(t *testing.T) {
 	}
 }
 
+func TestPreviewableMediaTypeAllowsModels(t *testing.T) {
+	for _, mimeType := range []string{"model/gltf-binary", "model/gltf+json", "model/obj", "model/stl", "model/3mf"} {
+		if !previewableMediaType(mimeType) {
+			t.Fatalf("previewableMediaType(%q) = false", mimeType)
+		}
+	}
+}
+
 func TestCountSessionChangedFilesRejectsUnavailableDiff(t *testing.T) {
 	service := New(
 		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo"}},

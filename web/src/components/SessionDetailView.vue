@@ -900,6 +900,7 @@ function fileIcon(file: SessionFile | null) {
     pdf: 'picture_as_pdf',
     video: 'movie',
     audio: 'audio_file',
+    model: 'view_in_ar',
     archive: 'folder_zip',
     text: 'description',
   };

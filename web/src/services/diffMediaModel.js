@@ -1,3 +1,5 @@
+import { modelFileFormat } from './modelFiles.js';
+
 const imageExtensions = new Set(['gif', 'jpeg', 'jpg', 'png', 'webp']);
 const audioExtensions = new Set(['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'wav']);
 const videoExtensions = new Set(['m4v', 'mov', 'mp4', 'ogv', 'webm']);
@@ -8,6 +10,7 @@ export function diffMediaKind(filePath) {
   if (imageExtensions.has(extension)) return 'image';
   if (audioExtensions.has(extension)) return 'audio';
   if (videoExtensions.has(extension)) return 'video';
+  if (modelFileFormat(filename)) return 'model';
   return null;
 }
 

@@ -138,3 +138,14 @@ test('image attachments use viewport-relative previews without scrolling', () =>
     /\.attachment-preview-media\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*object-fit:\s*contain/s,
   );
 });
+
+test('local 3D model attachments use the shared model preview', () => {
+  const composerSource = readFileSync(
+    new URL('../src/components/PromptComposer.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(composerSource, /<ModelFilePreview/);
+  assert.match(composerSource, /modelFileFormat\(file\.name\)/);
+  assert.match(composerSource, /previewKind\.value = 'model'/);
+});

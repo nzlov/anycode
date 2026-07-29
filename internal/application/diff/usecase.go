@@ -276,7 +276,7 @@ func changedFile(files []gitdiff.DiffFile, path string) (gitdiff.DiffFile, bool)
 
 func previewableMediaType(mimeType string) bool {
 	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
-	if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") {
+	if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") || strings.HasPrefix(mimeType, "model/") {
 		return true
 	}
 	switch mimeType {

@@ -23,6 +23,12 @@
         controls
         preload="metadata"
       />
+      <ModelFilePreview
+        v-else-if="kind === 'model'"
+        :src="states[version].url"
+        :filename="filePath"
+        class="diff-media-preview__model"
+      />
       <audio
         v-else
         :src="states[version].url"
@@ -35,11 +41,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, reactive, watch } from 'vue';
 
 import { fetchDiffMedia } from '@/services/diffMedia';
 import { diffMediaVersions } from '@/services/diffMediaModel';
 import type { DiffMediaKind, DiffMediaVersion } from '@/services/diffMediaModel';
+
+const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
 const props = defineProps<{
   sessionId: string;
@@ -139,6 +147,12 @@ onBeforeUnmount(clear);
 
 .diff-media-preview__audio {
   width: 100%;
+}
+
+.diff-media-preview__model {
+  min-height: min(60vh, 520px);
+  border-radius: 6px;
+  background: var(--ac-diff-bg);
 }
 
 @media (max-width: 720px) {

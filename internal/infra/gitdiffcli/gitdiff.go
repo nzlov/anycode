@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
+	"github.com/nzlov/anycode/internal/infra/filetype"
 )
 
 const defaultGitBin = "git"
@@ -474,6 +475,9 @@ func readWorktreeFile(worktreePath string, filePath string) ([]byte, error) {
 }
 
 func detectFileContentType(filePath string, body []byte) string {
+	if modelMIMEType := filetype.ModelMIMEType(filePath); modelMIMEType != "" {
+		return modelMIMEType
+	}
 	detected := strings.ToLower(http.DetectContentType(body))
 	if detected != "application/octet-stream" {
 		return detected
@@ -607,7 +611,7 @@ func untrackedFileDiff(worktreePath string, filePath string) ([]gitdiff.DiffHunk
 
 func isMediaContent(filePath string, body []byte) bool {
 	mimeType := detectFileContentType(filePath, body)
-	return strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/")
+	return strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") || strings.HasPrefix(mimeType, "model/")
 }
 
 func countFileLines(path string) int {

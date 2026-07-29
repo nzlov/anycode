@@ -85,7 +85,7 @@ const filename = computed(
 const artifactKind = computed(() => payloadString('artifactKind', 'file'));
 const previewKind = computed<SessionFilePreviewKind>(() => {
   const kind = payloadString('previewKind', 'none');
-  return ['image', 'pdf', 'video', 'audio', 'text'].includes(kind)
+  return ['image', 'pdf', 'video', 'audio', 'model', 'text'].includes(kind)
     ? (kind as SessionFilePreviewKind)
     : 'none';
 });
@@ -102,6 +102,7 @@ const icon = computed(() => {
     pdf: 'picture_as_pdf',
     video: 'movie',
     audio: 'audio_file',
+    model: 'view_in_ar',
     archive: 'folder_zip',
     text: 'description',
   };

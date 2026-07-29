@@ -290,6 +290,12 @@
             class="attachment-preview-media"
             controls
           />
+          <ModelFilePreview
+            v-else-if="previewKind === 'model'"
+            :src="previewUrl"
+            :filename="previewName"
+            class="attachment-preview-media"
+          />
         </q-card-section>
       </q-card>
     </q-dialog>
@@ -297,7 +303,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue';
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  useId,
+  watch,
+} from 'vue';
 import { useQuasar, type QFile, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
@@ -319,7 +334,10 @@ import {
   type PromptSlashCommand,
 } from '@/services/promptCompletions';
 import type { SessionFile } from '@/services/sessionFiles';
+import { modelFileFormat } from '@/services/modelFiles';
 import type { PromptMention } from '@/services/sessions';
+
+const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
 const props = withDefaults(
   defineProps<{
@@ -382,7 +400,7 @@ const sendShortcut = computed(
 );
 const previewOpen = ref(false);
 const previewName = ref('');
-const previewKind = ref<'image' | 'video' | ''>('');
+const previewKind = ref<'image' | 'video' | 'model' | ''>('');
 const previewUrl = ref('');
 const draggingFiles = ref(false);
 const dragDepth = ref(0);
@@ -453,6 +471,7 @@ const activeCompletionId = computed(() =>
 );
 
 function fileIcon(file: File) {
+  if (modelFileFormat(file.name)) return 'view_in_ar';
   if (file.type.startsWith('video/')) return 'movie';
   return 'description';
 }
@@ -490,20 +509,26 @@ function artifactIcon(artifact: SessionFile) {
   if (artifact.artifactKind === 'image') return 'image';
   if (artifact.artifactKind === 'video') return 'movie';
   if (artifact.artifactKind === 'audio') return 'audio_file';
+  if (artifact.artifactKind === 'model') return 'view_in_ar';
   if (artifact.artifactKind === 'archive') return 'folder_zip';
   if (artifact.artifactKind === 'pdf') return 'picture_as_pdf';
   return 'description';
 }
 
 function canPreview(file: File) {
-  return file.type.startsWith('image/') || file.type.startsWith('video/');
+  return (
+    file.type.startsWith('image/') ||
+    file.type.startsWith('video/') ||
+    Boolean(modelFileFormat(file.name))
+  );
 }
 
 function openPreview(file: File) {
   if (props.disabled || !canPreview(file)) return;
   revokePreviewUrl();
   previewName.value = file.name;
-  previewKind.value = file.type.startsWith('image/') ? 'image' : 'video';
+  if (modelFileFormat(file.name)) previewKind.value = 'model';
+  else previewKind.value = file.type.startsWith('image/') ? 'image' : 'video';
   previewUrl.value = URL.createObjectURL(file);
   previewOpen.value = true;
 }

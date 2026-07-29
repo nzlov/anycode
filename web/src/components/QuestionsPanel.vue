@@ -249,6 +249,7 @@ function fileIcon(file: QuestionFile) {
   if (file.previewKind === 'video') return 'movie';
   if (file.previewKind === 'audio') return 'audio_file';
   if (file.previewKind === 'pdf') return 'picture_as_pdf';
+  if (file.previewKind === 'model') return 'view_in_ar';
   return 'description';
 }
 

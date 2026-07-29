@@ -16,6 +16,10 @@ const preview = readFileSync(
   new URL('../src/components/SessionFilePreview.vue', import.meta.url),
   'utf8',
 );
+const modelPreview = readFileSync(
+  new URL('../src/components/ModelFilePreview.vue', import.meta.url),
+  'utf8',
+);
 const eventMessage = readFileSync(
   new URL('../src/components/SessionEventMessage.vue', import.meta.url),
   'utf8',
@@ -89,6 +93,16 @@ test('images use short-lived direct preview URLs while other previews keep authe
   assert.match(preview, /file\?\.previewKind === 'video'/);
   assert.match(preview, /file\?\.previewKind === 'audio'/);
   assert.match(preview, /file\?\.previewKind === 'text'/);
+  assert.match(preview, /file\?\.previewKind === 'model'/);
+  assert.match(preview, /<ModelFilePreview/);
+  assert.match(modelPreview, /GLTFLoader/);
+  assert.match(modelPreview, /OBJLoader/);
+  assert.match(modelPreview, /STLLoader/);
+  assert.match(modelPreview, /ThreeMFLoader/);
+  assert.match(modelPreview, /OrbitControls/);
+  assert.match(modelPreview, /ResizeObserver/);
+  assert.match(modelPreview, /setURLModifier/);
+  assert.match(modelPreview, /模型引用了不支持的外部资源/);
 });
 
 test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
