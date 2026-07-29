@@ -81,7 +81,7 @@
               round
               dense
               class="app-icon-btn"
-              icon="edit_outline"
+              icon="edit"
               :aria-label="`修改快捷指令：${command.content}`"
               :disable="quickCommandsLoading || quickCommandsMutating > 0 || saving"
               @click="startEdit(command)"
@@ -121,12 +121,13 @@
     />
 
     <q-btn
+      v-if="!adding && !editingCommandId"
       fab
       color="primary"
       class="global-settings-add-fab app-on-primary"
       icon="add"
       aria-label="新增快捷指令"
-      :disable="adding || !!editingCommandId || quickCommandsLoading || quickCommandsMutating > 0"
+      :disable="quickCommandsLoading || quickCommandsMutating > 0"
       @click="startAdd"
     >
       <q-tooltip>新增快捷指令</q-tooltip>

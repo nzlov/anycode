@@ -73,9 +73,18 @@ test('global settings expose quick command navigation, add FAB, item editing, an
   assert.match(settingsSource, /快捷指令/);
   assert.match(settingsSource, /<QuickCommandManager/);
   assert.match(managerSource, /\bfab\b/);
-  assert.match(managerSource, /icon="edit_outline"/);
+  assert.match(managerSource, /icon="edit"/);
   assert.match(managerSource, /startEdit\(command\)/);
   assert.match(managerSource, /icon="delete_outline"/);
+});
+
+test('quick command editor removes the inactive add hit target on mobile', () => {
+  const managerSource = readSource('../src/components/QuickCommandManager.vue');
+
+  assert.match(
+    managerSource,
+    /<q-btn\s+v-if="!adding && !editingCommandId"[\s\S]*?aria-label="新增快捷指令"/,
+  );
 });
 
 test('project settings manage project-only commands while prompt menus include global commands', () => {
