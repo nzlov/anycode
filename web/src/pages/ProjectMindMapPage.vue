@@ -46,7 +46,8 @@
               :color="taskStatusColor(card.taskStatus)"
               :label="taskStatusLabel(card.taskStatus)"
             />
-            <span class="text-positive">+{{ card.nodes.length }}</span>
+            <span class="text-positive"
+              >+{{ card.nodes.filter((node) => node.changeType === 'added').length }}</span>
             <span class="text-warning">~{{ card.modifiedNodeIds.length }}</span>
             <span class="text-negative">−{{ card.deletedNodeIds.length }}</span>
           </div>
@@ -395,7 +396,9 @@ let refreshPending = false;
 let loadedRevision = '';
 let disposed = false;
 
-const graph = computed<DisplayMindMapGraph>(() => combineMindMaps(mainGraph.value, cards.value));
+const graph = computed<DisplayMindMapGraph>(() =>
+  combineMindMaps(mainGraph.value, cards.value, activeCardSessionId.value),
+);
 const radialLayout = computed(() =>
   buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
 );
@@ -426,9 +429,13 @@ const activeCardElementIds = computed(() => {
   const card = cards.value.find((item) => item.sessionId === activeCardSessionId.value);
   if (!card) return { nodeIds, edgeIds };
 
-  const addedNodeIds = new Set(card.nodes.map((node) => node.id));
+  const addedNodeIds = new Set(
+    card.nodes.filter((node) => node.changeType === 'added').map((node) => node.id),
+  );
   const changedMainNodeIds = new Set([...card.modifiedNodeIds, ...card.deletedNodeIds]);
-  for (const node of card.nodes) nodeIds.add(cardDisplayId(card.sessionId, node.id));
+  for (const node of card.nodes) {
+    nodeIds.add(node.changeType === 'added' ? cardDisplayId(card.sessionId, node.id) : node.id);
+  }
   for (const nodeId of changedMainNodeIds) nodeIds.add(nodeId);
   for (const edge of card.edges) {
     edgeIds.add(cardDisplayId(card.sessionId, edge.id));
@@ -547,20 +554,34 @@ const flowEdges = computed({
   set: () => undefined,
 });
 
-function combineMindMaps(base: MindMapGraph, cardGraphs: MindMapCard[]): DisplayMindMapGraph {
+function combineMindMaps(
+  base: MindMapGraph,
+  cardGraphs: MindMapCard[],
+  activeCardSessionId: string,
+): DisplayMindMapGraph {
   const modifiedNodeIds = new Set(cardGraphs.flatMap((card) => card.modifiedNodeIds));
   const deletedNodeIds = new Set(cardGraphs.flatMap((card) => card.deletedNodeIds));
-  const nodes: DisplayMindMapNode[] = base.nodes.map((node) => ({
-    ...node,
-    changeType: deletedNodeIds.has(node.id)
-      ? 'deleted'
-      : modifiedNodeIds.has(node.id)
-        ? 'modified'
-        : 'unchanged',
-    entityId: node.id,
-    sessionId: '',
-    cardLabel: '',
-  }));
+  const activeCard = cardGraphs.find((card) => card.sessionId === activeCardSessionId);
+  const activeCardLabel = activeCard?.requirement || activeCard?.sessionId || '';
+  const activeNodeUpdates = new Map(
+    activeCard?.nodes
+      .filter((node) => node.changeType === 'modified')
+      .map((node) => [node.id, node]) ?? [],
+  );
+  const nodes: DisplayMindMapNode[] = base.nodes.map((node) => {
+    const activeNode = activeNodeUpdates.get(node.id);
+    return {
+      ...(activeNode ?? node),
+      changeType: deletedNodeIds.has(node.id)
+        ? 'deleted'
+        : modifiedNodeIds.has(node.id)
+          ? 'modified'
+          : 'unchanged',
+      entityId: node.id,
+      sessionId: activeNode ? activeCardSessionId : '',
+      cardLabel: activeNode ? activeCardLabel : '',
+    };
+  });
   const edges: DisplayMindMapEdge[] = base.edges.map((edge) => ({
     ...edge,
     entityId: edge.id,
@@ -569,9 +590,10 @@ function combineMindMaps(base: MindMapGraph, cardGraphs: MindMapCard[]): Display
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   for (const card of cardGraphs) {
-    const addedNodeIds = new Set(card.nodes.map((node) => node.id));
+    const addedNodes = card.nodes.filter((node) => node.changeType === 'added');
+    const addedNodeIds = new Set(addedNodes.map((node) => node.id));
     const cardLabel = card.requirement || card.sessionId;
-    for (const node of card.nodes) {
+    for (const node of addedNodes) {
       const id = cardDisplayId(card.sessionId, node.id);
       nodes.push({
         ...node,
@@ -779,11 +801,7 @@ async function runMindMapSearch() {
     ) {
       return;
     }
-    searchMatchNodeIds.value = new Set(
-      result.matches.map((match) =>
-        match.sessionId ? cardDisplayId(match.sessionId, match.nodeId) : match.nodeId,
-      ),
-    );
+    searchMatchNodeIds.value = new Set(result.matches.map(searchDisplayNodeId));
   } catch {
     if (requestRevision === searchRequestRevision) {
       searchMatchNodeIds.value = new Set();
@@ -792,6 +810,16 @@ async function runMindMapSearch() {
   } finally {
     if (requestRevision === searchRequestRevision) searchLoading.value = false;
   }
+}
+
+function searchDisplayNodeId(match: { nodeId: string; sessionId?: string | null }) {
+  if (!match.sessionId) return match.nodeId;
+  const node = cards.value
+    .find((card) => card.sessionId === match.sessionId)
+    ?.nodes.find((item) => item.id === match.nodeId);
+  return node?.changeType === 'modified'
+    ? match.nodeId
+    : cardDisplayId(match.sessionId, match.nodeId);
 }
 
 function selectNode({ node }: NodeMouseEvent) {

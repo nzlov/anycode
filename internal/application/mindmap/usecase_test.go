@@ -285,7 +285,7 @@ func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
 		changeIndex++
 		return domain.ChangeID(fmt.Sprintf("search-change-%d", changeIndex)), nil
 	}
-	mainTitle, cardTitle := "Shared Search", "Card Search"
+	mainTitle, cardTitle, translatedTitle := "Shared Search", "Card Search", "共享搜索"
 	if _, err := service.Update(ctx, UpdateInput{ProjectID: domain.ProjectID(project.ID), Operations: []OperationInput{{
 		Kind: domain.ChangeUpsertNode, ID: "main-node", Title: &mainTitle,
 	}}}); err != nil {
@@ -293,7 +293,10 @@ func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
 	}
 	if _, err := service.Update(ctx, UpdateInput{
 		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID),
-		Operations: []OperationInput{{Kind: domain.ChangeUpsertNode, ID: "card-node", Title: &cardTitle}},
+		Operations: []OperationInput{
+			{Kind: domain.ChangeUpsertNode, ID: "card-node", Title: &cardTitle},
+			{Kind: domain.ChangeUpsertNode, ID: "main-node", Title: &translatedTitle},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -312,9 +315,16 @@ func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
 	if len(cardResult.Matches) != 1 || cardResult.Matches[0].NodeID != "card-node" || cardResult.Matches[0].SessionID != domain.SessionID(session.ID) {
 		t.Fatalf("card search result = %#v", cardResult)
 	}
+	modifiedResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: translatedTitle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(modifiedResult.Matches) != 1 || modifiedResult.Matches[0].NodeID != "main-node" || modifiedResult.Matches[0].SessionID != domain.SessionID(session.ID) {
+		t.Fatalf("modified card search result = %#v", modifiedResult)
+	}
 }
 
-func TestCardDeltaContainsOnlyAddedNodesAndTheirRelationships(t *testing.T) {
+func TestCardDeltaContainsAddedAndModifiedNodes(t *testing.T) {
 	base := domain.Graph{
 		Nodes: []domain.Node{
 			{ID: domain.RootNodeID, Title: "AnyCode"},
@@ -333,7 +343,9 @@ func TestCardDeltaContainsOnlyAddedNodesAndTheirRelationships(t *testing.T) {
 
 	nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, current)
 
-	if len(nodes) != 1 || nodes[0].ID != "added" || nodes[0].ChangeType != NodeAdded {
+	if len(nodes) != 2 ||
+		nodes[0].ID != "modified" || nodes[0].Title != "After" || nodes[0].ChangeType != NodeModified ||
+		nodes[1].ID != "added" || nodes[1].ChangeType != NodeAdded {
 		t.Fatalf("card nodes = %#v", nodes)
 	}
 	if len(edges) != 1 || edges[0].ID != "root-added" {

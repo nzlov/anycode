@@ -97,10 +97,7 @@ test('mind map search matches agent-visible node fields and highlights only matc
   assert.match(page, /\{\{ searchMatchNodeIds\.size \}\} 个/);
   assert.match(page, /searchProjectMindMap\(requestedProjectId, query\)/);
   assert.match(page, /requestRevision !== searchRequestRevision/);
-  assert.match(
-    page,
-    /match\.sessionId \? cardDisplayId\(match\.sessionId, match\.nodeId\) : match\.nodeId/,
-  );
+  assert.match(page, /result\.matches\.map\(searchDisplayNodeId\)/);
   assert.match(page, /hasSearch\.value\s*\? searchMatchNodeIds\.value/);
   assert.match(page, /'mind-map-node--search-match'/);
   assert.match(page, /\.mind-map-node--search-match \.mind-map-node-content/);
@@ -148,7 +145,7 @@ test('mind map node information opens on desktop hover and mobile click with a c
   assert.match(page, /@click="closeNodeInfo"/);
 });
 
-test('mind map combines compact card deltas without a graph selector', () => {
+test('mind map combines compact card deltas and previews selected card modifications', () => {
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
   const service = readSource('../src/services/mindMaps.ts');
   const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
@@ -174,7 +171,14 @@ test('mind map combines compact card deltas without a graph selector', () => {
   assert.doesNotMatch(page, /<q-select/);
   assert.doesNotMatch(page, /scopeSessionId/);
   assert.match(page, /v-for="card in cards"/);
-  assert.match(page, /combineMindMaps\(mainGraph\.value, cards\.value\)/);
+  assert.match(
+    page,
+    /combineMindMaps\(mainGraph\.value, cards\.value, activeCardSessionId\.value\)/,
+  );
+  assert.match(page, /node\.changeType === 'added'/);
+  assert.match(page, /node\.changeType === 'modified'/);
+  assert.match(page, /activeNode \? activeCardSessionId : ''/);
+  assert.match(page, /\.\.\.\(activeNode \?\? node\)/);
   assert.match(page, /cardDisplayId\(card\.sessionId, node\.id\)/);
   assert.match(page, /v-if="cards\.length" class="mind-map-change-legend"/);
   assert.match(page, /data\.cardLabel/);
@@ -197,6 +201,7 @@ test('mind map cards toggle related elements with brightness without replacing o
   assert.match(page, /@keyup\.space\.self\.prevent="toggleCardHighlight\(card\.sessionId\)"/);
   assert.match(page, /const activeCardElementIds = computed/);
   assert.match(page, /card\.modifiedNodeIds, \.\.\.card\.deletedNodeIds/);
+  assert.match(page, /node\.changeType === 'added' \? cardDisplayId\(card\.sessionId, node\.id\) : node\.id/);
   assert.match(page, /cardDisplayId\(card\.sessionId, edge\.id\)/);
   assert.match(page, /'mind-map-element--highlighted'/);
   assert.match(page, /\.mind-map-element--highlighted[\s\S]*filter: brightness\(1\.14\)/);
@@ -222,6 +227,8 @@ test('session detail links to its mind map card and the page applies the route h
   assert.match(page, /let routeCardHighlightApplied = false/);
   assert.match(page, /typeof route\.query\.card === 'string' \? route\.query\.card : ''/);
   assert.match(page, /activeCardSessionId\.value = requestedCardSessionId/);
+  assert.match(page, /searchMatchNodeIds\.value = new Set\(result\.matches\.map\(searchDisplayNodeId\)\)/);
+  assert.match(page, /node\?\.changeType === 'modified'[\s\S]*\? match\.nodeId/);
 });
 
 test('horizontal sessions expose a live mind map link only after the card has effective changes', () => {

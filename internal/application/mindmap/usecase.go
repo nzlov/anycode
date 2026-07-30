@@ -1108,6 +1108,7 @@ func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.No
 			addedNodeIDs[node.ID] = struct{}{}
 			nodes = append(nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeAdded})
 		} else if node.Title != baseNode.Title || node.Content != baseNode.Content || !slices.Equal(node.Files, baseNode.Files) {
+			nodes = append(nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, Files: node.Files, ChangeType: NodeModified})
 			modifiedNodeIDs = append(modifiedNodeIDs, node.ID)
 		}
 	}
