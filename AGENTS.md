@@ -58,5 +58,6 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 ## 验证
 
 - 测试范围与风险匹配；文档改动至少运行 `git diff --check`。
+- 启动 AnyCode 测试实例时，必须使用该测试独占的临时数据库和数据目录，不得继承、连接或迁移主服务数据库。使用本地 Turso/libSQL 时，注意 `DATABASE_URL` 优先于 `TURSO_DATABASE_URL`：测试命令必须清除继承的 `DATABASE_URL` 和 `TURSO_AUTH_TOKEN`，并将 `TURSO_DATABASE_URL`、`ANYCODE_DATA_DIR` 显式指向临时目录；启动后先核对实际数据库目标，再执行迁移、恢复或浏览器测试。
 - 常规收口统一运行 `make verify`；该目标依次执行后端测试与静态检查、前端测试、类型检查、生产构建和 Git 差异检查。
 - 验证失败时记录结果，继续修复或询问用户。
