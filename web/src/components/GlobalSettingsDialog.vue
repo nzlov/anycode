@@ -184,8 +184,29 @@
               </q-item>
               <q-item v-if="general.mindMapEnabled">
                 <q-item-section>
+                  <q-item-label>默认布局</q-item-label>
+                  <q-item-label caption>进入思维图时使用，浏览时可临时切换</q-item-label>
+                </q-item-section>
+                <q-item-section side class="appearance-settings-list__control">
+                  <q-select
+                    v-model="general.mindMapLayout"
+                    outlined
+                    dense
+                    emit-value
+                    map-options
+                    options-dense
+                    :options="mindMapLayoutOptions"
+                    aria-label="思维图默认布局"
+                    :disable="generalLoading || generalSaving"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item v-if="general.mindMapEnabled">
+                <q-item-section>
                   <q-item-label>维护模式</q-item-label>
-                  <q-item-label caption>实时由卡片 Agent 维护；异步在会话关闭后排队整理</q-item-label>
+                  <q-item-label caption
+                    >实时由卡片 Agent 维护；异步在会话关闭后排队整理</q-item-label
+                  >
                 </q-item-section>
                 <q-item-section side class="appearance-settings-list__control">
                   <q-select
@@ -201,7 +222,10 @@
                   />
                 </q-item-section>
               </q-item>
-              <q-item v-if="general.mindMapEnabled && general.mindMapMode === 'async'" class="column items-stretch">
+              <q-item
+                v-if="general.mindMapEnabled && general.mindMapMode === 'async'"
+                class="column items-stretch"
+              >
                 <q-item-section>
                   <q-item-label>异步整理 Agent</q-item-label>
                   <q-item-label caption>所有项目共用此模型、思考强度与任务并发池</q-item-label>
@@ -555,6 +579,7 @@ import {
   defaultSendShortcut,
   getGeneralSettings,
   type GeneralSettings,
+  mindMapLayoutOptions,
   updateGeneralSettings,
 } from '@/services/generalSettings';
 import {
@@ -586,6 +611,7 @@ const defaultGeneral: GeneralSettings = {
   sendShortcut: defaultSendShortcut,
   mindMapEnabled: false,
   mindMapMode: 'realtime',
+  mindMapLayout: 'radial',
   mindMapModel: '',
   mindMapReasoningEffort: '',
   mindMapMaxConcurrent: 1,
@@ -622,23 +648,20 @@ const agentMaxConcurrentValid = computed(
 );
 const mindMapMaxConcurrentValid = computed(
   () =>
-    Number.isInteger(general.value.mindMapMaxConcurrent) &&
-    general.value.mindMapMaxConcurrent > 0,
+    Number.isInteger(general.value.mindMapMaxConcurrent) && general.value.mindMapMaxConcurrent > 0,
 );
 const mindMapSettingsValid = computed(
   () =>
     !general.value.mindMapEnabled ||
-    (general.value.mindMapMode === 'realtime' ||
-      (general.value.mindMapMode === 'async' &&
-        !!general.value.mindMapModel &&
-        !!general.value.mindMapReasoningEffort &&
-        mindMapMaxConcurrentValid.value)),
+    general.value.mindMapMode === 'realtime' ||
+    (general.value.mindMapMode === 'async' &&
+      !!general.value.mindMapModel &&
+      !!general.value.mindMapReasoningEffort &&
+      mindMapMaxConcurrentValid.value),
 );
 const generalSettingsValid = computed(
   () =>
-    agentMaxConcurrentValid.value &&
-    agentWritableRootsValid.value &&
-    mindMapSettingsValid.value,
+    agentMaxConcurrentValid.value && agentWritableRootsValid.value && mindMapSettingsValid.value,
 );
 const generalSettingsChanged = computed(
   () =>
@@ -646,6 +669,7 @@ const generalSettingsChanged = computed(
     general.value.sendShortcut !== persistedGeneral.value.sendShortcut ||
     general.value.mindMapEnabled !== persistedGeneral.value.mindMapEnabled ||
     general.value.mindMapMode !== persistedGeneral.value.mindMapMode ||
+    general.value.mindMapLayout !== persistedGeneral.value.mindMapLayout ||
     general.value.mindMapModel !== persistedGeneral.value.mindMapModel ||
     general.value.mindMapReasoningEffort !== persistedGeneral.value.mindMapReasoningEffort ||
     general.value.mindMapMaxConcurrent !== persistedGeneral.value.mindMapMaxConcurrent ||
@@ -725,6 +749,7 @@ async function saveGeneralSettings() {
       sendShortcut: general.value.sendShortcut,
       mindMapEnabled: general.value.mindMapEnabled,
       mindMapMode: general.value.mindMapMode,
+      mindMapLayout: general.value.mindMapLayout,
       mindMapModel: general.value.mindMapModel,
       mindMapReasoningEffort: general.value.mindMapReasoningEffort,
       mindMapMaxConcurrent: general.value.mindMapMaxConcurrent,
@@ -891,6 +916,7 @@ watch(
   [
     () => general.value.mindMapEnabled,
     () => general.value.mindMapMode,
+    () => general.value.mindMapLayout,
     () => general.value.mindMapModel,
     () => general.value.mindMapReasoningEffort,
     () => general.value.mindMapMaxConcurrent,

@@ -23,7 +23,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 		AgentWritableRoots: append([]string(nil), row.AgentWritableRoots...),
 		SendShortcut:       setting.SendShortcut(row.SendShortcut),
 		MindMap: setting.MindMapConfiguration{
-			Enabled: row.MindMapEnabled, Mode: setting.MindMapMode(row.MindMapMode), Model: row.MindMapModel,
+			Enabled: row.MindMapEnabled, Mode: setting.MindMapMode(row.MindMapMode), Layout: setting.MindMapLayout(row.MindMapLayout), Model: row.MindMapModel,
 			ReasoningEffort: row.MindMapReasoningEffort, MaxConcurrent: row.MindMapMaxConcurrent,
 		},
 		BackgroundType:       setting.BackgroundType(row.BackgroundType),
@@ -43,6 +43,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 		SetSendShortcut(string(configuration.SendShortcut)).
 		SetMindMapEnabled(configuration.MindMap.Enabled).
 		SetMindMapMode(string(configuration.MindMap.Mode)).
+		SetMindMapLayout(string(configuration.MindMap.Layout)).
 		SetMindMapModel(configuration.MindMap.Model).
 		SetMindMapReasoningEffort(configuration.MindMap.ReasoningEffort).
 		SetMindMapMaxConcurrent(configuration.MindMap.MaxConcurrent).
@@ -67,6 +68,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 		SetSendShortcut(string(configuration.SendShortcut)).
 		SetMindMapEnabled(configuration.MindMap.Enabled).
 		SetMindMapMode(string(configuration.MindMap.Mode)).
+		SetMindMapLayout(string(configuration.MindMap.Layout)).
 		SetMindMapModel(configuration.MindMap.Model).
 		SetMindMapReasoningEffort(configuration.MindMap.ReasoningEffort).
 		SetMindMapMaxConcurrent(configuration.MindMap.MaxConcurrent).

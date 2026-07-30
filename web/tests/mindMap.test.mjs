@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { buildRadialLayout, radialEdgeHandles } from '../src/services/mindMapFlowModel.js';
+import {
+  buildNestedLayout,
+  buildRadialLayout,
+  radialEdgeHandles,
+} from '../src/services/mindMapFlowModel.js';
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -15,6 +19,7 @@ test('global settings expose realtime and async mind map configuration', () => {
   for (const field of [
     'mindMapEnabled',
     'mindMapMode',
+    'mindMapLayout',
     'mindMapModel',
     'mindMapReasoningEffort',
     'mindMapMaxConcurrent',
@@ -23,6 +28,8 @@ test('global settings expose realtime and async mind map configuration', () => {
   }
   assert.match(dialog, /aria-label="项目思维图"/);
   assert.match(dialog, /v-model="general\.mindMapMode"/);
+  assert.match(dialog, /v-model="general\.mindMapLayout"/);
+  assert.equal(dialog.match(/<q-item-label>项目思维图<\/q-item-label>/g)?.length, 1);
   assert.match(dialog, /label: '实时', value: 'realtime'/);
   assert.match(dialog, /label: '异步', value: 'async'/);
   assert.match(
@@ -30,6 +37,20 @@ test('global settings expose realtime and async mind map configuration', () => {
     /v-if="general\.mindMapEnabled && general\.mindMapMode === 'async'"[\s\S]*<CodexModelSelector/,
   );
   assert.match(dialog, /label="全局并发任务数"/);
+});
+
+test('mind map uses the persisted default layout and keeps page switching temporary', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+
+  assert.match(page, /activeLayoutAlgorithm = ref<MindMapLayout>\('radial'\)/);
+  assert.match(
+    page,
+    /activeLayoutAlgorithm\.value = \(await getGeneralSettings\(\)\)\.mindMapLayout/,
+  );
+  assert.match(page, /buildNestedLayout/);
+  assert.match(page, /selectTemporaryLayout\(option\.value\)/);
+  assert.match(page, /临时切换思维图布局/);
+  assert.doesNotMatch(page, /updateGeneralSettings/);
 });
 
 test('project mind map is gated and opened from the project popup menu', () => {
@@ -93,6 +114,7 @@ test('mind map search matches agent-visible node fields and highlights only matc
   const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
 
   assert.match(page, /v-model="searchQuery"[\s\S]*placeholder="模拟 Agent 搜索节点"/);
+  assert.match(page, /<PageToolbar[\s\S]*class="mind-map-toolbar-search"[\s\S]*<\/PageToolbar>/);
   assert.match(page, /aria-label="搜索思维图节点"/);
   assert.match(page, /\{\{ searchMatchNodeIds\.size \}\} 个/);
   assert.match(page, /searchProjectMindMap\(requestedProjectId, query\)/);
@@ -101,7 +123,8 @@ test('mind map search matches agent-visible node fields and highlights only matc
   assert.match(page, /hasSearch\.value\s*\? searchMatchNodeIds\.value/);
   assert.match(page, /'mind-map-node--search-match'/);
   assert.match(page, /\.mind-map-node--search-match \.mind-map-node-content/);
-  assert.match(page, /width: min\(360px, calc\(100% - 24px\)\)/);
+  assert.match(page, /\.mind-map-toolbar-search\s*{[^}]*width: min\(320px, 30vw\)/s);
+  assert.doesNotMatch(page, /\.mind-map-search\s*{/);
   assert.match(service, /query SearchProjectMindMap/);
   assert.match(service, /matches \{ nodeId sessionId \}/);
   assert.match(schema, /searchProjectMindMap\(input: SearchMindMapInput!\): MindMapSearchResult!/);
@@ -201,7 +224,10 @@ test('mind map cards toggle related elements with brightness without replacing o
   assert.match(page, /@keyup\.space\.self\.prevent="toggleCardHighlight\(card\.sessionId\)"/);
   assert.match(page, /const activeCardElementIds = computed/);
   assert.match(page, /card\.modifiedNodeIds, \.\.\.card\.deletedNodeIds/);
-  assert.match(page, /node\.changeType === 'added' \? cardDisplayId\(card\.sessionId, node\.id\) : node\.id/);
+  assert.match(
+    page,
+    /node\.changeType === 'added' \? cardDisplayId\(card\.sessionId, node\.id\) : node\.id/,
+  );
   assert.match(page, /cardDisplayId\(card\.sessionId, edge\.id\)/);
   assert.match(page, /'mind-map-element--highlighted'/);
   assert.match(page, /\.mind-map-element--highlighted[\s\S]*filter: brightness\(1\.14\)/);
@@ -227,7 +253,10 @@ test('session detail links to its mind map card and the page applies the route h
   assert.match(page, /let routeCardHighlightApplied = false/);
   assert.match(page, /typeof route\.query\.card === 'string' \? route\.query\.card : ''/);
   assert.match(page, /activeCardSessionId\.value = requestedCardSessionId/);
-  assert.match(page, /searchMatchNodeIds\.value = new Set\(result\.matches\.map\(searchDisplayNodeId\)\)/);
+  assert.match(
+    page,
+    /searchMatchNodeIds\.value = new Set\(result\.matches\.map\(searchDisplayNodeId\)\)/,
+  );
   assert.match(page, /node\?\.changeType === 'modified'[\s\S]*\? match\.nodeId/);
 });
 
@@ -241,7 +270,10 @@ test('horizontal sessions expose a live mind map link only after the card has ef
   assert.match(service, /projectMindMapCards\(projectId: \$projectId\) \{ sessionId hasChanges \}/);
   assert.match(service, /\.filter\(\(card\) => card\.hasChanges\)/);
   assert.match(index, /:mind-map-updated="mindMapUpdated\(card\)"/);
-  assert.match(index, /subscribeMindMapUpdates\(projectId, '', \{[\s\S]*refreshProjectMindMapAvailability/);
+  assert.match(
+    index,
+    /subscribeMindMapUpdates\(projectId, '', \{[\s\S]*refreshProjectMindMapAvailability/,
+  );
   assert.match(horizontal, /v-if="mindMapUpdated"[\s\S]*aria-label="打开思维图"/);
   assert.match(horizontal, /params: \{ projectId: card\.projectId \}/);
   assert.match(horizontal, /query: \{ card: card\.id \}/);
@@ -294,6 +326,105 @@ test('radial layout keeps dense adjacent rings from overlapping', () => {
         Math.abs(layout[left.id].x - layout[right.id].x) < 172 &&
         Math.abs(layout[left.id].y - layout[right.id].y) < 48;
       assert.equal(overlaps, false, `${left.id} overlaps ${right.id}`);
+    }
+  }
+});
+
+test('nested layout expands children around their parent and offsets cross-linked nodes', () => {
+  const nodes = ['project-root', 'a', 'b', 'a-child', 'b-child'].map((id) => ({ id }));
+  const treeEdges = [
+    { id: 'root-a', sourceId: 'project-root', targetId: 'a' },
+    { id: 'root-b', sourceId: 'project-root', targetId: 'b' },
+    { id: 'a-child', sourceId: 'a', targetId: 'a-child' },
+    { id: 'b-child', sourceId: 'b', targetId: 'b-child' },
+  ];
+  const treeLayout = buildNestedLayout(nodes, treeEdges);
+  const linkedLayout = buildNestedLayout(nodes, [
+    ...treeEdges,
+    { id: 'cross', sourceId: 'a-child', targetId: 'b-child' },
+  ]);
+
+  assert.deepEqual(treeLayout['project-root'], { x: -86, y: -24 });
+  assert.equal(Math.round(Math.hypot(treeLayout.a.x + 86, treeLayout.a.y + 24)), 320);
+  assert.equal(Math.round(Math.hypot(treeLayout.b.x + 86, treeLayout.b.y + 24)), 320);
+  assert.equal(
+    Math.round(
+      Math.hypot(
+        treeLayout['a-child'].x - treeLayout.a.x,
+        treeLayout['a-child'].y - treeLayout.a.y,
+      ),
+    ),
+    220,
+  );
+  assert.equal(
+    Math.round(
+      Math.hypot(
+        treeLayout['b-child'].x - treeLayout.b.x,
+        treeLayout['b-child'].y - treeLayout.b.y,
+      ),
+    ),
+    220,
+  );
+  assert.ok(
+    Math.hypot(
+      linkedLayout['a-child'].x - linkedLayout['b-child'].x,
+      linkedLayout['a-child'].y - linkedLayout['b-child'].y,
+    ) <
+      Math.hypot(
+        treeLayout['a-child'].x - treeLayout['b-child'].x,
+        treeLayout['a-child'].y - treeLayout['b-child'].y,
+      ),
+  );
+});
+
+test('nested layout reserves branch space for dense child groups', () => {
+  const nodes = [{ id: 'project-root' }];
+  const edges = [];
+  for (let branch = 0; branch < 8; branch += 1) {
+    const branchId = `branch-${branch}`;
+    nodes.push({ id: branchId });
+    edges.push({ sourceId: 'project-root', targetId: branchId });
+    for (let child = 0; child < 6; child += 1) {
+      const childId = `${branchId}-child-${child}`;
+      nodes.push({ id: childId });
+      edges.push({ sourceId: branchId, targetId: childId });
+    }
+  }
+
+  const layout = buildNestedLayout(nodes, edges);
+  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+      const left = layout[nodes[leftIndex].id];
+      const right = layout[nodes[rightIndex].id];
+      assert.equal(
+        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 48,
+        false,
+        `${nodes[leftIndex].id} overlaps ${nodes[rightIndex].id}`,
+      );
+    }
+  }
+});
+
+test('nested layout keeps cross-linked siblings from overlapping after relation offsets', () => {
+  const nodes = [{ id: 'project-root' }, { id: 'parent' }];
+  const edges = [{ sourceId: 'project-root', targetId: 'parent' }];
+  for (let index = 0; index < 6; index += 1) {
+    const id = `child-${index}`;
+    nodes.push({ id });
+    edges.push({ sourceId: 'parent', targetId: id });
+  }
+  edges.push({ sourceId: 'child-2', targetId: 'child-3' });
+
+  const layout = buildNestedLayout(nodes, edges);
+  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+      const left = layout[nodes[leftIndex].id];
+      const right = layout[nodes[rightIndex].id];
+      assert.equal(
+        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 48,
+        false,
+        `${nodes[leftIndex].id} overlaps ${nodes[rightIndex].id}`,
+      );
     }
   }
 });

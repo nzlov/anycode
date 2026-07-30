@@ -16952,6 +16952,7 @@ type SystemConfigurationMutation struct {
 	send_shortcut              *string
 	mind_map_enabled           *bool
 	mind_map_mode              *string
+	mind_map_layout            *string
 	mind_map_model             *string
 	mind_map_reasoning_effort  *string
 	mind_map_max_concurrent    *int
@@ -17288,6 +17289,42 @@ func (m *SystemConfigurationMutation) OldMindMapMode(ctx context.Context) (v str
 // ResetMindMapMode resets all changes to the "mind_map_mode" field.
 func (m *SystemConfigurationMutation) ResetMindMapMode() {
 	m.mind_map_mode = nil
+}
+
+// SetMindMapLayout sets the "mind_map_layout" field.
+func (m *SystemConfigurationMutation) SetMindMapLayout(s string) {
+	m.mind_map_layout = &s
+}
+
+// MindMapLayout returns the value of the "mind_map_layout" field in the mutation.
+func (m *SystemConfigurationMutation) MindMapLayout() (r string, exists bool) {
+	v := m.mind_map_layout
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMindMapLayout returns the old "mind_map_layout" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldMindMapLayout(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMindMapLayout is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMindMapLayout requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMindMapLayout: %w", err)
+	}
+	return oldValue.MindMapLayout, nil
+}
+
+// ResetMindMapLayout resets all changes to the "mind_map_layout" field.
+func (m *SystemConfigurationMutation) ResetMindMapLayout() {
+	m.mind_map_layout = nil
 }
 
 // SetMindMapModel sets the "mind_map_model" field.
@@ -17760,7 +17797,7 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
@@ -17775,6 +17812,9 @@ func (m *SystemConfigurationMutation) Fields() []string {
 	}
 	if m.mind_map_mode != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapMode)
+	}
+	if m.mind_map_layout != nil {
+		fields = append(fields, systemconfiguration.FieldMindMapLayout)
 	}
 	if m.mind_map_model != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapModel)
@@ -17827,6 +17867,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 		return m.MindMapEnabled()
 	case systemconfiguration.FieldMindMapMode:
 		return m.MindMapMode()
+	case systemconfiguration.FieldMindMapLayout:
+		return m.MindMapLayout()
 	case systemconfiguration.FieldMindMapModel:
 		return m.MindMapModel()
 	case systemconfiguration.FieldMindMapReasoningEffort:
@@ -17868,6 +17910,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 		return m.OldMindMapEnabled(ctx)
 	case systemconfiguration.FieldMindMapMode:
 		return m.OldMindMapMode(ctx)
+	case systemconfiguration.FieldMindMapLayout:
+		return m.OldMindMapLayout(ctx)
 	case systemconfiguration.FieldMindMapModel:
 		return m.OldMindMapModel(ctx)
 	case systemconfiguration.FieldMindMapReasoningEffort:
@@ -17933,6 +17977,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetMindMapMode(v)
+		return nil
+	case systemconfiguration.FieldMindMapLayout:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMindMapLayout(v)
 		return nil
 	case systemconfiguration.FieldMindMapModel:
 		v, ok := value.(string)
@@ -18113,6 +18164,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 		return nil
 	case systemconfiguration.FieldMindMapMode:
 		m.ResetMindMapMode()
+		return nil
+	case systemconfiguration.FieldMindMapLayout:
+		m.ResetMindMapLayout()
 		return nil
 	case systemconfiguration.FieldMindMapModel:
 		m.ResetMindMapModel()

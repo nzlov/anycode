@@ -66,6 +66,7 @@ func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSetting
 		AgentMaxConcurrent: dto.AgentMaxConcurrent, AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
 		SendShortcut:   string(dto.SendShortcut),
 		MindMapEnabled: dto.MindMapEnabled, MindMapMode: string(dto.MindMapMode), MindMapModel: dto.MindMapModel,
+		MindMapLayout:          string(dto.MindMapLayout),
 		MindMapReasoningEffort: dto.MindMapReasoningEffort, MindMapMaxConcurrent: dto.MindMapMaxConcurrent,
 	}
 }

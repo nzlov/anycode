@@ -167,6 +167,7 @@ type GeneralSettings {
   sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
+  mindMapLayout: String!
   mindMapModel: String!
   mindMapReasoningEffort: String!
   mindMapMaxConcurrent: Int!
@@ -178,6 +179,7 @@ input UpdateGeneralSettingsInput {
   sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
+  mindMapLayout: String!
   mindMapModel: String!
   mindMapReasoningEffort: String!
   mindMapMaxConcurrent: Int!

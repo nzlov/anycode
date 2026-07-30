@@ -143,6 +143,7 @@ type ComplexityRoot struct {
 		AgentMaxConcurrent     func(childComplexity int) int
 		AgentWritableRoots     func(childComplexity int) int
 		MindMapEnabled         func(childComplexity int) int
+		MindMapLayout          func(childComplexity int) int
 		MindMapMaxConcurrent   func(childComplexity int) int
 		MindMapMode            func(childComplexity int) int
 		MindMapModel           func(childComplexity int) int
@@ -1263,6 +1264,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.GeneralSettings.MindMapEnabled(childComplexity), true
+	case "GeneralSettings.mindMapLayout":
+		if e.ComplexityRoot.GeneralSettings.MindMapLayout == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.MindMapLayout(childComplexity), true
 	case "GeneralSettings.mindMapMaxConcurrent":
 		if e.ComplexityRoot.GeneralSettings.MindMapMaxConcurrent == nil {
 			break
@@ -4568,6 +4575,7 @@ type GeneralSettings {
   sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
+  mindMapLayout: String!
   mindMapModel: String!
   mindMapReasoningEffort: String!
   mindMapMaxConcurrent: Int!
@@ -4579,6 +4587,7 @@ input UpdateGeneralSettingsInput {
   sendShortcut: String!
   mindMapEnabled: Boolean!
   mindMapMode: String!
+  mindMapLayout: String!
   mindMapModel: String!
   mindMapReasoningEffort: String!
   mindMapMaxConcurrent: Int!
@@ -8157,6 +8166,35 @@ func (ec *executionContext) fieldContext_GeneralSettings_mindMapMode(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _GeneralSettings_mindMapLayout(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_mindMapLayout,
+		func(ctx context.Context) (any, error) {
+			return obj.MindMapLayout, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_mindMapLayout(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GeneralSettings_mindMapModel(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9708,6 +9746,8 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
 			case "mindMapMode":
 				return ec.fieldContext_GeneralSettings_mindMapMode(ctx, field)
+			case "mindMapLayout":
+				return ec.fieldContext_GeneralSettings_mindMapLayout(ctx, field)
 			case "mindMapModel":
 				return ec.fieldContext_GeneralSettings_mindMapModel(ctx, field)
 			case "mindMapReasoningEffort":
@@ -12944,6 +12984,8 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 				return ec.fieldContext_GeneralSettings_mindMapEnabled(ctx, field)
 			case "mindMapMode":
 				return ec.fieldContext_GeneralSettings_mindMapMode(ctx, field)
+			case "mindMapLayout":
+				return ec.fieldContext_GeneralSettings_mindMapLayout(ctx, field)
 			case "mindMapModel":
 				return ec.fieldContext_GeneralSettings_mindMapModel(ctx, field)
 			case "mindMapReasoningEffort":
@@ -26649,7 +26691,7 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "sendShortcut", "mindMapEnabled", "mindMapMode", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
+	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "sendShortcut", "mindMapEnabled", "mindMapMode", "mindMapLayout", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26691,6 +26733,13 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 				return it, err
 			}
 			it.MindMapMode = data
+		case "mindMapLayout":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapLayout"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MindMapLayout = data
 		case "mindMapModel":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mindMapModel"))
 			data, err := ec.unmarshalNString2string(ctx, v)
@@ -28152,6 +28201,11 @@ func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.Select
 			}
 		case "mindMapMode":
 			out.Values[i] = ec._GeneralSettings_mindMapMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mindMapLayout":
+			out.Values[i] = ec._GeneralSettings_mindMapLayout(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

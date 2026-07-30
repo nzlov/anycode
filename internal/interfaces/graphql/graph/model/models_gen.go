@@ -181,6 +181,7 @@ type GeneralSettings struct {
 	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`
 	MindMapMode            string   `json:"mindMapMode"`
+	MindMapLayout          string   `json:"mindMapLayout"`
 	MindMapModel           string   `json:"mindMapModel"`
 	MindMapReasoningEffort string   `json:"mindMapReasoningEffort"`
 	MindMapMaxConcurrent   int      `json:"mindMapMaxConcurrent"`
@@ -866,6 +867,7 @@ type UpdateGeneralSettingsInput struct {
 	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`
 	MindMapMode            string   `json:"mindMapMode"`
+	MindMapLayout          string   `json:"mindMapLayout"`
 	MindMapModel           string   `json:"mindMapModel"`
 	MindMapReasoningEffort string   `json:"mindMapReasoningEffort"`
 	MindMapMaxConcurrent   int      `json:"mindMapMaxConcurrent"`

@@ -41,6 +41,7 @@ type UpdateGeneralSettingsInput struct {
 	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
 	MindMapMode            domain.MindMapMode
+	MindMapLayout          domain.MindMapLayout
 	MindMapModel           string
 	MindMapReasoningEffort string
 	MindMapMaxConcurrent   int
@@ -52,6 +53,7 @@ type GeneralSettingsDTO struct {
 	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
 	MindMapMode            domain.MindMapMode
+	MindMapLayout          domain.MindMapLayout
 	MindMapModel           string
 	MindMapReasoningEffort string
 	MindMapMaxConcurrent   int
@@ -183,12 +185,16 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 	if !configuration.SendShortcut.Valid() {
 		configuration.SendShortcut = domain.SendShortcutShiftEnter
 	}
+	if !configuration.MindMap.Layout.Valid() {
+		configuration.MindMap.Layout = domain.MindMapLayoutRadial
+	}
 	return GeneralSettingsDTO{
 		AgentMaxConcurrent:     configuration.AgentMaxConcurrent,
 		AgentWritableRoots:     append([]string{}, configuration.AgentWritableRoots...),
 		SendShortcut:           configuration.SendShortcut,
 		MindMapEnabled:         configuration.MindMap.Enabled,
 		MindMapMode:            configuration.MindMap.Mode,
+		MindMapLayout:          configuration.MindMap.Layout,
 		MindMapModel:           configuration.MindMap.Model,
 		MindMapReasoningEffort: configuration.MindMap.ReasoningEffort,
 		MindMapMaxConcurrent:   configuration.MindMap.MaxConcurrent,
@@ -217,6 +223,10 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	if mindMapMode == "" {
 		mindMapMode = domain.MindMapModeRealtime
 	}
+	mindMapLayout := input.MindMapLayout
+	if mindMapLayout == "" {
+		mindMapLayout = domain.MindMapLayoutRadial
+	}
 	mindMapMaxConcurrent := input.MindMapMaxConcurrent
 	if mindMapMaxConcurrent == 0 && !input.MindMapEnabled {
 		mindMapMaxConcurrent = domain.DefaultSystemConfiguration().MindMap.MaxConcurrent
@@ -224,6 +234,7 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	mindMap := domain.MindMapConfiguration{
 		Enabled:         input.MindMapEnabled,
 		Mode:            mindMapMode,
+		Layout:          mindMapLayout,
 		Model:           strings.TrimSpace(input.MindMapModel),
 		ReasoningEffort: strings.TrimSpace(input.MindMapReasoningEffort),
 		MaxConcurrent:   mindMapMaxConcurrent,
@@ -252,6 +263,7 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 		AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots,
 		SendShortcut:   sendShortcut,
 		MindMapEnabled: mindMap.Enabled, MindMapMode: mindMap.Mode, MindMapModel: mindMap.Model,
+		MindMapLayout:          mindMap.Layout,
 		MindMapReasoningEffort: mindMap.ReasoningEffort, MindMapMaxConcurrent: mindMap.MaxConcurrent,
 	}, nil
 }
@@ -259,6 +271,9 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 func (s *Service) validateMindMapConfiguration(configuration domain.MindMapConfiguration) error {
 	if !configuration.Mode.Valid() {
 		return validationError("mindMapMode", "mind map mode is invalid")
+	}
+	if !configuration.Layout.Valid() {
+		return validationError("mindMapLayout", "mind map layout is invalid")
 	}
 	if configuration.MaxConcurrent <= 0 {
 		return validationError("mindMapMaxConcurrent", "mind map concurrency limit must be positive")

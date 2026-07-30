@@ -82,6 +82,20 @@ func (_c *SystemConfigurationCreate) SetNillableMindMapMode(v *string) *SystemCo
 	return _c
 }
 
+// SetMindMapLayout sets the "mind_map_layout" field.
+func (_c *SystemConfigurationCreate) SetMindMapLayout(v string) *SystemConfigurationCreate {
+	_c.mutation.SetMindMapLayout(v)
+	return _c
+}
+
+// SetNillableMindMapLayout sets the "mind_map_layout" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableMindMapLayout(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetMindMapLayout(*v)
+	}
+	return _c
+}
+
 // SetMindMapModel sets the "mind_map_model" field.
 func (_c *SystemConfigurationCreate) SetMindMapModel(v string) *SystemConfigurationCreate {
 	_c.mutation.SetMindMapModel(v)
@@ -289,6 +303,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultMindMapMode
 		_c.mutation.SetMindMapMode(v)
 	}
+	if _, ok := _c.mutation.MindMapLayout(); !ok {
+		v := systemconfiguration.DefaultMindMapLayout
+		_c.mutation.SetMindMapLayout(v)
+	}
 	if _, ok := _c.mutation.MindMapModel(); !ok {
 		v := systemconfiguration.DefaultMindMapModel
 		_c.mutation.SetMindMapModel(v)
@@ -353,6 +371,14 @@ func (_c *SystemConfigurationCreate) check() error {
 	if v, ok := _c.mutation.MindMapMode(); ok {
 		if err := systemconfiguration.MindMapModeValidator(v); err != nil {
 			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.MindMapLayout(); !ok {
+		return &ValidationError{Name: "mind_map_layout", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_layout"`)}
+	}
+	if v, ok := _c.mutation.MindMapLayout(); ok {
+		if err := systemconfiguration.MindMapLayoutValidator(v); err != nil {
+			return &ValidationError{Name: "mind_map_layout", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_layout": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.MindMapModel(); !ok {
@@ -457,6 +483,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.MindMapMode(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapMode, field.TypeString, value)
 		_node.MindMapMode = value
+	}
+	if value, ok := _c.mutation.MindMapLayout(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapLayout, field.TypeString, value)
+		_node.MindMapLayout = value
 	}
 	if value, ok := _c.mutation.MindMapModel(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapModel, field.TypeString, value)

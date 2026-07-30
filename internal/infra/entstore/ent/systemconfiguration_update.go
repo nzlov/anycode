@@ -104,6 +104,20 @@ func (_u *SystemConfigurationUpdate) SetNillableMindMapMode(v *string) *SystemCo
 	return _u
 }
 
+// SetMindMapLayout sets the "mind_map_layout" field.
+func (_u *SystemConfigurationUpdate) SetMindMapLayout(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetMindMapLayout(v)
+	return _u
+}
+
+// SetNillableMindMapLayout sets the "mind_map_layout" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableMindMapLayout(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetMindMapLayout(*v)
+	}
+	return _u
+}
+
 // SetMindMapModel sets the "mind_map_model" field.
 func (_u *SystemConfigurationUpdate) SetMindMapModel(v string) *SystemConfigurationUpdate {
 	_u.mutation.SetMindMapModel(v)
@@ -317,6 +331,11 @@ func (_u *SystemConfigurationUpdate) check() error {
 			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.MindMapLayout(); ok {
+		if err := systemconfiguration.MindMapLayoutValidator(v); err != nil {
+			return &ValidationError{Name: "mind_map_layout", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_layout": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.WallpaperColorScheme(); ok {
 		if err := systemconfiguration.WallpaperColorSchemeValidator(v); err != nil {
 			return &ValidationError{Name: "wallpaper_color_scheme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.wallpaper_color_scheme": %w`, err)}
@@ -369,6 +388,9 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 	}
 	if value, ok := _u.mutation.MindMapMode(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.MindMapLayout(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapLayout, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MindMapModel(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapModel, field.TypeString, value)
@@ -500,6 +522,20 @@ func (_u *SystemConfigurationUpdateOne) SetMindMapMode(v string) *SystemConfigur
 func (_u *SystemConfigurationUpdateOne) SetNillableMindMapMode(v *string) *SystemConfigurationUpdateOne {
 	if v != nil {
 		_u.SetMindMapMode(*v)
+	}
+	return _u
+}
+
+// SetMindMapLayout sets the "mind_map_layout" field.
+func (_u *SystemConfigurationUpdateOne) SetMindMapLayout(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetMindMapLayout(v)
+	return _u
+}
+
+// SetNillableMindMapLayout sets the "mind_map_layout" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableMindMapLayout(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetMindMapLayout(*v)
 	}
 	return _u
 }
@@ -730,6 +766,11 @@ func (_u *SystemConfigurationUpdateOne) check() error {
 			return &ValidationError{Name: "mind_map_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.MindMapLayout(); ok {
+		if err := systemconfiguration.MindMapLayoutValidator(v); err != nil {
+			return &ValidationError{Name: "mind_map_layout", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.mind_map_layout": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.WallpaperColorScheme(); ok {
 		if err := systemconfiguration.WallpaperColorSchemeValidator(v); err != nil {
 			return &ValidationError{Name: "wallpaper_color_scheme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.wallpaper_color_scheme": %w`, err)}
@@ -799,6 +840,9 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 	}
 	if value, ok := _u.mutation.MindMapMode(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.MindMapLayout(); ok {
+		_spec.SetField(systemconfiguration.FieldMindMapLayout, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MindMapModel(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapModel, field.TypeString, value)

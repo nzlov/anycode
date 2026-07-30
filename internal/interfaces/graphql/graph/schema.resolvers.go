@@ -41,7 +41,8 @@ func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input mode
 		AgentWritableRoots: input.AgentWritableRoots,
 		SendShortcut:       settingdomain.SendShortcut(input.SendShortcut),
 		MindMapEnabled:     input.MindMapEnabled, MindMapMode: settingdomain.MindMapMode(input.MindMapMode),
-		MindMapModel: input.MindMapModel, MindMapReasoningEffort: input.MindMapReasoningEffort,
+		MindMapLayout: settingdomain.MindMapLayout(input.MindMapLayout),
+		MindMapModel:  input.MindMapModel, MindMapReasoningEffort: input.MindMapReasoningEffort,
 		MindMapMaxConcurrent: input.MindMapMaxConcurrent,
 	})
 	if err != nil {

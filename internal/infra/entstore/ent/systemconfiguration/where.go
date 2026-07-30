@@ -84,6 +84,11 @@ func MindMapMode(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapMode, v))
 }
 
+// MindMapLayout applies equality check predicate on the "mind_map_layout" field. It's identical to MindMapLayoutEQ.
+func MindMapLayout(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapLayout, v))
+}
+
 // MindMapModel applies equality check predicate on the "mind_map_model" field. It's identical to MindMapModelEQ.
 func MindMapModel(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapModel, v))
@@ -317,6 +322,71 @@ func MindMapModeEqualFold(v string) predicate.SystemConfiguration {
 // MindMapModeContainsFold applies the ContainsFold predicate on the "mind_map_mode" field.
 func MindMapModeContainsFold(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldMindMapMode, v))
+}
+
+// MindMapLayoutEQ applies the EQ predicate on the "mind_map_layout" field.
+func MindMapLayoutEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutNEQ applies the NEQ predicate on the "mind_map_layout" field.
+func MindMapLayoutNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutIn applies the In predicate on the "mind_map_layout" field.
+func MindMapLayoutIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldMindMapLayout, vs...))
+}
+
+// MindMapLayoutNotIn applies the NotIn predicate on the "mind_map_layout" field.
+func MindMapLayoutNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldMindMapLayout, vs...))
+}
+
+// MindMapLayoutGT applies the GT predicate on the "mind_map_layout" field.
+func MindMapLayoutGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutGTE applies the GTE predicate on the "mind_map_layout" field.
+func MindMapLayoutGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutLT applies the LT predicate on the "mind_map_layout" field.
+func MindMapLayoutLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutLTE applies the LTE predicate on the "mind_map_layout" field.
+func MindMapLayoutLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutContains applies the Contains predicate on the "mind_map_layout" field.
+func MindMapLayoutContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutHasPrefix applies the HasPrefix predicate on the "mind_map_layout" field.
+func MindMapLayoutHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutHasSuffix applies the HasSuffix predicate on the "mind_map_layout" field.
+func MindMapLayoutHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutEqualFold applies the EqualFold predicate on the "mind_map_layout" field.
+func MindMapLayoutEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldMindMapLayout, v))
+}
+
+// MindMapLayoutContainsFold applies the ContainsFold predicate on the "mind_map_layout" field.
+func MindMapLayoutContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldMindMapLayout, v))
 }
 
 // MindMapModelEQ applies the EQ predicate on the "mind_map_model" field.

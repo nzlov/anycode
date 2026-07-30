@@ -23,6 +23,8 @@ const (
 	FieldMindMapEnabled = "mind_map_enabled"
 	// FieldMindMapMode holds the string denoting the mind_map_mode field in the database.
 	FieldMindMapMode = "mind_map_mode"
+	// FieldMindMapLayout holds the string denoting the mind_map_layout field in the database.
+	FieldMindMapLayout = "mind_map_layout"
 	// FieldMindMapModel holds the string denoting the mind_map_model field in the database.
 	FieldMindMapModel = "mind_map_model"
 	// FieldMindMapReasoningEffort holds the string denoting the mind_map_reasoning_effort field in the database.
@@ -57,6 +59,7 @@ var Columns = []string{
 	FieldSendShortcut,
 	FieldMindMapEnabled,
 	FieldMindMapMode,
+	FieldMindMapLayout,
 	FieldMindMapModel,
 	FieldMindMapReasoningEffort,
 	FieldMindMapMaxConcurrent,
@@ -95,6 +98,10 @@ var (
 	DefaultMindMapMode string
 	// MindMapModeValidator is a validator for the "mind_map_mode" field. It is called by the builders before save.
 	MindMapModeValidator func(string) error
+	// DefaultMindMapLayout holds the default value on creation for the "mind_map_layout" field.
+	DefaultMindMapLayout string
+	// MindMapLayoutValidator is a validator for the "mind_map_layout" field. It is called by the builders before save.
+	MindMapLayoutValidator func(string) error
 	// DefaultMindMapModel holds the default value on creation for the "mind_map_model" field.
 	DefaultMindMapModel string
 	// DefaultMindMapReasoningEffort holds the default value on creation for the "mind_map_reasoning_effort" field.
@@ -151,6 +158,11 @@ func ByMindMapEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByMindMapMode orders the results by the mind_map_mode field.
 func ByMindMapMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMindMapMode, opts...).ToFunc()
+}
+
+// ByMindMapLayout orders the results by the mind_map_layout field.
+func ByMindMapLayout(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMindMapLayout, opts...).ToFunc()
 }
 
 // ByMindMapModel orders the results by the mind_map_model field.

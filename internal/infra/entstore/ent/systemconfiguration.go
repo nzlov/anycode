@@ -28,6 +28,8 @@ type SystemConfiguration struct {
 	MindMapEnabled bool `json:"mind_map_enabled,omitempty"`
 	// MindMapMode holds the value of the "mind_map_mode" field.
 	MindMapMode string `json:"mind_map_mode,omitempty"`
+	// MindMapLayout holds the value of the "mind_map_layout" field.
+	MindMapLayout string `json:"mind_map_layout,omitempty"`
 	// MindMapModel holds the value of the "mind_map_model" field.
 	MindMapModel string `json:"mind_map_model,omitempty"`
 	// MindMapReasoningEffort holds the value of the "mind_map_reasoning_effort" field.
@@ -64,7 +66,7 @@ func (*SystemConfiguration) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldMindMapMaxConcurrent, systemconfiguration.FieldBackgroundMask:
 			values[i] = new(sql.NullInt64)
-		case systemconfiguration.FieldID, systemconfiguration.FieldSendShortcut, systemconfiguration.FieldMindMapMode, systemconfiguration.FieldMindMapModel, systemconfiguration.FieldMindMapReasoningEffort, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
+		case systemconfiguration.FieldID, systemconfiguration.FieldSendShortcut, systemconfiguration.FieldMindMapMode, systemconfiguration.FieldMindMapLayout, systemconfiguration.FieldMindMapModel, systemconfiguration.FieldMindMapReasoningEffort, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
 			values[i] = new(sql.NullString)
 		case systemconfiguration.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -120,6 +122,12 @@ func (_m *SystemConfiguration) assignValues(columns []string, values []any) erro
 				return fmt.Errorf("unexpected type %T for field mind_map_mode", values[i])
 			} else if value.Valid {
 				_m.MindMapMode = value.String
+			}
+		case systemconfiguration.FieldMindMapLayout:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field mind_map_layout", values[i])
+			} else if value.Valid {
+				_m.MindMapLayout = value.String
 			}
 		case systemconfiguration.FieldMindMapModel:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -237,6 +245,9 @@ func (_m *SystemConfiguration) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("mind_map_mode=")
 	builder.WriteString(_m.MindMapMode)
+	builder.WriteString(", ")
+	builder.WriteString("mind_map_layout=")
+	builder.WriteString(_m.MindMapLayout)
 	builder.WriteString(", ")
 	builder.WriteString("mind_map_model=")
 	builder.WriteString(_m.MindMapModel)

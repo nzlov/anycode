@@ -22,6 +22,7 @@ func (SystemConfiguration) Fields() []ent.Field {
 		field.String("send_shortcut").NotEmpty().Default("shift_enter"),
 		field.Bool("mind_map_enabled").Default(false),
 		field.String("mind_map_mode").NotEmpty().Default("realtime"),
+		field.String("mind_map_layout").NotEmpty().Default("radial"),
 		field.String("mind_map_model").Default(""),
 		field.String("mind_map_reasoning_effort").Default(""),
 		field.Int("mind_map_max_concurrent").Default(1),

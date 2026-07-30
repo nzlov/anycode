@@ -1,6 +1,54 @@
 <template>
   <q-page class="mind-map-page">
-    <PageToolbar :title="project ? `${project.name} · 思维图` : '项目思维图'">
+    <PageToolbar
+      :title="project ? `${project.name} · 思维图` : '项目思维图'"
+      compact-title-on-mobile
+    >
+      <q-input
+        v-model="searchQuery"
+        class="mind-map-toolbar-search"
+        dense
+        outlined
+        clearable
+        debounce="200"
+        :loading="searchLoading"
+        placeholder="模拟 Agent 搜索节点"
+        aria-label="搜索思维图节点"
+      >
+        <template #prepend><q-icon name="search" /></template>
+        <template v-if="hasSearch" #append>
+          <span class="mind-map-toolbar-search__count" aria-live="polite">
+            {{ searchMatchNodeIds.size }} 个
+          </span>
+        </template>
+      </q-input>
+      <q-btn
+        flat
+        round
+        dense
+        icon="account_tree"
+        :aria-label="`临时切换思维图布局，当前为${activeLayoutLabel}`"
+      >
+        <q-tooltip>布局：{{ activeLayoutLabel }}</q-tooltip>
+        <q-menu>
+          <q-list dense class="app-touch-list">
+            <q-item-label header>临时布局</q-item-label>
+            <q-item
+              v-for="option in mindMapLayoutOptions"
+              :key="option.value"
+              v-close-popup
+              clickable
+              :active="activeLayoutAlgorithm === option.value"
+              @click="selectTemporaryLayout(option.value)"
+            >
+              <q-item-section>{{ option.label }}</q-item-section>
+              <q-item-section v-if="activeLayoutAlgorithm === option.value" side>
+                <q-icon name="check" color="primary" />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-menu>
+      </q-btn>
       <q-btn
         flat
         round
@@ -15,7 +63,9 @@
       <q-btn
         color="primary"
         icon="add"
-        label="新增节点"
+        :label="$q.screen.lt.sm ? undefined : '新增节点'"
+        :round="$q.screen.lt.sm"
+        aria-label="新增节点"
         no-caps
         :disable="loading"
         @click="openNewNodeDialog"
@@ -47,7 +97,8 @@
               :label="taskStatusLabel(card.taskStatus)"
             />
             <span class="text-positive"
-              >+{{ card.nodes.filter((node) => node.changeType === 'added').length }}</span>
+              >+{{ card.nodes.filter((node) => node.changeType === 'added').length }}</span
+            >
             <span class="text-warning">~{{ card.modifiedNodeIds.length }}</span>
             <span class="text-negative">−{{ card.deletedNodeIds.length }}</span>
           </div>
@@ -78,25 +129,6 @@
     </div>
 
     <div class="mind-map-canvas">
-      <div class="mind-map-search">
-        <q-input
-          v-model="searchQuery"
-          dense
-          outlined
-          clearable
-          debounce="200"
-          :loading="searchLoading"
-          placeholder="模拟 Agent 搜索节点"
-          aria-label="搜索思维图节点"
-        >
-          <template #prepend><q-icon name="search" /></template>
-          <template v-if="hasSearch" #append>
-            <span class="mind-map-search__count" aria-live="polite">
-              {{ searchMatchNodeIds.size }} 个
-            </span>
-          </template>
-        </q-input>
-      </div>
       <VueFlow
         id="project-mind-map-flow"
         v-model:nodes="flowNodes"
@@ -325,7 +357,16 @@ import '@vue-flow/controls/dist/style.css';
 
 import PageToolbar from '@/components/PageToolbar.vue';
 import { useProjects } from '@/composables/useProjects';
-import { buildRadialLayout, radialEdgeHandles } from '@/services/mindMapFlowModel';
+import {
+  buildNestedLayout,
+  buildRadialLayout,
+  radialEdgeHandles,
+} from '@/services/mindMapFlowModel';
+import {
+  getGeneralSettings,
+  type MindMapLayout,
+  mindMapLayoutOptions,
+} from '@/services/generalSettings';
 import {
   getProjectMindMap,
   listProjectMindMapCards,
@@ -369,6 +410,7 @@ const saving = ref(false);
 const mainGraph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt: '' });
 const cards = ref<MindMapCard[]>([]);
 const activeCardSessionId = ref('');
+const activeLayoutAlgorithm = ref<MindMapLayout>('radial');
 let routeCardHighlightApplied = false;
 const searchQuery = ref('');
 const searchLoading = ref(false);
@@ -399,8 +441,15 @@ let disposed = false;
 const graph = computed<DisplayMindMapGraph>(() =>
   combineMindMaps(mainGraph.value, cards.value, activeCardSessionId.value),
 );
-const radialLayout = computed(() =>
-  buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
+const activeLayout = computed(() =>
+  activeLayoutAlgorithm.value === 'nested'
+    ? buildNestedLayout(graph.value.nodes, graph.value.edges, rootNodeId)
+    : buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
+);
+const activeLayoutLabel = computed(
+  () =>
+    mindMapLayoutOptions.find((option) => option.value === activeLayoutAlgorithm.value)?.label ??
+    '',
 );
 const hasSearch = computed(() => Boolean(searchQuery.value?.trim()));
 const directlyRelatedNodeIds = computed(() => {
@@ -512,7 +561,7 @@ const flowNodes = computed({
         changeType: node.changeType,
         cardLabel: node.cardLabel,
       },
-      position: radialLayout.value[node.id] ?? { x: 0, y: 0 },
+      position: activeLayout.value[node.id] ?? { x: 0, y: 0 },
       draggable: false,
       connectable: node.changeType !== 'deleted',
       class: {
@@ -542,7 +591,7 @@ const flowEdges = computed({
       target: edge.targetId,
       label: edge.label,
       type: 'default',
-      ...radialEdgeHandles(edge, radialLayout.value),
+      ...radialEdgeHandles(edge, activeLayout.value),
       class: {
         'mind-map-edge--active': directlyRelatedEdgeIds.value.has(edge.id),
         'mind-map-element--highlighted':
@@ -640,7 +689,7 @@ function cardDisplayId(sessionId: string, entityId: string) {
 }
 
 onMounted(async () => {
-  await loadProjects();
+  await Promise.all([loadProjects(), loadDefaultLayout()]);
   await refreshMindMap();
   startMindMapSubscription();
 });
@@ -779,6 +828,21 @@ async function applyOperations(operations: MindMapOperation[], sessionId = '') {
 
 function fitGraph() {
   requestAnimationFrame(() => void fitView({ padding: 0.2 }));
+}
+
+async function loadDefaultLayout() {
+  try {
+    activeLayoutAlgorithm.value = (await getGeneralSettings()).mindMapLayout;
+  } catch {
+    activeLayoutAlgorithm.value = 'radial';
+  }
+}
+
+function selectTemporaryLayout(layout: MindMapLayout) {
+  if (activeLayoutAlgorithm.value === layout) return;
+  activeLayoutAlgorithm.value = layout;
+  clearSelection();
+  fitGraph();
 }
 
 async function runMindMapSearch() {
@@ -1132,18 +1196,16 @@ function taskStatusColor(status: string) {
   touch-action: none;
 }
 
-.mind-map-search {
-  position: absolute;
-  z-index: 5;
-  top: 12px;
-  left: 12px;
-  width: min(360px, calc(100% - 24px));
+.mind-map-toolbar-search {
+  width: min(320px, 30vw);
+  min-width: 100px;
+  max-width: 360px;
+  flex: 1 1 320px;
   border-radius: 4px;
   background: var(--ac-surface);
-  box-shadow: var(--ac-shadow-card);
 }
 
-.mind-map-search__count {
+.mind-map-toolbar-search__count {
   color: var(--ac-text-muted);
   font-size: 12px;
   white-space: nowrap;
@@ -1345,6 +1407,11 @@ function taskStatusColor(status: string) {
 }
 
 @media (max-width: 699px) {
+  .mind-map-toolbar-search {
+    width: auto;
+    min-width: 72px;
+  }
+
   .mind-map-file-editor {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   }

@@ -11,6 +11,12 @@ export function buildRadialLayout(
   rootNodeId?: string,
 ): Record<string, MindMapFlowPosition>;
 
+export function buildNestedLayout(
+  nodes: MindMapNode[],
+  edges: MindMapEdge[],
+  rootNodeId?: string,
+): Record<string, MindMapFlowPosition>;
+
 export function radialEdgeHandles(
   edge: MindMapEdge,
   layout: Record<string, MindMapFlowPosition>,

@@ -6,12 +6,19 @@ export interface GeneralSettings {
   sendShortcut: SendShortcut;
   mindMapEnabled: boolean;
   mindMapMode: 'realtime' | 'async';
+  mindMapLayout: MindMapLayout;
   mindMapModel: string;
   mindMapReasoningEffort: string;
   mindMapMaxConcurrent: number;
 }
 
 export type SendShortcut = 'enter' | 'shift_enter';
+export type MindMapLayout = 'radial' | 'nested';
+
+export const mindMapLayoutOptions: { label: string; value: MindMapLayout }[] = [
+  { label: '同心放射', value: 'radial' },
+  { label: '关联分层', value: 'nested' },
+];
 
 export const defaultSendShortcut: SendShortcut = 'shift_enter';
 
@@ -21,6 +28,7 @@ const generalSettingsFields = `
   sendShortcut
   mindMapEnabled
   mindMapMode
+  mindMapLayout
   mindMapModel
   mindMapReasoningEffort
   mindMapMaxConcurrent

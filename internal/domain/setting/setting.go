@@ -55,6 +55,8 @@ type SolidTheme string
 
 type MindMapMode string
 
+type MindMapLayout string
+
 type SendShortcut string
 
 const (
@@ -67,17 +69,24 @@ func (shortcut SendShortcut) Valid() bool {
 }
 
 const (
-	MindMapModeRealtime MindMapMode = "realtime"
-	MindMapModeAsync    MindMapMode = "async"
+	MindMapModeRealtime MindMapMode   = "realtime"
+	MindMapModeAsync    MindMapMode   = "async"
+	MindMapLayoutRadial MindMapLayout = "radial"
+	MindMapLayoutNested MindMapLayout = "nested"
 )
 
 func (mode MindMapMode) Valid() bool {
 	return mode == MindMapModeRealtime || mode == MindMapModeAsync
 }
 
+func (layout MindMapLayout) Valid() bool {
+	return layout == MindMapLayoutRadial || layout == MindMapLayoutNested
+}
+
 type MindMapConfiguration struct {
 	Enabled         bool
 	Mode            MindMapMode
+	Layout          MindMapLayout
 	Model           string
 	ReasoningEffort string
 	MaxConcurrent   int
@@ -158,7 +167,7 @@ func DefaultSystemConfiguration() SystemConfiguration {
 		AgentMaxConcurrent: 2,
 		SendShortcut:       SendShortcutShiftEnter,
 		MindMap: MindMapConfiguration{
-			Mode: MindMapModeRealtime, MaxConcurrent: 1,
+			Mode: MindMapModeRealtime, Layout: MindMapLayoutRadial, MaxConcurrent: 1,
 		},
 		BackgroundType:       BackgroundTypeBing,
 		SolidTheme:           SolidThemeVermilion,
