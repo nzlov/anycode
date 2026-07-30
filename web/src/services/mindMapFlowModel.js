@@ -36,8 +36,14 @@ export function buildRadialLayout(nodes, edges, rootNodeId = 'project-root') {
   }
 
   layout[centerId] = { x: -nodeWidth / 2, y: -nodeHeight / 2 };
+  let previousRadius = 0;
   for (const [depth, ring] of [...rings.entries()].sort(([a], [b]) => a - b)) {
-    const radius = Math.max(depth * 240, (ring.length * 190) / (2 * Math.PI));
+    const radius = Math.max(
+      depth * 240,
+      previousRadius + 240,
+      (ring.length * 190) / (2 * Math.PI),
+    );
+    previousRadius = radius;
     ring.forEach((id, index) => {
       const angle = -Math.PI / 2 + (2 * Math.PI * index) / ring.length;
       layout[id] = {

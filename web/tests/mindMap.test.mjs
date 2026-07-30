@@ -269,6 +269,28 @@ test('radial layout centers the root, groups connected depths into rings, and cu
   );
 });
 
+test('radial layout keeps dense adjacent rings from overlapping', () => {
+  const innerNodes = Array.from({ length: 12 }, (_, index) => ({ id: `inner-${index}` }));
+  const outerNodes = Array.from({ length: 12 }, (_, index) => ({ id: `outer-${index}` }));
+  const nodes = [{ id: 'project-root' }, ...innerNodes, ...outerNodes];
+  const edges = innerNodes.flatMap((node, index) => [
+    { id: `root-${index}`, sourceId: 'project-root', targetId: node.id },
+    { id: `branch-${index}`, sourceId: node.id, targetId: outerNodes[index].id },
+  ]);
+
+  const layout = buildRadialLayout(nodes, edges);
+  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+      const left = nodes[leftIndex];
+      const right = nodes[rightIndex];
+      const overlaps =
+        Math.abs(layout[left.id].x - layout[right.id].x) < 172 &&
+        Math.abs(layout[left.id].y - layout[right.id].y) < 48;
+      assert.equal(overlaps, false, `${left.id} overlaps ${right.id}`);
+    }
+  }
+});
+
 test('realtime cards have merge-close while async cards use ordinary close', () => {
   const index = readSource('../src/pages/IndexPage.vue');
   const menu = readSource('../src/components/SessionCardContextMenu.vue');
