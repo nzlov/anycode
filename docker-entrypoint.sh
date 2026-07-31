@@ -13,6 +13,10 @@ update_packages() {
     esac
   done
 
+  if [ -n "${PACMAN_MIRROR:-}" ]; then
+    printf 'Server = %s\n' "$PACMAN_MIRROR" | tee /etc/pacman.d/mirrorlist >/dev/null
+  fi
+
   pacman -Syu --noconfirm
   [ "$#" -eq 0 ] || pacman -S --noconfirm --needed -- "$@"
   pacman -Scc --noconfirm

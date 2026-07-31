@@ -176,6 +176,7 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ANYCODE_ACCESS_KEY` | No usable default | Access key for web data, GraphQL, WebSocket, MCP, and session files. Compose requires an explicit value. |
+| `PACMAN_MIRROR` | Empty | Single Arch Linux mirror URL template written to the pacman mirrorlist before packages are updated on container startup. |
 | `ANYCODE_EXTRA_PACKAGES` | Empty | Whitespace-separated Arch Linux official repository package names installed as root when the container starts. |
 | `ANYCODE_INIT_SCRIPT` | Empty | Shell script run as root on every container startup, after extra packages are installed and before AnyCode drops privileges. |
 | `ANYCODE_HTTP_PORT` | `8080` | Published host port and service listening port. |

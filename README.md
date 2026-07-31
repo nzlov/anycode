@@ -176,6 +176,7 @@ curl --fail http://127.0.0.1:8080/healthz
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `ANYCODE_ACCESS_KEY` | 无可用默认值 | 访问 Web 数据、GraphQL、WebSocket 和会话文件的密钥；Compose 要求显式设置。 |
+| `PACMAN_MIRROR` | 空 | 容器启动时更新软件包前写入 pacman mirrorlist 的单个 Arch Linux 镜像地址模板。 |
 | `ANYCODE_EXTRA_PACKAGES` | 空 | 容器启动时以 root 权限安装的、由空白分隔的 Arch Linux 官方仓库包名。 |
 | `ANYCODE_INIT_SCRIPT` | 空 | 容器每次启动时以 root 权限执行的 shell 脚本；在安装额外软件包后、AnyCode 降权启动前运行。 |
 | `ANYCODE_HTTP_PORT` | `8080` | 宿主机发布端口和容器监听端口。 |
