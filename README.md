@@ -177,6 +177,7 @@ curl --fail http://127.0.0.1:8080/healthz
 | --- | --- | --- |
 | `ANYCODE_ACCESS_KEY` | 无可用默认值 | 访问 Web 数据、GraphQL、WebSocket 和会话文件的密钥；Compose 要求显式设置。 |
 | `ANYCODE_EXTRA_PACKAGES` | 空 | 容器启动时以 root 权限安装的、由空白分隔的 Arch Linux 官方仓库包名。 |
+| `ANYCODE_INIT_SCRIPT` | 空 | 容器每次启动时以 root 权限执行的 shell 脚本；在安装额外软件包后、AnyCode 降权启动前运行。 |
 | `ANYCODE_HTTP_PORT` | `8080` | 宿主机发布端口和容器监听端口。 |
 | `ANYCODE_HOST_DATA_DIR` | `./data` | 挂载到容器 `/home/anycode` 的宿主机目录，用于持久化 AnyCode 数据和 Codex 凭据。 |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | 容器内数据库、附件、产物以及 AnyCode 创建的 worktree 目录。通常无需修改。 |
@@ -193,6 +194,7 @@ Turso 缓存变量可在 [`.env.example`](.env.example) 中查看；产物大小
 
 - `ANYCODE_ACCESS_KEY` 是高权限访问凭据。持有者可以读取服务进程有权访问的目录，并可通过项目 worktree 初始化命令执行 shell。请使用随机密钥并只交给受信用户。
 - `ANYCODE_EXTRA_PACKAGES` 在入口脚本降权前通过 `pacman` 安装，只接受包名而不执行任意命令。仅配置受信的官方仓库包；缺少包时会更新系统并增加启动耗时，容器重建后会重新安装。
+- `ANYCODE_INIT_SCRIPT` 会在每次容器启动时由 `/bin/sh` 以 root 权限执行，失败会阻止 AnyCode 启动。它可以修改容器和已挂载目录；只配置可信脚本，并确保脚本可重复执行。安装官方仓库软件包时优先使用约束更窄的 `ANYCODE_EXTRA_PACKAGES`。
 - 登录后，访问密钥会保存在浏览器 `localStorage` 中。只使用受信浏览器；使用共享设备后应在界面中退出登录，并在必要时清除该站点数据。
 - 访问密钥只提供应用鉴权，不提供传输加密。Compose 的端口映射通常会监听宿主机所有网络接口；不要把服务直接暴露到不受信网络。远程访问时应自行配置防火墙和带 TLS 的可信反向代理或私有网络。
 - 只把需要 AnyCode 访问的项目放入 `ANYCODE_WORKSPACES_DIR`。该挂载默认可读写，项目内命令和 Codex 进程拥有容器用户权限范围内的文件访问能力。

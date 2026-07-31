@@ -177,6 +177,7 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | --- | --- | --- |
 | `ANYCODE_ACCESS_KEY` | No usable default | Access key for web data, GraphQL, WebSocket, MCP, and session files. Compose requires an explicit value. |
 | `ANYCODE_EXTRA_PACKAGES` | Empty | Whitespace-separated Arch Linux official repository package names installed as root when the container starts. |
+| `ANYCODE_INIT_SCRIPT` | Empty | Shell script run as root on every container startup, after extra packages are installed and before AnyCode drops privileges. |
 | `ANYCODE_HTTP_PORT` | `8080` | Published host port and service listening port. |
 | `ANYCODE_HOST_DATA_DIR` | `./data` | Host directory mounted at `/home/anycode` in the container to persist AnyCode data and Codex credentials. |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | Container directory for the database, attachments, artifacts, and worktrees created by AnyCode. This usually does not need to be changed. |
@@ -193,6 +194,7 @@ See [`.env.example`](.env.example) for Turso caching variables. See [`compose.ym
 
 - `ANYCODE_ACCESS_KEY` is a high-privilege credential. Anyone who has it can read directories available to the service process and execute shell commands through project worktree initialization commands. Use a random key and share it only with trusted users.
 - `ANYCODE_EXTRA_PACKAGES` is installed with `pacman` before the entrypoint drops privileges; it accepts package names and does not execute arbitrary commands. Only configure trusted official repository packages. Missing packages trigger a system update, increase startup time, and are installed again after the container is recreated.
+- `ANYCODE_INIT_SCRIPT` is executed by `/bin/sh` as root on every container startup, and a failure prevents AnyCode from starting. It can modify the container and mounted directories, so configure only trusted, repeatable commands. Prefer the narrower `ANYCODE_EXTRA_PACKAGES` setting when installing official repository packages.
 - After login, the access key is stored in the browser's `localStorage`. Use only trusted browsers. Sign out after using a shared device and clear the site's data when necessary.
 - The access key provides application authentication, not transport encryption. Compose port mappings generally listen on all host network interfaces. Do not expose the service directly to untrusted networks. For remote access, configure a firewall and a trusted TLS reverse proxy or private network.
 - Only place projects that AnyCode needs to access in `ANYCODE_WORKSPACES_DIR`. This mount is read-write by default, and project commands and Codex processes can access files within the container user's permission scope.

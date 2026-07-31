@@ -9,7 +9,7 @@ import (
 )
 
 func TestDockerEntrypointInstallsExtraPackagesBeforeDroppingPrivileges(t *testing.T) {
-	log, output, err := runDockerEntrypoint(t, "jq python")
+	log, output, err := runDockerEntrypoint(t, "0", "jq python", "")
 	if err != nil {
 		t.Fatalf("entrypoint failed: %v\n%s", err, output)
 	}
@@ -25,7 +25,7 @@ func TestDockerEntrypointInstallsExtraPackagesBeforeDroppingPrivileges(t *testin
 }
 
 func TestDockerEntrypointRejectsInvalidExtraPackageName(t *testing.T) {
-	log, output, err := runDockerEntrypoint(t, "jq;touch")
+	log, output, err := runDockerEntrypoint(t, "0", "jq;touch", "")
 	if err == nil {
 		t.Fatalf("entrypoint accepted invalid package name; log = %q", log)
 	}
@@ -37,11 +37,54 @@ func TestDockerEntrypointRejectsInvalidExtraPackageName(t *testing.T) {
 	}
 }
 
-func runDockerEntrypoint(t *testing.T, packages string) (string, string, error) {
+func TestDockerEntrypointRunsInitScriptAsRootBeforeDroppingPrivileges(t *testing.T) {
+	initScript := `printf 'init uid=%s\n' "$(id -u)" >> "$ENTRYPOINT_TEST_LOG"`
+	log, output, err := runDockerEntrypoint(t, "0", "jq", initScript)
+	if err != nil {
+		t.Fatalf("entrypoint failed: %v\n%s", err, output)
+	}
+
+	install := "pacman -Syu --noconfirm --needed -- jq"
+	init := "init uid=0"
+	dropPrivileges := "setpriv --reuid=1234 --regid=1235 --init-groups -- anycode"
+	for _, entry := range []string{install, init, dropPrivileges} {
+		if !strings.Contains(log, entry) {
+			t.Fatalf("entrypoint log = %q, want %q", log, entry)
+		}
+	}
+	if strings.Index(log, install) > strings.Index(log, init) || strings.Index(log, init) > strings.Index(log, dropPrivileges) {
+		t.Fatalf("unexpected initialization order: %q", log)
+	}
+}
+
+func TestDockerEntrypointStopsWhenInitScriptFails(t *testing.T) {
+	log, _, err := runDockerEntrypoint(t, "0", "", "printf 'init failed\\n' >&2; exit 23")
+	if err == nil {
+		t.Fatalf("entrypoint ignored init script failure; log = %q", log)
+	}
+	if strings.Contains(log, "setpriv") {
+		t.Fatalf("entrypoint dropped privileges after init script failure: %q", log)
+	}
+}
+
+func TestDockerEntrypointRejectsInitScriptWithoutRoot(t *testing.T) {
+	log, output, err := runDockerEntrypoint(t, "1000", "", "printf 'unexpected\\n' >> \"$ENTRYPOINT_TEST_LOG\"")
+	if err == nil {
+		t.Fatalf("entrypoint accepted init script without root; log = %q", log)
+	}
+	if !strings.Contains(output, "ANYCODE_INIT_SCRIPT requires the container to start as root") {
+		t.Fatalf("entrypoint output = %q", output)
+	}
+	if strings.Contains(log, "unexpected") {
+		t.Fatalf("entrypoint ran init script without root: %q", log)
+	}
+}
+
+func runDockerEntrypoint(t *testing.T, uid string, packages string, initScript string) (string, string, error) {
 	t.Helper()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "commands.log")
-	writeEntrypointStub(t, dir, "id", "printf '0\\n'")
+	writeEntrypointStub(t, dir, "id", "printf '%s\\n' \"$ENTRYPOINT_TEST_UID\"")
 	writeEntrypointStub(t, dir, "install", "printf 'install %s\\n' \"$*\" >> \"$ENTRYPOINT_TEST_LOG\"")
 	writeEntrypointStub(t, dir, "chown", "printf 'chown %s\\n' \"$*\" >> \"$ENTRYPOINT_TEST_LOG\"")
 	writeEntrypointStub(t, dir, "setpriv", "printf 'setpriv %s\\n' \"$*\" >> \"$ENTRYPOINT_TEST_LOG\"")
@@ -55,7 +98,9 @@ fi`)
 	command.Env = []string{
 		"PATH=" + dir,
 		"ENTRYPOINT_TEST_LOG=" + logPath,
+		"ENTRYPOINT_TEST_UID=" + uid,
 		"ANYCODE_EXTRA_PACKAGES=" + packages,
+		"ANYCODE_INIT_SCRIPT=" + initScript,
 		"ANYCODE_UID=1234",
 		"ANYCODE_GID=1235",
 	}
