@@ -30,12 +30,14 @@ test('global settings expose realtime and async mind map configuration', () => {
   assert.match(dialog, /v-model="general\.mindMapMode"/);
   assert.match(dialog, /v-model="general\.mindMapLayout"/);
   assert.equal(dialog.match(/<q-item-label>项目思维图<\/q-item-label>/g)?.length, 1);
-  assert.match(dialog, /label: '实时', value: 'realtime'/);
-  assert.match(dialog, /label: '异步', value: 'async'/);
   assert.match(
     dialog,
-    /v-if="general\.mindMapEnabled && general\.mindMapMode === 'async'"[\s\S]*<CodexModelSelector/,
+    /<\/q-list>\s*<q-card flat bordered class="general-settings-group">[\s\S]*?<q-item-label>项目思维图<\/q-item-label>/,
   );
+  assert.match(dialog, /class="general-settings-group general-thinking-settings"/);
+  assert.match(dialog, /label: '实时', value: 'realtime'/);
+  assert.match(dialog, /label: '异步', value: 'async'/);
+  assert.match(dialog, /v-if="general\.mindMapMode === 'async'"[\s\S]*<CodexModelSelector/);
   assert.match(dialog, /label="全局并发任务数"/);
 });
 

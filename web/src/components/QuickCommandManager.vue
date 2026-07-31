@@ -1,6 +1,6 @@
 <template>
   <div class="quick-command-manager">
-    <div class="global-settings-panel__header">
+    <div v-if="!hideHeader" class="global-settings-panel__header">
       <div class="text-subtitle2 text-weight-bold">快捷指令</div>
     </div>
 
@@ -143,6 +143,7 @@ import { useQuickCommands } from '@/composables/useQuickCommands';
 
 const props = defineProps<{
   projectId?: string;
+  hideHeader?: boolean;
 }>();
 
 const {

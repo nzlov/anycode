@@ -25,7 +25,7 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /v-model="general\.sendShortcut"/);
   assert.match(settingsSource, /\{ label: 'Enter', value: 'enter' \}/);
   assert.match(settingsSource, /\{ label: 'Shift\+Enter', value: 'shift_enter' \}/);
-  assert.match(settingsSource, /class="general-thinking-settings"/);
+  assert.match(settingsSource, /class="general-settings-group general-thinking-settings"/);
   assert.match(settingsSource, /<q-toggle\s+v-model="thinkingPhrasesEnabled"/);
   assert.match(
     settingsSource,
@@ -35,6 +35,15 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /v-model="thinkingPhraseStyle"/);
   assert.match(settingsSource, /:options="sessionThinkingPhraseStyleOptions"/);
   assert.doesNotMatch(configSource, /ANYCODE_AGENT_MAX_CONCURRENT/);
+});
+
+test('global setting panels rely on navigation labels instead of repeated headings', () => {
+  const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+  const quickCommandsSource = readSource('../src/components/QuickCommandManager.vue');
+
+  assert.doesNotMatch(settingsSource, /class="global-settings-panel__header"/);
+  assert.match(settingsSource, /<QuickCommandManager v-if="modelValue" hide-header \/>/);
+  assert.match(quickCommandsSource, /v-if="!hideHeader" class="global-settings-panel__header"/);
 });
 
 test('general settings save valid changes after a debounce without a separating save button', () => {

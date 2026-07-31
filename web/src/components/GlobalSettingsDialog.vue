@@ -73,10 +73,6 @@
         </nav>
 
         <section v-if="activeSection === 'general'" class="global-settings-panel">
-          <div class="global-settings-panel__header">
-            <div class="text-subtitle2 text-weight-bold">常规</div>
-          </div>
-
           <q-banner v-if="generalError" dense class="quick-command-error">
             <template #avatar>
               <q-icon name="error_outline" color="negative" />
@@ -165,6 +161,9 @@
                   />
                 </q-item-section>
               </q-item>
+            </q-list>
+
+            <q-card flat bordered class="general-settings-group">
               <q-item>
                 <q-item-section avatar>
                   <q-icon name="hub" color="primary" />
@@ -182,78 +181,84 @@
                   />
                 </q-item-section>
               </q-item>
-              <q-item v-if="general.mindMapEnabled">
-                <q-item-section>
-                  <q-item-label>默认布局</q-item-label>
-                  <q-item-label caption>进入思维图时使用，浏览时可临时切换</q-item-label>
-                </q-item-section>
-                <q-item-section side class="appearance-settings-list__control">
-                  <q-select
-                    v-model="general.mindMapLayout"
-                    outlined
-                    dense
-                    emit-value
-                    map-options
-                    options-dense
-                    :options="mindMapLayoutOptions"
-                    aria-label="思维图默认布局"
-                    :disable="generalLoading || generalSaving"
-                  />
-                </q-item-section>
-              </q-item>
-              <q-item v-if="general.mindMapEnabled">
-                <q-item-section>
-                  <q-item-label>维护模式</q-item-label>
-                  <q-item-label caption
-                    >实时由卡片 Agent 维护；异步在会话关闭后排队整理</q-item-label
-                  >
-                </q-item-section>
-                <q-item-section side class="appearance-settings-list__control">
-                  <q-select
-                    v-model="general.mindMapMode"
-                    outlined
-                    dense
-                    emit-value
-                    map-options
-                    options-dense
-                    :options="mindMapModeOptions"
-                    aria-label="思维图维护模式"
-                    :disable="generalLoading || generalSaving"
-                  />
-                </q-item-section>
-              </q-item>
-              <q-item
-                v-if="general.mindMapEnabled && general.mindMapMode === 'async'"
-                class="column items-stretch"
-              >
-                <q-item-section>
-                  <q-item-label>异步整理 Agent</q-item-label>
-                  <q-item-label caption>所有项目共用此模型、思考强度与任务并发池</q-item-label>
-                </q-item-section>
-                <q-item-section class="q-mt-sm mind-map-agent-settings">
-                  <CodexModelSelector
-                    v-model:model="general.mindMapModel"
-                    v-model:effort="general.mindMapReasoningEffort"
-                    :disabled="generalLoading || generalSaving"
-                  />
-                  <q-input
-                    v-model.number="general.mindMapMaxConcurrent"
-                    outlined
-                    dense
-                    type="number"
-                    min="1"
-                    step="1"
-                    label="全局并发任务数"
-                    hide-bottom-space
-                    aria-label="思维图全局并发任务数"
-                    :disable="generalLoading || generalSaving"
-                    :error="!mindMapMaxConcurrentValid"
-                  />
-                </q-item-section>
-              </q-item>
-            </q-list>
+              <q-slide-transition>
+                <div v-if="general.mindMapEnabled">
+                  <q-separator />
+                  <q-list separator class="appearance-settings-list">
+                    <q-item>
+                      <q-item-section>
+                        <q-item-label>默认布局</q-item-label>
+                        <q-item-label caption>进入思维图时使用，浏览时可临时切换</q-item-label>
+                      </q-item-section>
+                      <q-item-section side class="appearance-settings-list__control">
+                        <q-select
+                          v-model="general.mindMapLayout"
+                          outlined
+                          dense
+                          emit-value
+                          map-options
+                          options-dense
+                          :options="mindMapLayoutOptions"
+                          aria-label="思维图默认布局"
+                          :disable="generalLoading || generalSaving"
+                        />
+                      </q-item-section>
+                    </q-item>
+                    <q-item>
+                      <q-item-section>
+                        <q-item-label>维护模式</q-item-label>
+                        <q-item-label caption
+                          >实时由卡片 Agent 维护；异步在会话关闭后排队整理</q-item-label
+                        >
+                      </q-item-section>
+                      <q-item-section side class="appearance-settings-list__control">
+                        <q-select
+                          v-model="general.mindMapMode"
+                          outlined
+                          dense
+                          emit-value
+                          map-options
+                          options-dense
+                          :options="mindMapModeOptions"
+                          aria-label="思维图维护模式"
+                          :disable="generalLoading || generalSaving"
+                        />
+                      </q-item-section>
+                    </q-item>
+                    <q-item v-if="general.mindMapMode === 'async'" class="column items-stretch">
+                      <q-item-section>
+                        <q-item-label>异步整理 Agent</q-item-label>
+                        <q-item-label caption
+                          >所有项目共用此模型、思考强度与任务并发池</q-item-label
+                        >
+                      </q-item-section>
+                      <q-item-section class="q-mt-sm mind-map-agent-settings">
+                        <CodexModelSelector
+                          v-model:model="general.mindMapModel"
+                          v-model:effort="general.mindMapReasoningEffort"
+                          :disabled="generalLoading || generalSaving"
+                        />
+                        <q-input
+                          v-model.number="general.mindMapMaxConcurrent"
+                          outlined
+                          dense
+                          type="number"
+                          min="1"
+                          step="1"
+                          label="全局并发任务数"
+                          hide-bottom-space
+                          aria-label="思维图全局并发任务数"
+                          :disable="generalLoading || generalSaving"
+                          :error="!mindMapMaxConcurrentValid"
+                        />
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+              </q-slide-transition>
+            </q-card>
 
-            <q-card flat bordered class="general-thinking-settings">
+            <q-card flat bordered class="general-settings-group general-thinking-settings">
               <q-item>
                 <q-item-section avatar>
                   <q-icon name="psychology" color="primary" />
@@ -296,10 +301,6 @@
         </section>
 
         <section v-else-if="activeSection === 'appearance'" class="global-settings-panel">
-          <div class="global-settings-panel__header">
-            <div class="text-subtitle2 text-weight-bold">外观</div>
-          </div>
-
           <q-banner v-if="appearanceError" dense class="quick-command-error">
             <template #avatar>
               <q-icon name="error_outline" color="negative" />
@@ -459,10 +460,6 @@
         </section>
 
         <section v-else-if="activeSection === 'notifications'" class="global-settings-panel">
-          <div class="global-settings-panel__header">
-            <div class="text-subtitle2 text-weight-bold">通知</div>
-          </div>
-
           <q-banner v-if="notificationError" dense class="quick-command-error">
             <template #avatar>
               <q-icon name="error_outline" color="negative" />
@@ -548,7 +545,7 @@
         </section>
 
         <section v-else class="global-settings-panel global-settings-panel--quick-commands">
-          <QuickCommandManager v-if="modelValue" />
+          <QuickCommandManager v-if="modelValue" hide-header />
         </section>
       </div>
     </q-card>
