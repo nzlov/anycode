@@ -44,8 +44,8 @@ ENV PATH=/usr/local/nvm/current/bin:$PATH
 WORKDIR /app
 COPY --from=build /out/anycode /usr/local/bin/anycode
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less \
-  go chromium cloudflared ttf-dejavu wqy-microhei catatonit ffmpeg \
+RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wget ripgrep p7zip openssh less \
+  go cloudflared ttf-dejavu catatonit \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
@@ -53,7 +53,7 @@ RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wge
   && if [ -n "$NPM_MIRROR" ]; then \
   npm config set registry "$NPM_MIRROR" ;\
   fi \
-  && npm install -g @openai/codex@latest @playwright/mcp@0.0.78 \
+  && npm install -g @openai/codex@latest \
   && npm cache clean --force \
   && groupadd --gid "$ANYCODE_GID" anycode \
   && useradd --uid "$ANYCODE_UID" --gid anycode --create-home --home-dir /home/anycode --shell /bin/bash anycode \
@@ -61,8 +61,6 @@ RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wge
   && git config --system --add safe.directory '/workspaces/*' \
   && chown anycode:anycode /usr/local/bin/anycode && chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV HOME=/home/anycode
-ENV PLAYWRIGHT_MCP_BIN=playwright-mcp
-ENV CHROMIUM_BIN=/usr/bin/chromium
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD addr="${ANYCODE_HTTP_ADDR:-:8080}"; wget -qO- "http://127.0.0.1${addr}/healthz" >/dev/null || exit 1
 ENTRYPOINT ["/usr/bin/catatonit", "--", "/usr/local/bin/docker-entrypoint.sh"]
