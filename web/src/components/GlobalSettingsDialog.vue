@@ -547,7 +547,7 @@
           </q-list>
         </section>
 
-        <section v-else class="global-settings-panel">
+        <section v-else class="global-settings-panel global-settings-panel--quick-commands">
           <QuickCommandManager v-if="modelValue" />
         </section>
       </div>

@@ -137,6 +137,17 @@ test('quick command actions stay outside the scrolling list', () => {
   );
 });
 
+test('global quick commands use square list corners and right-aligned add action at every size', () => {
+  assert.match(
+    globalSettingsSource,
+    /class="global-settings-panel global-settings-panel--quick-commands"/,
+  );
+  assert.match(
+    stylesSource,
+    /\.global-settings-panel--quick-commands,[\s\S]*?\.global-settings-panel--quick-commands \.quick-command-list\s*{[^}]*border-radius:\s*0[\s\S]*?\.global-settings-panel--quick-commands \.global-settings-add-fab\s*{[^}]*align-self:\s*flex-end/s,
+  );
+});
+
 test('quick command actions stay aligned and reachable on mobile', () => {
   assert.match(quickCommandManagerSource, /class="quick-command-item__actions"/);
   assert.doesNotMatch(quickCommandManagerSource, /class="row no-wrap q-gutter-xs"/);

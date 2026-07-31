@@ -58,7 +58,10 @@ test('global settings load quick commands only while the quick command section i
   const managerSource = readSource('../src/components/QuickCommandManager.vue');
 
   assert.match(settingsSource, /<QuickCommandManager v-if="modelValue"/);
-  assert.match(settingsSource, /<section v-else class="global-settings-panel">/);
+  assert.match(
+    settingsSource,
+    /<section v-else class="global-settings-panel global-settings-panel--quick-commands">/,
+  );
   assert.match(managerSource, /onMounted\(refreshQuickCommands\)/);
 });
 

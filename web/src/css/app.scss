@@ -2398,6 +2398,15 @@ body.desktop
   }
 }
 
+.global-settings-panel--quick-commands,
+.global-settings-panel--quick-commands .quick-command-list {
+  border-radius: 0;
+}
+
+.global-settings-panel--quick-commands .global-settings-add-fab {
+  align-self: flex-end;
+}
+
 @media (max-width: 599.98px) {
   .app-toolbar--overview {
     gap: 0;
