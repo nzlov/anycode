@@ -101,6 +101,26 @@ test('session text messages fold runtime context without parsing developer instr
   assert.doesNotMatch(pageSource, /workflow-prompt/);
 });
 
+test('markdown messages expose a hover action that toggles their raw source', () => {
+  const componentSource = readFileSync(
+    new URL('../src/components/SessionTextMessage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(componentSource, /v-if="canToggleRaw && !showRaw"/);
+  assert.match(
+    componentSource,
+    /<pre v-else-if="canToggleRaw"[^>]*>\{\{ content\.text \}\}<\/pre>/,
+  );
+  assert.match(componentSource, /:aria-pressed="showRaw"/);
+  assert.match(componentSource, /@click="showRaw = !showRaw"/);
+  assert.match(
+    componentSource,
+    /\.text-message:hover \.text-message__raw-toggle,[\s\S]*\.text-message:focus-within \.text-message__raw-toggle/,
+  );
+  assert.match(componentSource, /@media \(hover: none\), \(pointer: coarse\)/);
+});
+
 test('session detail loads the first transcript page before starting subscriptions', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),

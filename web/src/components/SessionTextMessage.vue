@@ -12,10 +12,8 @@
         <span>展开大型消息（{{ formatBytes(event.deferred.byteLength) }}）</span>
       </button>
       <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
-      <MarkdownContent
-        v-if="presentation.text && content.format === 'markdown'"
-        :text="presentation.text"
-      />
+      <MarkdownContent v-if="canToggleRaw && !showRaw" :text="presentation.text" />
+      <pre v-else-if="canToggleRaw" class="text-message__raw">{{ content.text }}</pre>
       <div v-else-if="presentation.text" class="text-message__plain">
         {{ presentation.text }}
       </div>
@@ -38,7 +36,23 @@
         :label="content.role === 'user' ? '用户输入图片' : '模型输出图片'"
       />
     </div>
-    <time>{{ timelineTime(event.occurredAt) }}</time>
+    <div class="text-message__meta">
+      <q-btn
+        v-if="canToggleRaw"
+        flat
+        round
+        dense
+        size="sm"
+        class="text-message__raw-toggle"
+        :icon="showRaw ? 'preview' : 'code'"
+        :aria-label="showRaw ? '显示渲染结果' : '显示原始数据'"
+        :aria-pressed="showRaw"
+        @click="showRaw = !showRaw"
+      >
+        <q-tooltip>{{ showRaw ? '显示渲染结果' : '显示原始数据' }}</q-tooltip>
+      </q-btn>
+      <time>{{ timelineTime(event.occurredAt) }}</time>
+    </div>
   </article>
 </template>
 
@@ -65,7 +79,11 @@ const content = computed(() => resolvedEvent.value.content as TranscriptMessageC
 const presentation = computed(() =>
   sessionTextPresentation(content.value.role, content.value.text, props.knownUserPrompts),
 );
+const canToggleRaw = computed(
+  () => Boolean(presentation.value.text) && content.value.format === 'markdown',
+);
 const expanded = ref(false);
+const showRaw = ref(false);
 
 function formatBytes(value: number) {
   return value >= 1024 * 1024
@@ -99,6 +117,41 @@ function formatBytes(value: number) {
   line-height: 1.72;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.text-message__raw {
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface-muted);
+  color: var(--ac-text);
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.text-message__meta {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  gap: 2px;
+}
+
+.text-message__raw-toggle {
+  opacity: 0;
+  color: var(--ac-text-muted);
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.text-message:hover .text-message__raw-toggle,
+.text-message:focus-within .text-message__raw-toggle {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .text-message__fold-toggle {
@@ -143,5 +196,12 @@ function formatBytes(value: number) {
 .text-message time {
   color: var(--ac-text-muted);
   font-size: 12px;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .text-message__raw-toggle {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 </style>
