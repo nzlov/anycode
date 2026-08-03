@@ -1,6 +1,7 @@
 services:
   anycode:
     image: ghcr.io/nzlov/anycode:latest
+    restart: unless-stopped
     environment:
       ANYCODE_ACCESS_KEY: ${ANYCODE_ACCESS_KEY:?set ANYCODE_ACCESS_KEY}
       PACMAN_MIRROR: ${PACMAN_MIRROR:-}
@@ -35,6 +36,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     profiles:
       - postgres
     environment:
