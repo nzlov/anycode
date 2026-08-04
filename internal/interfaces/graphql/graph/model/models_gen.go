@@ -255,6 +255,7 @@ type MindMapCard struct {
 	Edges           []*MindMapEdge `json:"edges"`
 	ModifiedNodeIds []string       `json:"modifiedNodeIds"`
 	DeletedNodeIds  []string       `json:"deletedNodeIds"`
+	DeletedEdgeIds  []string       `json:"deletedEdgeIds"`
 }
 
 type MindMapEdge struct {

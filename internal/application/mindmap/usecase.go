@@ -163,6 +163,7 @@ type CardDTO struct {
 	Edges           []EdgeDTO
 	ModifiedNodeIDs []domain.NodeID
 	DeletedNodeIDs  []domain.NodeID
+	DeletedEdgeIDs  []domain.EdgeID
 }
 
 type ChangeDTO struct {
@@ -463,12 +464,12 @@ func (s *Service) ListCards(ctx context.Context, projectID domain.ProjectID) ([]
 			}
 		}
 		task := taskBySession[overlay.SessionID]
-		nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, domain.Materialize(graph, overlay.Changes))
+		nodes, edges, modifiedNodeIDs, deletedNodeIDs, deletedEdgeIDs := cardDeltaDTO(base, domain.Materialize(graph, overlay.Changes))
 		items = append(items, CardDTO{
 			SessionID: overlay.SessionID, Requirement: session.Requirement, UpdatedAt: overlay.UpdatedAt,
 			HasChanges: len(overlay.Changes) > 0,
 			TaskID:     task.ID, TaskStatus: task.Status, TaskError: task.Error,
-			Nodes: nodes, Edges: edges, ModifiedNodeIDs: modifiedNodeIDs, DeletedNodeIDs: deletedNodeIDs,
+			Nodes: nodes, Edges: edges, ModifiedNodeIDs: modifiedNodeIDs, DeletedNodeIDs: deletedNodeIDs, DeletedEdgeIDs: deletedEdgeIDs,
 		})
 		seen[overlay.SessionID] = struct{}{}
 	}
@@ -1500,7 +1501,7 @@ func toDiffDTO(base, current domain.Graph, sessionID domain.SessionID) GraphDTO 
 	return dto
 }
 
-func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.NodeID, []domain.NodeID) {
+func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.NodeID, []domain.NodeID, []domain.EdgeID) {
 	baseNodes := make(map[domain.NodeID]domain.Node, len(base.Nodes))
 	currentNodes := make(map[domain.NodeID]domain.Node, len(current.Nodes))
 	for _, node := range base.Nodes {
@@ -1527,7 +1528,9 @@ func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.No
 		}
 	}
 	edges := make([]EdgeDTO, 0)
+	currentEdgeIDs := make(map[domain.EdgeID]struct{}, len(current.Edges))
 	for _, edge := range current.Edges {
+		currentEdgeIDs[edge.ID] = struct{}{}
 		_, sourceAdded := addedNodeIDs[edge.SourceID]
 		_, targetAdded := addedNodeIDs[edge.TargetID]
 		if !sourceAdded && !targetAdded {
@@ -1535,7 +1538,13 @@ func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.No
 		}
 		edges = append(edges, EdgeDTO{ID: edge.ID, SourceID: edge.SourceID, TargetID: edge.TargetID, Label: edge.Label})
 	}
-	return nodes, edges, modifiedNodeIDs, deletedNodeIDs
+	deletedEdgeIDs := make([]domain.EdgeID, 0)
+	for _, edge := range base.Edges {
+		if _, found := currentEdgeIDs[edge.ID]; !found {
+			deletedEdgeIDs = append(deletedEdgeIDs, edge.ID)
+		}
+	}
+	return nodes, edges, modifiedNodeIDs, deletedNodeIDs, deletedEdgeIDs
 }
 
 func generateID() (domain.ChangeID, error) {

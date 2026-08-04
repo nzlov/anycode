@@ -906,6 +906,7 @@ type MindMapCard {
   edges: [MindMapEdge!]!
   modifiedNodeIds: [ID!]!
   deletedNodeIds: [ID!]!
+  deletedEdgeIds: [ID!]!
 }
 
 input SearchMindMapInput {

@@ -614,6 +614,7 @@ function combineMindMaps(
   const modifiedNodeIds = new Set(cardGraphs.flatMap((card) => card.modifiedNodeIds));
   const deletedNodeIds = new Set(cardGraphs.flatMap((card) => card.deletedNodeIds));
   const activeCard = cardGraphs.find((card) => card.sessionId === activeCardSessionId);
+  const activeDeletedEdgeIds = new Set(activeCard?.deletedEdgeIds ?? []);
   const activeCardLabel = activeCard?.requirement || activeCard?.sessionId || '';
   const activeNodeUpdates = new Map(
     activeCard?.nodes
@@ -634,11 +635,13 @@ function combineMindMaps(
       cardLabel: activeNode ? activeCardLabel : '',
     };
   });
-  const edges: DisplayMindMapEdge[] = base.edges.map((edge) => ({
-    ...edge,
-    entityId: edge.id,
-    sessionId: '',
-  }));
+  const edges: DisplayMindMapEdge[] = base.edges
+    .filter((edge) => !activeDeletedEdgeIds.has(edge.id))
+    .map((edge) => ({
+      ...edge,
+      entityId: edge.id,
+      sessionId: '',
+    }));
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   for (const card of cardGraphs) {

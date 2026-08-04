@@ -192,9 +192,10 @@ test('mind map combines compact card deltas and previews selected card modificat
   assert.match(service, /nodes: MindMapNode\[\]/);
   assert.match(service, /modifiedNodeIds: string\[\]/);
   assert.match(service, /deletedNodeIds: string\[\]/);
+  assert.match(service, /deletedEdgeIds: string\[\]/);
   assert.match(
     schema,
-    /type MindMapCard \{[\s\S]*nodes: \[MindMapNode!\]![\s\S]*edges: \[MindMapEdge!\]![\s\S]*modifiedNodeIds: \[ID!\]![\s\S]*deletedNodeIds: \[ID!\]!/,
+    /type MindMapCard \{[\s\S]*nodes: \[MindMapNode!\]![\s\S]*edges: \[MindMapEdge!\]![\s\S]*modifiedNodeIds: \[ID!\]![\s\S]*deletedNodeIds: \[ID!\]![\s\S]*deletedEdgeIds: \[ID!\]!/,
   );
   assert.doesNotMatch(page, /<q-select/);
   assert.doesNotMatch(page, /scopeSessionId/);
@@ -208,6 +209,8 @@ test('mind map combines compact card deltas and previews selected card modificat
   assert.match(page, /activeNode \? activeCardSessionId : ''/);
   assert.match(page, /\.\.\.\(activeNode \?\? node\)/);
   assert.match(page, /cardDisplayId\(card\.sessionId, node\.id\)/);
+  assert.match(page, /activeCard\?\.deletedEdgeIds \?\? \[\]/);
+  assert.match(page, /\.filter\(\(edge\) => !activeDeletedEdgeIds\.has\(edge\.id\)\)/);
   assert.match(page, /v-if="cards\.length" class="mind-map-change-legend"/);
   assert.match(page, /data\.cardLabel/);
   assert.match(page, /mind-map-node--added/);

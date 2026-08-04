@@ -500,6 +500,10 @@ func TestCardDeltaContainsAddedAndModifiedNodes(t *testing.T) {
 			{ID: "modified", Title: "Before"},
 			{ID: "deleted", Title: "Deleted"},
 		},
+		Edges: []domain.Edge{
+			{ID: "root-modified", SourceID: domain.RootNodeID, TargetID: "modified", Label: "kept"},
+			{ID: "root-deleted", SourceID: domain.RootNodeID, TargetID: "deleted", Label: "removed"},
+		},
 	}
 	current := domain.Graph{
 		Nodes: []domain.Node{
@@ -507,10 +511,13 @@ func TestCardDeltaContainsAddedAndModifiedNodes(t *testing.T) {
 			{ID: "modified", Title: "After"},
 			{ID: "added", Title: "Added"},
 		},
-		Edges: []domain.Edge{{ID: "root-added", SourceID: domain.RootNodeID, TargetID: "added", Label: "contains"}},
+		Edges: []domain.Edge{
+			{ID: "root-modified", SourceID: domain.RootNodeID, TargetID: "modified", Label: "kept"},
+			{ID: "root-added", SourceID: domain.RootNodeID, TargetID: "added", Label: "contains"},
+		},
 	}
 
-	nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, current)
+	nodes, edges, modifiedNodeIDs, deletedNodeIDs, deletedEdgeIDs := cardDeltaDTO(base, current)
 
 	if len(nodes) != 2 ||
 		nodes[0].ID != "modified" || nodes[0].Title != "After" || nodes[0].ChangeType != NodeModified ||
@@ -525,6 +532,9 @@ func TestCardDeltaContainsAddedAndModifiedNodes(t *testing.T) {
 	}
 	if len(deletedNodeIDs) != 1 || deletedNodeIDs[0] != "deleted" {
 		t.Fatalf("deleted node ids = %#v", deletedNodeIDs)
+	}
+	if len(deletedEdgeIDs) != 1 || deletedEdgeIDs[0] != "root-deleted" {
+		t.Fatalf("deleted edge ids = %#v", deletedEdgeIDs)
 	}
 }
 

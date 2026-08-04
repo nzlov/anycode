@@ -182,11 +182,15 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 	for _, id := range dto.DeletedNodeIDs {
 		deletedNodeIDs = append(deletedNodeIDs, string(id))
 	}
+	deletedEdgeIDs := make([]string, 0, len(dto.DeletedEdgeIDs))
+	for _, id := range dto.DeletedEdgeIDs {
+		deletedEdgeIDs = append(deletedEdgeIDs, string(id))
+	}
 	return &model.MindMapCard{
 		SessionID: string(dto.SessionID), Requirement: dto.Requirement, UpdatedAt: dto.UpdatedAt,
 		HasChanges: dto.HasChanges,
 		TaskID:     taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
-		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs,
+		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs, DeletedEdgeIds: deletedEdgeIDs,
 	}
 }
 

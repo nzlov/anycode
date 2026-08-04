@@ -170,6 +170,7 @@ type ComplexityRoot struct {
 	}
 
 	MindMapCard struct {
+		DeletedEdgeIds  func(childComplexity int) int
 		DeletedNodeIds  func(childComplexity int) int
 		Edges           func(childComplexity int) int
 		HasChanges      func(childComplexity int) int
@@ -1361,6 +1362,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.MergeConfig.Strategy(childComplexity), true
 
+	case "MindMapCard.deletedEdgeIds":
+		if e.ComplexityRoot.MindMapCard.DeletedEdgeIds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MindMapCard.DeletedEdgeIds(childComplexity), true
 	case "MindMapCard.deletedNodeIds":
 		if e.ComplexityRoot.MindMapCard.DeletedNodeIds == nil {
 			break
@@ -5336,6 +5343,7 @@ type MindMapCard {
   edges: [MindMapEdge!]!
   modifiedNodeIds: [ID!]!
   deletedNodeIds: [ID!]!
+  deletedEdgeIds: [ID!]!
 }
 
 input SearchMindMapInput {
@@ -8938,6 +8946,35 @@ func (ec *executionContext) fieldContext_MindMapCard_deletedNodeIds(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _MindMapCard_deletedEdgeIds(ctx context.Context, field graphql.CollectedField, obj *model.MindMapCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MindMapCard_deletedEdgeIds,
+		func(ctx context.Context) (any, error) {
+			return obj.DeletedEdgeIds, nil
+		},
+		nil,
+		ec.marshalNID2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MindMapCard_deletedEdgeIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MindMapCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MindMapEdge_id(ctx context.Context, field graphql.CollectedField, obj *model.MindMapEdge) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10459,6 +10496,8 @@ func (ec *executionContext) fieldContext_Mutation_retryMindMapTask(ctx context.C
 				return ec.fieldContext_MindMapCard_modifiedNodeIds(ctx, field)
 			case "deletedNodeIds":
 				return ec.fieldContext_MindMapCard_deletedNodeIds(ctx, field)
+			case "deletedEdgeIds":
+				return ec.fieldContext_MindMapCard_deletedEdgeIds(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MindMapCard", field.Name)
 		},
@@ -13517,6 +13556,8 @@ func (ec *executionContext) fieldContext_Query_projectMindMapCards(ctx context.C
 				return ec.fieldContext_MindMapCard_modifiedNodeIds(ctx, field)
 			case "deletedNodeIds":
 				return ec.fieldContext_MindMapCard_deletedNodeIds(ctx, field)
+			case "deletedEdgeIds":
+				return ec.fieldContext_MindMapCard_deletedEdgeIds(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MindMapCard", field.Name)
 		},
@@ -28683,6 +28724,11 @@ func (ec *executionContext) _MindMapCard(ctx context.Context, sel ast.SelectionS
 			}
 		case "deletedNodeIds":
 			out.Values[i] = ec._MindMapCard_deletedNodeIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deletedEdgeIds":
+			out.Values[i] = ec._MindMapCard_deletedEdgeIds(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

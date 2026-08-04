@@ -46,6 +46,7 @@ export interface MindMapCard {
   edges: MindMapEdge[];
   modifiedNodeIds: string[];
   deletedNodeIds: string[];
+  deletedEdgeIds: string[];
 }
 
 export interface MindMapUpdate {
@@ -98,6 +99,7 @@ const cardFields = `
   edges { id sourceId targetId label }
   modifiedNodeIds
   deletedNodeIds
+  deletedEdgeIds
 `;
 
 export async function getProjectMindMap(projectId: string, sessionId = '') {
