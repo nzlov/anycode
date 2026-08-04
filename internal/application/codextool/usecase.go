@@ -47,7 +47,8 @@ type TunnelUseCase interface {
 
 type MindMapUseCase interface {
 	SearchForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID, query string, limit int) (mindmapapp.SearchResultDTO, error)
-	UpdateForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error)
+	ListTagsForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID) (mindmapapp.TagListDTO, error)
+	UpdateForProcess(ctx context.Context, processRunID string, sessionID mindmapdomain.SessionID, tagRevision string, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error)
 }
 
 type Service struct {
@@ -89,11 +90,34 @@ func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.Dyna
 		return s.closeTunnel(ctx, call)
 	case string(processdomain.DynamicToolMindMapSearch):
 		return s.searchMindMap(ctx, call)
+	case string(processdomain.DynamicToolMindMapTags):
+		return s.listMindMapTags(ctx, call)
 	case string(processdomain.DynamicToolMindMapUpdate):
 		return s.updateMindMap(ctx, call)
 	default:
 		return processdomain.DynamicToolResult{}, fmt.Errorf("unknown dynamic tool %q", call.Tool)
 	}
+}
+
+func (s *Service) listMindMapTags(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.mindMaps == nil {
+		return processdomain.DynamicToolResult{}, errors.New("mind map service is unavailable")
+	}
+	result, err := s.mindMaps.ListTagsForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID))
+	if err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	tags := make([]map[string]any, 0, len(result.Tags))
+	for _, tag := range result.Tags {
+		tags = append(tags, map[string]any{"id": tag.ID, "title": tag.Title, "content": tag.Content})
+	}
+	payload, err := json.Marshal(map[string]any{
+		"projectId": result.ProjectID, "sessionId": result.SessionID, "tagRevision": result.Revision, "tags": tags,
+	})
+	if err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("encode mind map tags: %w", err)
+	}
+	return textResult(payload), nil
 }
 
 func (s *Service) searchMindMap(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
@@ -119,12 +143,14 @@ func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicT
 		return processdomain.DynamicToolResult{}, errors.New("mind map service is unavailable")
 	}
 	var input struct {
-		Operations []struct {
+		TagRevision string `json:"tagRevision"`
+		Operations  []struct {
 			Kind     mindmapdomain.ChangeKind  `json:"kind"`
 			ID       string                    `json:"id"`
 			Title    *string                   `json:"title"`
 			Content  *string                   `json:"content"`
 			Files    *[]mindmapdomain.NodeFile `json:"files"`
+			Tags     *[]string                 `json:"tags"`
 			SourceID *mindmapdomain.NodeID     `json:"sourceId"`
 			TargetID *mindmapdomain.NodeID     `json:"targetId"`
 			Label    *string                   `json:"label"`
@@ -133,14 +159,18 @@ func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicT
 	if err := json.Unmarshal(call.Arguments, &input); err != nil {
 		return processdomain.DynamicToolResult{}, fmt.Errorf("decode mind_map_update arguments: %w", err)
 	}
+	if strings.TrimSpace(input.TagRevision) == "" {
+		return processdomain.DynamicToolResult{}, errors.New("mind map tag revision is required; call mind_map_tags before updating")
+	}
 	operations := make([]mindmapapp.OperationInput, 0, len(input.Operations))
 	for _, operation := range input.Operations {
 		operations = append(operations, mindmapapp.OperationInput{
 			Kind: operation.Kind, ID: operation.ID, Title: operation.Title, Content: operation.Content,
-			Files: operation.Files, SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label,
+			Files: operation.Files, Tags: operation.Tags,
+			SourceID: operation.SourceID, TargetID: operation.TargetID, Label: operation.Label,
 		})
 	}
-	graph, err := s.mindMaps.UpdateForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID), operations)
+	graph, err := s.mindMaps.UpdateForProcess(ctx, string(call.ProcessRunID), mindmapdomain.SessionID(call.SessionID), input.TagRevision, operations)
 	if err != nil {
 		return processdomain.DynamicToolResult{}, err
 	}

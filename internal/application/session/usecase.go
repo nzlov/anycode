@@ -4006,7 +4006,7 @@ func (s *Service) mindMapCodexContext(ctx context.Context, session domain.Sessio
 	}
 	tools := []processdomain.DynamicToolName{processdomain.DynamicToolMindMapSearch}
 	if configuration.Mode == settingdomain.MindMapModeRealtime {
-		tools = append(tools, processdomain.DynamicToolMindMapUpdate)
+		tools = append(tools, processdomain.DynamicToolMindMapTags, processdomain.DynamicToolMindMapUpdate)
 		return tools, realtimeMindMapPromptGuidance, nil
 	}
 	return tools, asyncMindMapQueryPromptGuidance, nil
@@ -4301,7 +4301,7 @@ const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工�
 const questionsWaitPromptGuidance = "调用 `questions` 时，承载调用的 `exec` 源码首行必须设置 `// @exec: {\"yield_time_ms\": 300000}`，并等待 `tools.questions(...)` 返回。只要 `questions` 在当前 turn 内完成，包括 `exec` 已返回 `Script running with cell ID ...` 后才完成，都必须读取答案并继续本轮工作，不得重复输出“请选择”或提前发送 final。若 `exec` 返回 `Script running with cell ID ...`，不要调用 `wait` 延长本轮，也不要重复提问；仅当 `questions` 尚未完成时结束当前 Codex 运行。若当前 turn 已先结束，AnyCode 会保留待回答请求，并在用户回答后通过持久化恢复继续。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
-const realtimeMindMapPromptGuidance = "本项目已开启实时思维图。需要了解已有概念或关系时调用 `mind_map_search` 按需检索节点标题、内容、代码位置及一跳关联；不要尝试读取全图。当需求、功能、决策或关联关系发生变化时，必须及时调用 `mind_map_update` 更新本卡片的隔离思维图，无需请求用户批准。节点标题不能为空，一个节点只表达一个稳定概念；涉及具体代码时记录准确的文件、方法和行号范围。禁止将文件列表更新到节点内容里；文件路径、方法和行号只记录在专用代码位置字段中。更新前先检索，优先修改已有节点，并删除已失效节点及其关系，保持思维图最新有效。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；结束前删除本卡片隔离图中已有的交付状态、提交、测试结果、事故和调试节点，并清理重复节点、重复关系和悬空关系。思维图只保留稳定的项目结构、需求、功能、决策和关联关系。"
+const realtimeMindMapPromptGuidance = "本项目已开启实时思维图。需要了解已有概念或关系时调用 `mind_map_search` 按需检索节点标题、内容、代码位置及一跳关联；不要尝试读取全图。当需求、功能、决策或关联关系发生变化时，必须及时更新本卡片的隔离思维图，无需请求用户批准。每次更新前必须先调用 `mind_map_tags` 获取全部现有 tag 和 tagRevision，再将该版本原样传给 `mind_map_update`。Agent 不得创建、更新、删除 tag 或直接维护 tag 关系；每个节点的 upsert 操作必须携带完整的 Tag 名称列表。后端负责规范化 tag、生成受控 ID、对账节点关系并清理孤儿 tag，且只有 tag 可以作为 project-root 的一级节点。节点标题不能为空，一个节点只表达一个稳定概念；代码相关节点必须携带非空 files 列表，逐项记录准确的文件、方法和起止行号；非代码节点不得携带文件位置。禁止将文件列表更新到节点内容里；文件路径、方法和行号只记录在专用代码位置字段中。更新前先检索，优先修改已有节点，并删除已失效节点及其关系，保持思维图最新有效。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；结束前删除本卡片隔离图中已有的交付状态、提交、测试结果、事故和调试节点，并清理重复节点、重复关系和悬空关系。思维图只保留稳定的项目结构、需求、功能、决策和关联关系。"
 const asyncMindMapQueryPromptGuidance = "本项目使用异步思维图维护。当前常规会话只可调用 `mind_map_search` 按需查询相关节点及一跳关联以辅助理解，不提供全图查看工具，也不得尝试修改；会话关闭后将由独立思维图分析任务整理并更新。"
 
 func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {

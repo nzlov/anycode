@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -759,18 +760,23 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if searchSchema["required"].([]string)[0] != "query" {
 		t.Fatalf("search schema = %#v", searchSchema)
 	}
-	realtime := anyCodeDynamicTools(process.DynamicToolMindMapSearch, process.DynamicToolMindMapUpdate)
-	if len(realtime) != 7 || realtime[6]["name"] != string(process.DynamicToolMindMapUpdate) {
+	realtime := anyCodeDynamicTools(process.DynamicToolMindMapSearch, process.DynamicToolMindMapTags, process.DynamicToolMindMapUpdate)
+	if len(realtime) != 8 || realtime[6]["name"] != string(process.DynamicToolMindMapTags) || realtime[7]["name"] != string(process.DynamicToolMindMapUpdate) {
 		t.Fatalf("realtime tools = %#v", realtime)
 	}
-	description, _ := realtime[6]["description"].(string)
+	description, _ := realtime[7]["description"].(string)
 	if !strings.Contains(description, "Each node must express exactly one durable concept") {
 		t.Fatalf("mind map update description = %q", description)
 	}
-	if !strings.Contains(description, "Do not put file lists in node content") {
-		t.Fatalf("mind map update description allows file lists in node content = %q", description)
+	if !strings.Contains(description, "Every node upsert must provide its complete desired tag-name list") ||
+		!strings.Contains(description, "Nodes that reference implementation code must include a non-empty files list") {
+		t.Fatalf("mind map update description lacks managed tag or code location rules = %q", description)
 	}
-	updateSchema := realtime[6]["inputSchema"].(map[string]any)
+	updateSchema := realtime[7]["inputSchema"].(map[string]any)
+	required := updateSchema["required"].([]string)
+	if len(required) != 2 || required[0] != "tagRevision" || required[1] != "operations" {
+		t.Fatalf("mind map update required fields = %#v", required)
+	}
 	operations := updateSchema["properties"].(map[string]any)["operations"].(map[string]any)
 	if operations["maxItems"] != 100 {
 		t.Fatalf("mind map operation limit = %#v", operations)
@@ -780,12 +786,13 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if len(variants) != 4 {
 		t.Fatalf("mind map operation schema = %#v", operation)
 	}
-	if anyOf, ok := variants[0]["anyOf"].([]map[string]any); !ok || len(anyOf) != 3 {
-		t.Fatalf("node upsert must allow title, content, or file updates: %#v", variants[0])
+	nodeRequired := variants[0]["required"].([]string)
+	if !slices.Contains(nodeRequired, "tags") || slices.Contains(nodeRequired, "codeRelated") {
+		t.Fatalf("node upsert intent fields = %#v", nodeRequired)
 	}
 	nodeProperties := variants[0]["properties"].(map[string]any)
 	files, ok := nodeProperties["files"].(map[string]any)
-	if !ok || files["maxItems"] != 100 {
+	if !ok || files["maxItems"] != 100 || nodeProperties["codeRelated"] != nil {
 		t.Fatalf("node upsert files schema = %#v", variants[0])
 	}
 	for _, variant := range variants {

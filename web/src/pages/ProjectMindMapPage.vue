@@ -166,6 +166,7 @@
               :position="handlePosition(side)"
             />
             <span class="mind-map-node-content__title">{{ data.label }}</span>
+            <small v-if="data.isTag" class="mind-map-node-content__tag">TAG</small>
             <small v-if="data.cardLabel" class="mind-map-node-content__card">
               {{ data.cardLabel }}
             </small>
@@ -560,12 +561,14 @@ const flowNodes = computed({
         files: node.files,
         changeType: node.changeType,
         cardLabel: node.cardLabel,
+        isTag: isTagNodeId(node.entityId),
       },
       position: activeLayout.value[node.id] ?? { x: 0, y: 0 },
       draggable: false,
       connectable: node.changeType !== 'deleted',
       class: {
         'mind-map-node--root': node.id === rootNodeId,
+        'mind-map-node--tag': isTagNodeId(node.entityId),
         'mind-map-node--active': node.id === selectedNodeId.value,
         'mind-map-node--added': node.changeType === 'added',
         'mind-map-node--modified': node.changeType === 'modified',
@@ -686,6 +689,10 @@ function combineMindMaps(
 
 function cardDisplayId(sessionId: string, entityId: string) {
   return `card:${encodeURIComponent(sessionId)}:${encodeURIComponent(entityId)}`;
+}
+
+function isTagNodeId(id: string) {
+  return id.startsWith('tag:');
 }
 
 onMounted(async () => {
@@ -1256,6 +1263,14 @@ function taskStatusColor(status: string) {
   white-space: nowrap;
 }
 
+.mind-map-node-content__tag {
+  margin-top: 2px;
+  color: var(--q-primary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .mind-map-node-content__card {
   display: block;
   max-width: 100%;
@@ -1315,6 +1330,11 @@ function taskStatusColor(status: string) {
   border-color: var(--q-primary);
   background: var(--q-primary);
   color: white;
+}
+
+.mind-map-canvas :deep(.mind-map-node--tag .mind-map-node-content) {
+  border-color: color-mix(in srgb, var(--q-primary) 58%, var(--ac-border));
+  background: color-mix(in srgb, var(--q-primary) 9%, var(--ac-surface));
 }
 
 .mind-map-canvas :deep(.mind-map-node--active .mind-map-node-content) {

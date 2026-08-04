@@ -178,20 +178,189 @@ func TestActiveAsyncTaskCanFinishAfterGlobalModeIsDisabled(t *testing.T) {
 	}
 	settings.configuration.Enabled = false
 	title := "异步整理结果"
+	nodeTags := []string{"异步任务"}
+	tags, err := service.ListTagsForProcess(ctx, "run-1", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	graph, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), []OperationInput{{
-		Kind: domain.ChangeUpsertNode, ID: "async-node", Title: &title,
+	graph, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: "async-result", Title: &title, Tags: &nodeTags,
 	}})
 	if err != nil {
 		t.Fatalf("active async update after disable: %v", err)
 	}
-	if len(graph.Nodes) != 2 {
+	if len(graph.Nodes) != 3 || len(graph.Edges) != 2 {
 		t.Fatalf("async graph = %#v", graph)
 	}
 	if _, err := service.UpdateForSession(ctx, domain.SessionID(session.ID), []OperationInput{{
 		Kind: domain.ChangeUpsertNode, ID: "realtime-node", Title: &title,
 	}}); err == nil {
 		t.Fatal("regular session retained update tool while realtime mode was disabled")
+	}
+}
+
+func TestAgentMindMapUpdateReconcilesManagedTags(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime,
+	}}
+	_, session := saveMindMapTestProjectAndSession(t, store, "session-tags")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	tags, err := service.ListTagsForProcess(ctx, "run-1", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "普通节点"
+	frontendTags := []string{" 前端 ", "前端"}
+	nodeID := domain.NodeID("frontend-change")
+	if _, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: string(nodeID), Title: &title,
+	}}); err == nil || !strings.Contains(err.Error(), "tags must contain at least one") {
+		t.Fatalf("missing tags error = %v", err)
+	}
+	graph, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: string(nodeID), Title: &title, Tags: &frontendTags,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frontendTagID := domain.ManagedTagNodeID("前端")
+	if len(graph.Nodes) != 3 || len(graph.Edges) != 2 || !graphHasNode(graph, frontendTagID) ||
+		!graphHasEdge(graph, domain.TagRootEdgeID(frontendTagID)) || !graphHasEdge(graph, domain.TagNodeEdgeID(frontendTagID, nodeID)) {
+		t.Fatalf("managed tag graph = %#v", graph)
+	}
+	if _, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: string(nodeID), Content: &title, Tags: &frontendTags,
+	}}); err == nil || !strings.Contains(err.Error(), "list tags again") {
+		t.Fatalf("stale revision error = %v", err)
+	}
+	updatedTags, err := service.ListTagsForProcess(ctx, "run-1", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updatedTags.Tags) != 1 || updatedTags.Tags[0].ID != frontendTagID || updatedTags.Revision == tags.Revision {
+		t.Fatalf("updated tags = %#v", updatedTags)
+	}
+	source, target := domain.RootNodeID, domain.NodeID("root-child")
+	if _, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), updatedTags.Revision, []OperationInput{
+		{Kind: domain.ChangeUpsertNode, ID: "root-child", Title: &title, Tags: &frontendTags},
+		{Kind: domain.ChangeUpsertEdge, ID: "root-child", SourceID: &source, TargetID: &target},
+	}); err == nil || !strings.Contains(err.Error(), "managed by the server") {
+		t.Fatalf("root child error = %v", err)
+	}
+	if _, err := service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), updatedTags.Revision, []OperationInput{{
+		Kind: domain.ChangeDeleteEdge, ID: string(domain.TagRootEdgeID(frontendTagID)),
+	}}); err == nil || !strings.Contains(err.Error(), "managed by the server") {
+		t.Fatalf("managed edge deletion error = %v", err)
+	}
+	backendTags := []string{"后端"}
+	content := "重新分类"
+	graph, err = service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), updatedTags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: string(nodeID), Content: &content, Tags: &backendTags,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backendTagID := domain.ManagedTagNodeID("后端")
+	if graphHasNode(graph, frontendTagID) || !graphHasNode(graph, backendTagID) || len(graph.Nodes) != 3 || len(graph.Edges) != 2 {
+		t.Fatalf("reconciled tag graph = %#v", graph)
+	}
+	latestTags, err := service.ListTagsForProcess(ctx, "run-1", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err = service.UpdateForProcess(ctx, "run-1", domain.SessionID(session.ID), latestTags.Revision, []OperationInput{{
+		Kind: domain.ChangeDeleteNode, ID: string(nodeID),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Nodes) != 1 || len(graph.Edges) != 0 {
+		t.Fatalf("orphan tag cleanup graph = %#v", graph)
+	}
+}
+
+func TestAgentMindMapNodesPersistExplicitFileLocations(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{Enabled: true, Mode: settingdomain.MindMapModeRealtime}}
+	_, session := saveMindMapTestProjectAndSession(t, store, "session-code-files")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	tags, err := service.ListTagsForProcess(ctx, "run-code", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "代码节点"
+	nodeTags := []string{"后端"}
+	files := []domain.NodeFile{{File: "internal/example.go", Method: "Run", StartLine: 10, EndLine: 20}}
+	graph, err := service.UpdateForProcess(ctx, "run-code", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: "code-node", Title: &title, Files: &files, Tags: &nodeTags,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node := graphNode(graph, "code-node"); node == nil || len(node.Files) != 1 || node.Files[0].StartLine != 10 {
+		t.Fatalf("code node = %#v", node)
+	}
+}
+
+func TestOrphanTagCleanupKeepsTagsUsedByAnyNode(t *testing.T) {
+	tagID := domain.ManagedTagNodeID("共享")
+	graph := domain.Graph{
+		Nodes: []domain.Node{
+			{ID: domain.RootNodeID, Title: "AnyCode"},
+			{ID: tagID, Title: "共享"},
+			{ID: "first", Title: "First"},
+			{ID: "second", Title: "Second"},
+		},
+		Edges: []domain.Edge{
+			{ID: domain.TagRootEdgeID(tagID), SourceID: domain.RootNodeID, TargetID: tagID},
+			{ID: domain.TagNodeEdgeID(tagID, "first"), SourceID: tagID, TargetID: "first"},
+			{ID: domain.TagNodeEdgeID(tagID, "second"), SourceID: tagID, TargetID: "second"},
+		},
+	}
+	if operations := orphanTagCleanupOperations(graph); len(operations) != 0 {
+		t.Fatalf("used tag cleanup operations = %#v", operations)
+	}
+	graph.Edges = graph.Edges[:1]
+	if operations := orphanTagCleanupOperations(graph); len(operations) != 2 || operations[0].Kind != domain.ChangeDeleteEdge || operations[1].Kind != domain.ChangeDeleteNode {
+		t.Fatalf("orphan tag cleanup operations = %#v", operations)
+	}
+}
+
+func TestAgentTagPolicyDoesNotRevalidateLegacyRootRelationships(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime,
+	}}
+	project, session := saveMindMapTestProjectAndSession(t, store, "session-legacy-root")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	title := "旧节点"
+	source, target := domain.RootNodeID, domain.NodeID("legacy-node")
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID), Operations: []OperationInput{
+			{Kind: domain.ChangeUpsertNode, ID: string(target), Title: &title},
+			{Kind: domain.ChangeUpsertEdge, ID: "legacy-root-edge", SourceID: &source, TargetID: &target},
+		}}); err != nil {
+		t.Fatal(err)
+	}
+	tags, err := service.ListTagsForProcess(ctx, "run-legacy", domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "保留旧拓扑，只更新内容"
+	legacyTags := []string{"遗留"}
+	graph, err := service.UpdateForProcess(ctx, "run-legacy", domain.SessionID(session.ID), tags.Revision, []OperationInput{{
+		Kind: domain.ChangeUpsertNode, ID: string(target), Content: &content, Tags: &legacyTags,
+	}})
+	if err != nil {
+		t.Fatalf("update legacy node: %v", err)
+	}
+	if !graphHasEdge(graph, "legacy-root-edge") {
+		t.Fatalf("legacy root relationship changed: %#v", graph.Edges)
 	}
 }
 
@@ -524,4 +693,26 @@ func saveMindMapTestProjectAndSession(t *testing.T, store *entstore.Store, sessi
 		t.Fatal(err)
 	}
 	return project, session
+}
+
+func graphNode(graph GraphDTO, id domain.NodeID) *NodeDTO {
+	for index := range graph.Nodes {
+		if graph.Nodes[index].ID == id {
+			return &graph.Nodes[index]
+		}
+	}
+	return nil
+}
+
+func graphHasNode(graph GraphDTO, id domain.NodeID) bool {
+	return graphNode(graph, id) != nil
+}
+
+func graphHasEdge(graph GraphDTO, id domain.EdgeID) bool {
+	for _, edge := range graph.Edges {
+		if edge.ID == id {
+			return true
+		}
+	}
+	return false
 }

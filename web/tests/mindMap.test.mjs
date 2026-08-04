@@ -104,6 +104,9 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.doesNotMatch(page, /mind-map-editor/);
   assert.match(page, /kind: 'upsert_node'/);
   assert.match(page, /kind: 'upsert_edge'/);
+  assert.match(page, /isTagNodeId/);
+  assert.match(page, /mind-map-node--tag/);
+  assert.match(page, /mind-map-node-content__tag/);
   assert.doesNotMatch(page, /需求节点|功能节点|决策节点/);
   assert.match(service, /query ProjectMindMap/);
   assert.match(service, /mutation UpdateProjectMindMap/);

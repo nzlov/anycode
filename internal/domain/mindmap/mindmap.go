@@ -2,9 +2,12 @@ package mindmap
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -29,6 +32,9 @@ const (
 type ChangeKind string
 
 const RootNodeID NodeID = "project-root"
+const TagNodeIDPrefix = "tag:"
+const TagRootEdgeIDPrefix = "root-tag:"
+const TagNodeEdgeIDPrefix = "tag-node:"
 
 const (
 	ChangeUpsertNode ChangeKind = "upsert_node"
@@ -36,6 +42,24 @@ const (
 	ChangeUpsertEdge ChangeKind = "upsert_edge"
 	ChangeDeleteEdge ChangeKind = "delete_edge"
 )
+
+func IsTagNodeID(id NodeID) bool {
+	return strings.HasPrefix(string(id), TagNodeIDPrefix) && len(id) > len(TagNodeIDPrefix)
+}
+
+func TagRootEdgeID(id NodeID) EdgeID {
+	return EdgeID(TagRootEdgeIDPrefix + string(id))
+}
+
+func ManagedTagNodeID(normalizedTitle string) NodeID {
+	sum := sha256.Sum256([]byte(normalizedTitle))
+	return NodeID(TagNodeIDPrefix + hex.EncodeToString(sum[:]))
+}
+
+func TagNodeEdgeID(tagID, nodeID NodeID) EdgeID {
+	sum := sha256.Sum256([]byte(string(tagID) + "\x00" + string(nodeID)))
+	return EdgeID(TagNodeEdgeIDPrefix + hex.EncodeToString(sum[:]))
+}
 
 type Graph struct {
 	ProjectID ProjectID

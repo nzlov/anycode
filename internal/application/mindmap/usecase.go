@@ -27,9 +27,10 @@ type UseCase interface {
 	Apply(ctx context.Context, input UpdateInput) (GraphDTO, error)
 	GetForSession(ctx context.Context, sessionID domain.SessionID) (GraphDTO, error)
 	SearchForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, query string, limit int) (SearchResultDTO, error)
+	ListTagsForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID) (TagListDTO, error)
 	UpdateForSession(ctx context.Context, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error)
 	UpdateForTask(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error)
-	UpdateForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error)
+	UpdateForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, tagRevision string, operations []OperationInput) (GraphDTO, error)
 	RetryTask(ctx context.Context, taskID domain.TaskID) (CardDTO, error)
 	Watch(ctx context.Context, input GetInput) (<-chan ChangeDTO, error)
 }
@@ -50,9 +51,11 @@ type GetPageInput struct {
 }
 
 type UpdateInput struct {
-	ProjectID  domain.ProjectID
-	SessionID  domain.SessionID
-	Operations []OperationInput
+	ProjectID        domain.ProjectID
+	SessionID        domain.SessionID
+	TagRevision      string
+	EnforceTagPolicy bool
+	Operations       []OperationInput
 }
 
 type SearchInput struct {
@@ -66,6 +69,7 @@ type OperationInput struct {
 	Title    *string
 	Content  *string
 	Files    *[]domain.NodeFile
+	Tags     *[]string
 	SourceID *domain.NodeID
 	TargetID *domain.NodeID
 	Label    *string
@@ -133,6 +137,13 @@ type ProjectSearchResultDTO struct {
 	ProjectID domain.ProjectID
 	Query     string
 	Matches   []ProjectSearchMatchDTO
+}
+
+type TagListDTO struct {
+	ProjectID domain.ProjectID
+	SessionID domain.SessionID
+	Revision  string
+	Tags      []NodeDTO
 }
 
 type ProjectSearchMatchDTO struct {
@@ -594,9 +605,12 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 	if len(input.Operations) == 0 {
 		return s.loadGraph(ctx, project, input.SessionID, withChanges)
 	}
-	changes, err := s.buildChanges(input)
-	if err != nil {
-		return GraphDTO{}, err
+	var staticChanges []domain.Change
+	if !input.EnforceTagPolicy {
+		staticChanges, err = s.buildChanges(input)
+		if err != nil {
+			return GraphDTO{}, err
+		}
 	}
 	result := GraphDTO{ProjectID: input.ProjectID, SessionID: input.SessionID}
 	apply := func(ctx context.Context, repo domain.Repository) error {
@@ -607,12 +621,33 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 		graph.ProjectID = input.ProjectID
 		domain.EnsureRoot(&graph, project.Name, project.UpdatedAt)
 		if input.SessionID == "" {
+			before := domain.Visible(graph)
+			changes := staticChanges
+			if input.EnforceTagPolicy {
+				if err := validateTagRevision(input.TagRevision, before.UpdatedAt); err != nil {
+					return err
+				}
+				changes, err = s.buildAgentChanges(input, before)
+				if err != nil {
+					return err
+				}
+			}
+			if len(changes) == 0 {
+				result.UpdatedAt = before.UpdatedAt
+				return nil
+			}
 			for _, change := range changes {
 				domain.Apply(&graph, change)
 				graph.History = append(graph.History, change)
 			}
 			domain.Touch(&graph, changes[len(changes)-1].OccurredAt)
-			if err := validateVisibleGraph(domain.Visible(graph)); err != nil {
+			candidate := domain.Visible(graph)
+			if input.EnforceTagPolicy {
+				if err := validateAgentTagTopology(before, candidate); err != nil {
+					return err
+				}
+			}
+			if err := validateVisibleGraph(candidate); err != nil {
 				return err
 			}
 			result.UpdatedAt = graph.UpdatedAt
@@ -624,7 +659,30 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 		}
 		overlay.ProjectID = input.ProjectID
 		overlay.SessionID = input.SessionID
+		before := domain.Materialize(graph, overlay.Changes)
+		changes := staticChanges
+		if overlay.UpdatedAt.After(before.UpdatedAt) {
+			before.UpdatedAt = overlay.UpdatedAt
+		}
+		if input.EnforceTagPolicy {
+			if err := validateTagRevision(input.TagRevision, before.UpdatedAt); err != nil {
+				return err
+			}
+			changes, err = s.buildAgentChanges(input, before)
+			if err != nil {
+				return err
+			}
+		}
+		if len(changes) == 0 {
+			result.UpdatedAt = before.UpdatedAt
+			return nil
+		}
 		candidate := domain.Materialize(graph, append(append([]domain.Change(nil), overlay.Changes...), changes...))
+		if input.EnforceTagPolicy {
+			if err := validateAgentTagTopology(before, candidate); err != nil {
+				return err
+			}
+		}
 		if err := validateVisibleGraph(candidate); err != nil {
 			return err
 		}
@@ -730,6 +788,25 @@ func (s *Service) SearchForProcess(ctx context.Context, processRunID string, ses
 	return searchGraph(graph, query, limit), nil
 }
 
+func (s *Service) ListTagsForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID) (TagListDTO, error) {
+	graph, err := s.getForProcess(ctx, processRunID, sessionID)
+	if err != nil {
+		return TagListDTO{}, err
+	}
+	result := TagListDTO{
+		ProjectID: graph.ProjectID, SessionID: graph.SessionID, Revision: formatTagRevision(graph.UpdatedAt),
+	}
+	for _, node := range graph.Nodes {
+		if domain.IsTagNodeID(node.ID) {
+			result.Tags = append(result.Tags, node)
+		}
+	}
+	sort.Slice(result.Tags, func(i, j int) bool {
+		return strings.ToLower(result.Tags[i].Title) < strings.ToLower(result.Tags[j].Title)
+	})
+	return result, nil
+}
+
 func validateSearchQuery(query string) (string, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -741,15 +818,343 @@ func validateSearchQuery(query string) (string, error) {
 	return query, nil
 }
 
-func (s *Service) UpdateForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error) {
+func (s *Service) UpdateForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, tagRevision string, operations []OperationInput) (GraphDTO, error) {
+	if strings.TrimSpace(tagRevision) == "" {
+		return GraphDTO{}, errors.New("mind map tag revision is required; list tags before updating")
+	}
 	task, found, err := s.repo.FindTaskBySession(ctx, sessionID)
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find mind map task: %w", err)
 	}
 	if found && task.Status == domain.TaskRunning && strings.TrimSpace(task.ProcessRunID) == strings.TrimSpace(processRunID) {
-		return s.UpdateForTask(ctx, processRunID, sessionID, operations)
+		session, err := s.sessions.Find(ctx, sessiondomain.ID(sessionID))
+		if err != nil {
+			return GraphDTO{}, fmt.Errorf("find session: %w", err)
+		}
+		return s.update(ctx, UpdateInput{
+			ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, TagRevision: tagRevision,
+			EnforceTagPolicy: true, Operations: operations,
+		}, true, true, false, true)
 	}
-	return s.UpdateForSession(ctx, sessionID, operations)
+	configuration, err := s.settings.MindMapConfiguration(ctx)
+	if err != nil {
+		return GraphDTO{}, fmt.Errorf("get mind map settings: %w", err)
+	}
+	if !configuration.Enabled || configuration.Mode != settingdomain.MindMapModeRealtime {
+		return GraphDTO{}, errors.New("mind map update tool is unavailable outside realtime mode")
+	}
+	session, err := s.sessions.Find(ctx, sessiondomain.ID(sessionID))
+	if err != nil {
+		return GraphDTO{}, fmt.Errorf("find session: %w", err)
+	}
+	return s.update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, TagRevision: tagRevision,
+		EnforceTagPolicy: true, Operations: operations,
+	}, true, false, false, true)
+}
+
+type managedTag struct {
+	key   string
+	title string
+}
+
+func (s *Service) buildAgentChanges(input UpdateInput, before domain.Graph) ([]domain.Change, error) {
+	beforeNodes := make(map[domain.NodeID]domain.Node, len(before.Nodes))
+	beforeEdges := make(map[domain.EdgeID]domain.Edge, len(before.Edges))
+	for _, node := range before.Nodes {
+		beforeNodes[node.ID] = node
+	}
+	for _, edge := range before.Edges {
+		beforeEdges[edge.ID] = edge
+	}
+	explicit := make([]OperationInput, 0, len(input.Operations))
+	desiredTags := make(map[domain.NodeID][]managedTag)
+	for _, operation := range input.Operations {
+		nodeID := domain.NodeID(strings.TrimSpace(operation.ID))
+		if (operation.Kind == domain.ChangeUpsertNode || operation.Kind == domain.ChangeDeleteNode) && domain.IsTagNodeID(nodeID) {
+			return nil, fmt.Errorf("mind map tags are managed by the server; operation %q cannot target %q", operation.Kind, nodeID)
+		}
+		if operation.Kind == domain.ChangeUpsertNode {
+			if _, duplicate := desiredTags[nodeID]; duplicate {
+				return nil, fmt.Errorf("mind map node %q cannot be upserted more than once per update", nodeID)
+			}
+			tags, err := normalizeManagedTags(operation.Tags)
+			if err != nil {
+				return nil, fmt.Errorf("mind map node %q: %w", nodeID, err)
+			}
+			desiredTags[nodeID] = tags
+			operation.Tags = nil
+			if operation.Title != nil || operation.Content != nil || operation.Files != nil {
+				explicit = append(explicit, operation)
+			} else if _, found := beforeNodes[nodeID]; !found {
+				return nil, fmt.Errorf("new mind map node %q requires a title", nodeID)
+			}
+			continue
+		}
+		if operation.Tags != nil {
+			return nil, fmt.Errorf("mind map operation %q cannot contain tags", operation.Kind)
+		}
+		if operation.Kind == domain.ChangeUpsertEdge && operation.SourceID != nil && operation.TargetID != nil {
+			if *operation.SourceID == domain.RootNodeID || *operation.TargetID == domain.RootNodeID ||
+				domain.IsTagNodeID(*operation.SourceID) || domain.IsTagNodeID(*operation.TargetID) {
+				return nil, errors.New("mind map root and tag relationships are managed by the server")
+			}
+		}
+		if operation.Kind == domain.ChangeDeleteEdge {
+			if edge, found := beforeEdges[domain.EdgeID(strings.TrimSpace(operation.ID))]; found &&
+				(edge.SourceID == domain.RootNodeID || edge.TargetID == domain.RootNodeID ||
+					domain.IsTagNodeID(edge.SourceID) || domain.IsTagNodeID(edge.TargetID)) {
+				return nil, errors.New("mind map root and tag relationships are managed by the server")
+			}
+		}
+		if operation.Kind == domain.ChangeDeleteNode {
+			for _, edge := range before.Edges {
+				if (edge.SourceID == nodeID && domain.IsTagNodeID(edge.TargetID)) ||
+					(edge.TargetID == nodeID && domain.IsTagNodeID(edge.SourceID)) {
+					explicit = append(explicit, OperationInput{Kind: domain.ChangeDeleteEdge, ID: string(edge.ID)})
+				}
+			}
+		}
+		explicit = append(explicit, operation)
+	}
+
+	changes, err := s.buildChanges(UpdateInput{ProjectID: input.ProjectID, SessionID: input.SessionID, Operations: explicit})
+	if err != nil {
+		return nil, err
+	}
+	candidate := domain.Materialize(before, changes)
+	managedOperations, err := reconcileManagedTags(candidate, desiredTags)
+	if err != nil {
+		return nil, err
+	}
+	managedChanges, err := s.buildChanges(UpdateInput{ProjectID: input.ProjectID, SessionID: input.SessionID, Operations: managedOperations})
+	if err != nil {
+		return nil, err
+	}
+	changes = append(changes, managedChanges...)
+	candidate = domain.Materialize(candidate, managedChanges)
+	cleanupOperations := orphanTagCleanupOperations(candidate)
+	cleanupChanges, err := s.buildChanges(UpdateInput{ProjectID: input.ProjectID, SessionID: input.SessionID, Operations: cleanupOperations})
+	if err != nil {
+		return nil, err
+	}
+	return append(changes, cleanupChanges...), nil
+}
+
+func normalizeManagedTags(values *[]string) ([]managedTag, error) {
+	if values == nil || len(*values) == 0 {
+		return nil, errors.New("tags must contain at least one tag name")
+	}
+	if len(*values) > 20 {
+		return nil, errors.New("tags cannot contain more than 20 tag names")
+	}
+	seen := make(map[string]struct{}, len(*values))
+	result := make([]managedTag, 0, len(*values))
+	for _, value := range *values {
+		title := strings.Join(strings.Fields(value), " ")
+		if title == "" {
+			return nil, errors.New("tag names cannot be empty")
+		}
+		if len(title) > 100 {
+			return nil, fmt.Errorf("tag name %q is too long", title)
+		}
+		key := strings.ToLower(title)
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, managedTag{key: key, title: title})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].key < result[j].key })
+	return result, nil
+}
+
+func reconcileManagedTags(graph domain.Graph, desiredTags map[domain.NodeID][]managedTag) ([]OperationInput, error) {
+	tagByKey := make(map[string]domain.NodeID)
+	tagNodes := make(map[domain.NodeID]struct{})
+	rootLinked := make(map[domain.NodeID]bool)
+	for _, node := range graph.Nodes {
+		if !domain.IsTagNodeID(node.ID) {
+			continue
+		}
+		key := strings.ToLower(strings.Join(strings.Fields(node.Title), " "))
+		if existing, found := tagByKey[key]; !found || string(node.ID) < string(existing) {
+			tagByKey[key] = node.ID
+		}
+		tagNodes[node.ID] = struct{}{}
+	}
+	for _, edge := range graph.Edges {
+		if edge.SourceID == domain.RootNodeID && domain.IsTagNodeID(edge.TargetID) {
+			rootLinked[edge.TargetID] = true
+		}
+	}
+	nodeIDs := make([]domain.NodeID, 0, len(desiredTags))
+	for nodeID := range desiredTags {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	sort.Slice(nodeIDs, func(i, j int) bool { return nodeIDs[i] < nodeIDs[j] })
+	operations := make([]OperationInput, 0)
+	for _, nodeID := range nodeIDs {
+		desiredIDs := make(map[domain.NodeID]struct{}, len(desiredTags[nodeID]))
+		for _, tag := range desiredTags[nodeID] {
+			tagID, found := tagByKey[tag.key]
+			if !found {
+				tagID = domain.ManagedTagNodeID(tag.key)
+				if _, collision := tagNodes[tagID]; collision {
+					return nil, fmt.Errorf("managed mind map tag id collision for %q", tag.title)
+				}
+				title := tag.title
+				operations = append(operations, OperationInput{Kind: domain.ChangeUpsertNode, ID: string(tagID), Title: &title})
+				tagByKey[tag.key] = tagID
+				tagNodes[tagID] = struct{}{}
+			}
+			desiredIDs[tagID] = struct{}{}
+			if !rootLinked[tagID] {
+				source, target, label := domain.RootNodeID, tagID, "分类"
+				operations = append(operations, OperationInput{
+					Kind: domain.ChangeUpsertEdge, ID: string(domain.TagRootEdgeID(tagID)),
+					SourceID: &source, TargetID: &target, Label: &label,
+				})
+				rootLinked[tagID] = true
+			}
+		}
+		linked := make(map[domain.NodeID]bool, len(desiredIDs))
+		for _, edge := range graph.Edges {
+			var tagID domain.NodeID
+			switch {
+			case edge.TargetID == nodeID && domain.IsTagNodeID(edge.SourceID):
+				tagID = edge.SourceID
+			case edge.SourceID == nodeID && domain.IsTagNodeID(edge.TargetID):
+				tagID = edge.TargetID
+			default:
+				continue
+			}
+			_, desired := desiredIDs[tagID]
+			canonical := domain.TagNodeEdgeID(tagID, nodeID)
+			if desired && edge.ID == canonical && edge.SourceID == tagID && edge.TargetID == nodeID {
+				linked[tagID] = true
+				continue
+			}
+			operations = append(operations, OperationInput{Kind: domain.ChangeDeleteEdge, ID: string(edge.ID)})
+		}
+		for _, tag := range desiredTags[nodeID] {
+			tagID := tagByKey[tag.key]
+			if linked[tagID] {
+				continue
+			}
+			source, target, label := tagID, nodeID, "标记"
+			operations = append(operations, OperationInput{
+				Kind: domain.ChangeUpsertEdge, ID: string(domain.TagNodeEdgeID(tagID, nodeID)),
+				SourceID: &source, TargetID: &target, Label: &label,
+			})
+		}
+	}
+	return operations, nil
+}
+
+func orphanTagCleanupOperations(graph domain.Graph) []OperationInput {
+	used := make(map[domain.NodeID]bool)
+	for _, edge := range graph.Edges {
+		if domain.IsTagNodeID(edge.SourceID) && edge.TargetID != domain.RootNodeID && !domain.IsTagNodeID(edge.TargetID) {
+			used[edge.SourceID] = true
+		}
+		if domain.IsTagNodeID(edge.TargetID) && edge.SourceID != domain.RootNodeID && !domain.IsTagNodeID(edge.SourceID) {
+			used[edge.TargetID] = true
+		}
+	}
+	orphans := make([]domain.NodeID, 0)
+	for _, node := range graph.Nodes {
+		if domain.IsTagNodeID(node.ID) && !used[node.ID] {
+			orphans = append(orphans, node.ID)
+		}
+	}
+	sort.Slice(orphans, func(i, j int) bool { return orphans[i] < orphans[j] })
+	deleteEdges := make(map[domain.EdgeID]struct{})
+	operations := make([]OperationInput, 0)
+	for _, tagID := range orphans {
+		for _, edge := range graph.Edges {
+			if edge.SourceID != tagID && edge.TargetID != tagID {
+				continue
+			}
+			if _, duplicate := deleteEdges[edge.ID]; duplicate {
+				continue
+			}
+			deleteEdges[edge.ID] = struct{}{}
+			operations = append(operations, OperationInput{Kind: domain.ChangeDeleteEdge, ID: string(edge.ID)})
+		}
+		operations = append(operations, OperationInput{Kind: domain.ChangeDeleteNode, ID: string(tagID)})
+	}
+	return operations
+}
+
+func formatTagRevision(value time.Time) string {
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func validateTagRevision(expected string, current time.Time) error {
+	if strings.TrimSpace(expected) != formatTagRevision(current) {
+		return errors.New("mind map tags changed; list tags again before updating")
+	}
+	return nil
+}
+
+func validateAgentTagTopology(before, candidate domain.Graph) error {
+	beforeNodes := make(map[domain.NodeID]struct{}, len(before.Nodes))
+	beforeEdges := make(map[domain.EdgeID]domain.Edge, len(before.Edges))
+	beforeRootTags := make(map[domain.NodeID]struct{})
+	for _, node := range before.Nodes {
+		beforeNodes[node.ID] = struct{}{}
+	}
+	for _, edge := range before.Edges {
+		beforeEdges[edge.ID] = edge
+		if edge.SourceID == domain.RootNodeID && domain.IsTagNodeID(edge.TargetID) {
+			beforeRootTags[edge.TargetID] = struct{}{}
+		}
+	}
+	rootTags := make(map[domain.NodeID]struct{})
+	taggedNodes := make(map[domain.NodeID]struct{})
+	for _, edge := range candidate.Edges {
+		previous, existed := beforeEdges[edge.ID]
+		changed := !existed || previous.SourceID != edge.SourceID || previous.TargetID != edge.TargetID
+		if changed && (edge.SourceID == domain.RootNodeID || edge.TargetID == domain.RootNodeID) {
+			if edge.SourceID != domain.RootNodeID || !domain.IsTagNodeID(edge.TargetID) {
+				return fmt.Errorf("new mind map root relationship %q must target a tag", edge.ID)
+			}
+		}
+		if edge.SourceID == domain.RootNodeID && domain.IsTagNodeID(edge.TargetID) {
+			rootTags[edge.TargetID] = struct{}{}
+		}
+		if domain.IsTagNodeID(edge.SourceID) && edge.TargetID != domain.RootNodeID && !domain.IsTagNodeID(edge.TargetID) {
+			taggedNodes[edge.TargetID] = struct{}{}
+		}
+		if domain.IsTagNodeID(edge.TargetID) && edge.SourceID != domain.RootNodeID && !domain.IsTagNodeID(edge.SourceID) {
+			taggedNodes[edge.SourceID] = struct{}{}
+		}
+	}
+	for _, node := range candidate.Nodes {
+		if _, existed := beforeNodes[node.ID]; existed || node.ID == domain.RootNodeID {
+			if _, wasRootTag := beforeRootTags[node.ID]; wasRootTag {
+				if _, remainsRootTag := rootTags[node.ID]; !remainsRootTag {
+					return fmt.Errorf("mind map tag %q must remain directly connected to project-root", node.ID)
+				}
+			}
+			continue
+		}
+		if domain.IsTagNodeID(node.ID) {
+			normalizedTitle := strings.ToLower(strings.Join(strings.Fields(node.Title), " "))
+			if node.ID != domain.ManagedTagNodeID(normalizedTitle) {
+				return fmt.Errorf("new mind map tag %q must use a server-managed id", node.ID)
+			}
+			if _, ok := rootTags[node.ID]; !ok {
+				return fmt.Errorf("new mind map tag %q must remain directly connected to project-root", node.ID)
+			}
+			continue
+		}
+		if _, tagged := taggedNodes[node.ID]; !tagged {
+			return fmt.Errorf("new mind map node %q must connect to a tag", node.ID)
+		}
+	}
+	return nil
 }
 
 func (s *Service) buildChanges(input UpdateInput) ([]domain.Change, error) {
@@ -805,6 +1210,9 @@ func (s *Service) buildChanges(input UpdateInput) ([]domain.Change, error) {
 }
 
 func validateOperationShape(operation OperationInput) error {
+	if operation.Tags != nil {
+		return errors.New("mind map tag intent fields must be resolved before persistence")
+	}
 	hasNodeFields := operation.Title != nil || operation.Content != nil || operation.Files != nil
 	hasEdgeFields := operation.SourceID != nil || operation.TargetID != nil || operation.Label != nil
 	switch operation.Kind {

@@ -210,9 +210,15 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 	if maps.query != "tool" || maps.limit != 5 || !strings.Contains(searchResult.Content[0].Text, `"matchedFields":["title","content"]`) || !strings.Contains(searchResult.Content[0].Text, `"agent-tools"`) || !strings.Contains(searchResult.Content[0].Text, `"startLine":10`) {
 		t.Fatalf("search = maps:%#v result:%#v", maps, searchResult)
 	}
+	call.Tool = string(processdomain.DynamicToolMindMapTags)
+	call.Arguments = json.RawMessage(`{}`)
+	tagResult, err := service.HandleDynamicTool(context.Background(), call)
+	if err != nil || !strings.Contains(tagResult.Content[0].Text, `"tagRevision":"revision-1"`) {
+		t.Fatalf("tags result = %#v err = %v", tagResult, err)
+	}
 
 	call.Tool = string(processdomain.DynamicToolMindMapUpdate)
-	call.Arguments = json.RawMessage(`{"operations":[{"kind":"upsert_node","id":"feature","title":"Feature","content":"Details","files":[{"file":"internal/feature.go","method":"Run","startLine":1,"endLine":9}]}]}`)
+	call.Arguments = json.RawMessage(`{"tagRevision":"revision-1","operations":[{"kind":"upsert_node","id":"feature","title":"Feature","content":"Details","tags":["Backend"],"files":[{"file":"internal/feature.go","method":"Run","startLine":1,"endLine":9}]}]}`)
 	updateResult, err := service.HandleDynamicTool(context.Background(), call)
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +228,12 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 	}
 	if len(maps.operations) != 1 || maps.operations[0].ID != "feature" || maps.operations[0].Title == nil || *maps.operations[0].Title != "Feature" || maps.operations[0].Content == nil || *maps.operations[0].Content != "Details" || maps.operations[0].Files == nil || len(*maps.operations[0].Files) != 1 || (*maps.operations[0].Files)[0].StartLine != 1 {
 		t.Fatalf("operations = %#v", maps.operations)
+	}
+	if maps.operations[0].Tags == nil || len(*maps.operations[0].Tags) != 1 || (*maps.operations[0].Tags)[0] != "Backend" {
+		t.Fatalf("managed node intent = %#v", maps.operations[0])
+	}
+	if maps.tagRevision != "revision-1" {
+		t.Fatalf("tag revision = %q", maps.tagRevision)
 	}
 }
 
@@ -276,8 +288,19 @@ type fakeMindMaps struct {
 	query        string
 	limit        int
 	operations   []mindmapapp.OperationInput
+	tagRevision  string
 	graph        mindmapapp.GraphDTO
+	tagList      mindmapapp.TagListDTO
 	searchResult mindmapapp.SearchResultDTO
+}
+
+func (f *fakeMindMaps) ListTagsForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID) (mindmapapp.TagListDTO, error) {
+	f.processRunID = processRunID
+	f.sessionID = sessionID
+	if f.tagList.Revision == "" {
+		f.tagList.Revision = "revision-1"
+	}
+	return f.tagList, nil
 }
 
 func (f *fakeMindMaps) SearchForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, query string, limit int) (mindmapapp.SearchResultDTO, error) {
@@ -288,9 +311,10 @@ func (f *fakeMindMaps) SearchForProcess(_ context.Context, processRunID string, 
 	return f.searchResult, nil
 }
 
-func (f *fakeMindMaps) UpdateForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error) {
+func (f *fakeMindMaps) UpdateForProcess(_ context.Context, processRunID string, sessionID mindmapdomain.SessionID, tagRevision string, operations []mindmapapp.OperationInput) (mindmapapp.GraphDTO, error) {
 	f.processRunID = processRunID
 	f.sessionID = sessionID
+	f.tagRevision = tagRevision
 	f.operations = operations
 	return f.graph, nil
 }

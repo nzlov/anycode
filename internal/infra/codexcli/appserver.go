@@ -280,11 +280,21 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 		switch name {
 		case process.DynamicToolMindMapSearch:
 			tools = append(tools, mindMapSearchTool())
+		case process.DynamicToolMindMapTags:
+			tools = append(tools, mindMapTagsTool())
 		case process.DynamicToolMindMapUpdate:
 			tools = append(tools, mindMapUpdateTool())
 		}
 	}
 	return tools
+}
+
+func mindMapTagsTool() map[string]any {
+	return map[string]any{
+		"type": "function", "name": string(process.DynamicToolMindMapTags),
+		"description": "List every existing first-level mind map tag and return the current tagRevision. Call this immediately before mind_map_update. The returned tagRevision is required for updates and becomes stale after any graph change.",
+		"inputSchema": map[string]any{"type": "object", "additionalProperties": false},
+	}
 }
 
 func mindMapSearchTool() map[string]any {
@@ -302,24 +312,17 @@ func mindMapSearchTool() map[string]any {
 }
 
 func mindMapUpdateTool() map[string]any {
-	nodeUpsert := mindMapOperationSchema("upsert_node", []string{"kind", "id"}, map[string]any{
+	tags := map[string]any{
+		"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true,
+		"description": "Desired tag names for this node. The server normalizes names, creates or reuses tags, reconciles relationships, and removes orphan tags.",
+		"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 100},
+	}
+	nodeUpsert := mindMapOperationSchema("upsert_node", []string{"kind", "id", "tags"}, map[string]any{
 		"title":   map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
 		"content": map[string]any{"type": "string", "maxLength": 20000},
-		"files": map[string]any{
-			"type": "array", "maxItems": 100,
-			"items": map[string]any{
-				"type": "object", "additionalProperties": false,
-				"required": []string{"file", "method", "startLine", "endLine"},
-				"properties": map[string]any{
-					"file":      map[string]any{"type": "string", "minLength": 1, "maxLength": 2000},
-					"method":    map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
-					"startLine": map[string]any{"type": "integer", "minimum": 1},
-					"endLine":   map[string]any{"type": "integer", "minimum": 1},
-				},
-			},
-		},
+		"tags":    tags,
+		"files":   mindMapNodeFilesSchema(),
 	})
-	nodeUpsert["anyOf"] = []map[string]any{{"required": []string{"title"}}, {"required": []string{"content"}}, {"required": []string{"files"}}}
 	operation := map[string]any{"oneOf": []map[string]any{
 		nodeUpsert,
 		mindMapOperationSchema("delete_node", []string{"kind", "id"}, nil),
@@ -332,10 +335,30 @@ func mindMapUpdateTool() map[string]any {
 	}}
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
-		"description": "Apply node and relationship changes to this card's isolated mind map. Search first, then update an existing node's title, content, or optional code file locations, delete obsolete nodes, and maintain relationships as needed. Node titles must not be empty. Each node must express exactly one durable concept. Do not put file lists in node content; store file paths, methods, and line ranges only in the dedicated code file locations field. Use project-root as the immutable project-name center node. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
+		"description": "Apply node and relationship changes to this card's isolated mind map. Call mind_map_tags immediately before every update and pass its tagRevision. Every node upsert must provide its complete desired tag-name list. The server exclusively creates, reuses, links, and removes tag nodes; agents must not manipulate project-root or tag relationships. Nodes that reference implementation code must include a non-empty files list with file, method, startLine, and endLine. Search before reusing or changing concepts. Each node must express exactly one durable concept. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
 		"inputSchema": map[string]any{
-			"type": "object", "additionalProperties": false, "required": []string{"operations"},
-			"properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": operation}},
+			"type": "object", "additionalProperties": false, "required": []string{"tagRevision", "operations"},
+			"properties": map[string]any{
+				"tagRevision": map[string]any{"type": "string", "minLength": 1, "description": "Exact tagRevision returned by the most recent mind_map_tags call."},
+				"operations":  map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": operation},
+			},
+		},
+	}
+}
+
+func mindMapNodeFilesSchema() map[string]any {
+	return map[string]any{
+		"type": "array", "maxItems": 100,
+		"description": "Complete code location list. Required and non-empty when the concept references implementation code; pass an empty list only to clear previous locations. Store locations only, never source snapshots.",
+		"items": map[string]any{
+			"type": "object", "additionalProperties": false,
+			"required": []string{"file", "method", "startLine", "endLine"},
+			"properties": map[string]any{
+				"file":      map[string]any{"type": "string", "minLength": 1, "maxLength": 2000},
+				"method":    map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
+				"startLine": map[string]any{"type": "integer", "minimum": 1},
+				"endLine":   map[string]any{"type": "integer", "minimum": 1},
+			},
 		},
 	}
 }

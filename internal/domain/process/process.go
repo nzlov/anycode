@@ -20,6 +20,7 @@ type DynamicToolName string
 
 const (
 	DynamicToolMindMapSearch DynamicToolName = "mind_map_search"
+	DynamicToolMindMapTags   DynamicToolName = "mind_map_tags"
 	DynamicToolMindMapUpdate DynamicToolName = "mind_map_update"
 )
 
