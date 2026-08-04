@@ -3951,6 +3951,12 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	developerInstructions := joinPromptParts(anyCodeDeveloperInstructions(session, artifactDir), mindMapGuidance)
+	files, err := s.listSessionAttachments(ctx, session.ID)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
+	files = appendUniqueSessionFiles(files, options.promptFiles...)
+	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
 	if options.resumeCodexSessionID != "" {
 		handle, resumeErr := s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:          runID,
@@ -3958,7 +3964,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			CodexSessionID:        options.resumeCodexSessionID,
 			Workdir:               workdir,
 			ArtifactDir:           artifactDir,
-			Input:                 codexInput(prompt, options.promptFiles, options.promptMentions),
+			Input:                 codexInput(prompt, files, mentions),
 			Action:                action,
 			ActionArgument:        actionArgument,
 			DeveloperInstructions: developerInstructions,
@@ -3977,12 +3983,6 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		}
 		prompt = strings.TrimSpace(options.fallbackPrompt)
 	}
-	files, err := s.listSessionAttachments(ctx, session.ID)
-	if err != nil {
-		return processdomain.CodexHandle{}, err
-	}
-	files = appendUniqueSessionFiles(files, options.promptFiles...)
-	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
 	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots, developerInstructions, mindMapTools))
 }
 
@@ -4046,10 +4046,8 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 }
 
 func codexInput(prompt string, files []domain.SessionFile, mentions []domain.PromptMention) []processdomain.CodexInputItem {
-	input := make([]processdomain.CodexInputItem, 0, 1+len(files)+len(mentions))
-	if prompt != "" {
-		input = append(input, processdomain.CodexInputItem{Type: "text", Text: prompt})
-	}
+	mediaInput := make([]processdomain.CodexInputItem, 0, len(files))
+	localFiles := make([]string, 0, len(files)+len(mentions))
 	seen := make(map[string]struct{}, len(files))
 	for _, file := range files {
 		path := strings.TrimSpace(file.Path)
@@ -4062,9 +4060,9 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 		seen[path] = struct{}{}
 		switch {
 		case strings.HasPrefix(strings.ToLower(file.MimeType), "image/"):
-			input = append(input, processdomain.CodexInputItem{Type: "localImage", Path: path})
+			mediaInput = append(mediaInput, processdomain.CodexInputItem{Type: "localImage", Path: path})
 		case strings.HasPrefix(strings.ToLower(file.MimeType), "audio/"):
-			input = append(input, processdomain.CodexInputItem{Type: "localAudio", Path: path})
+			mediaInput = append(mediaInput, processdomain.CodexInputItem{Type: "localAudio", Path: path})
 		default:
 			name := strings.TrimSpace(file.LogicalPath)
 			if name == "" {
@@ -4073,7 +4071,7 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 			if name == "" {
 				name = filepath.Base(path)
 			}
-			input = append(input, processdomain.CodexInputItem{Type: "mention", Path: path, Name: name})
+			localFiles = append(localFiles, fmt.Sprintf("- name=%q path=%q mime=%q", name, path, strings.TrimSpace(file.MimeType)))
 		}
 	}
 	for _, mention := range mentions {
@@ -4081,8 +4079,21 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 		if path == "" {
 			continue
 		}
-		input = append(input, processdomain.CodexInputItem{Type: "mention", Path: path, Name: path})
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		localFiles = append(localFiles, fmt.Sprintf("- path=%q", path))
 	}
+	if len(localFiles) > 0 {
+		// GLUE: App Server has no generic local-file input; remove this manifest when it adds one.
+		prompt = joinPromptParts(prompt, "本轮可读取的本地文件如下。请直接使用文件工具读取这些路径；除非读取失败，否则不要要求用户重新上传。\n"+strings.Join(localFiles, "\n"))
+	}
+	input := make([]processdomain.CodexInputItem, 0, 1+len(mediaInput))
+	if prompt != "" {
+		input = append(input, processdomain.CodexInputItem{Type: "text", Text: prompt})
+	}
+	input = append(input, mediaInput...)
 	return input
 }
 

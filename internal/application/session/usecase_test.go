@@ -5305,11 +5305,11 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	if !files.promoted["staged-1"] {
 		t.Fatal("staged attachment file was not promoted")
 	}
-	if codexInputText(codex.resumeInput.Input) != "only this new instruction" {
-		t.Fatalf("codex resume prompt = %q", codexInputText(codex.resumeInput.Input))
+	if prompt := codexInputText(codex.resumeInput.Input); !strings.Contains(prompt, "only this new instruction") || !strings.Contains(prompt, newPath) {
+		t.Fatalf("codex resume prompt = %q", prompt)
 	}
-	if !slices.Equal(codexInputPaths(codex.resumeInput.Input, "mention"), []string{newPath}) {
-		t.Fatalf("codex resume mentions = %#v", codex.resumeInput.Input)
+	if paths := codexInputPaths(codex.resumeInput.Input, "mention"); len(paths) != 0 {
+		t.Fatalf("local files must not use mention input: %#v", codex.resumeInput.Input)
 	}
 	if codex.resumeInput.DeveloperInstructions != anyCodeDeveloperInstructions(repo.sessions["session-1"], codex.resumeInput.ArtifactDir) {
 		t.Fatalf("codex resume developer instructions = %q", codex.resumeInput.DeveloperInstructions)
@@ -5467,11 +5467,14 @@ func TestRunningAppendSteersActiveTurn(t *testing.T) {
 	if got := repo.sessions["session-1"]; got.Status != domain.StatusRunning || len(repo.appends) != 1 || repo.appends[0].Status != domain.PromptAppendInflight {
 		t.Fatalf("running append state = session=%#v appends=%#v", got, repo.appends)
 	}
-	if !codex.steerCalled || codex.steerInput.ProcessRunID != "id-1" || codexInputText(codex.steerInput.Input) != "review the result" {
+	if !codex.steerCalled || codex.steerInput.ProcessRunID != "id-1" {
 		t.Fatalf("steer input = %#v", codex.steerInput)
 	}
-	if !slices.Equal(codexInputPaths(codex.steerInput.Input, "mention"), []string{"src/main.go"}) {
-		t.Fatalf("steer mentions = %#v", codex.steerInput.Input)
+	if prompt := codexInputText(codex.steerInput.Input); !strings.Contains(prompt, "review the result") || !strings.Contains(prompt, "src/main.go") {
+		t.Fatalf("steer local file context = %q", prompt)
+	}
+	if paths := codexInputPaths(codex.steerInput.Input, "mention"); len(paths) != 0 {
+		t.Fatalf("local files must not use mention input: %#v", codex.steerInput.Input)
 	}
 	if codex.startInputs == nil || len(codex.startInputs) != 1 || codex.resumeCalled {
 		t.Fatalf("unexpected turn calls: starts=%d resume=%v", len(codex.startInputs), codex.resumeCalled)
@@ -7457,11 +7460,11 @@ func TestStartSessionPassesArchivedAttachmentsToCodex(t *testing.T) {
 	if !slices.Equal(codexInputPaths(codex.startInput.Input, "localImage"), []string{"/data/attachments/sessions/session-1/screenshot.png"}) {
 		t.Fatalf("local image input = %#v", codex.startInput.Input)
 	}
-	if !slices.Equal(codexInputPaths(codex.startInput.Input, "mention"), []string{"/data/attachments/sessions/session-1/notes.md"}) {
-		t.Fatalf("document mention input = %#v", codex.startInput.Input)
+	if prompt := codexInputText(codex.startInput.Input); !strings.Contains(prompt, "implement session") || !strings.Contains(prompt, "/data/attachments/sessions/session-1/notes.md") {
+		t.Fatalf("local file context = %q", prompt)
 	}
-	if strings.Contains(codexInputText(codex.startInput.Input), "/data/attachments/") {
-		t.Fatalf("prompt contains attachment paths: %q", codexInputText(codex.startInput.Input))
+	if paths := codexInputPaths(codex.startInput.Input, "mention"); len(paths) != 0 {
+		t.Fatalf("local files must not use mention input: %#v", codex.startInput.Input)
 	}
 }
 
@@ -9746,6 +9749,11 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 		},
 	}
 	files := newFakeAttachmentStore()
+	files.sessionAttachments["requirement-3mf"] = domain.SessionFile{
+		ID: "requirement-3mf", SessionID: "session-1", Role: domain.FileRoleInput,
+		SourceType: domain.AttachmentSourceRequirement, Filename: "model.3mf",
+		Path: "/archive/model.3mf", MimeType: "model/3mf",
+	}
 	files.sessionAttachments["artifact-image"] = domain.SessionFile{
 		ID: "artifact-image", SessionID: "session-1", Role: domain.FileRoleArtifact,
 		Path: "/archive/image.png", MimeType: "image/png",
@@ -9771,7 +9779,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.ProcessRunID != "process-run-2" {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
 	}
-	if codexInputText(codex.resumeInput.Input) != "continue work" || repo.appends[0].Status != domain.PromptAppendInflight {
+	if prompt := codexInputText(codex.resumeInput.Input); !strings.Contains(prompt, "continue work") || !strings.Contains(prompt, "/archive/model.3mf") || repo.appends[0].Status != domain.PromptAppendInflight {
 		t.Fatalf("resume prompt delivery = %#v appends=%#v", codex.resumeInput, repo.appends)
 	}
 	if !slices.Equal(codexInputPaths(codex.resumeInput.Input, "localImage"), []string{"/archive/image.png"}) {
