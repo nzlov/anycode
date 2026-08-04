@@ -1707,6 +1707,14 @@ body.desktop
   object-fit: contain;
 }
 
+.attachment-preview-frame {
+  border: 0;
+}
+
+.attachment-preview-audio {
+  width: min(560px, calc(100% - 32px));
+}
+
 .prompt-input-wrap {
   position: relative;
   min-width: 0;

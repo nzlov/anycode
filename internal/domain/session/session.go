@@ -69,6 +69,26 @@ const (
 	PreviewKindNone  PreviewKind = "none"
 )
 
+func BrowserPreviewKind(mimeType string) PreviewKind {
+	mimeType = strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
+	switch mimeType {
+	case "application/pdf":
+		return PreviewKindPDF
+	case "image/apng", "image/avif", "image/bmp", "image/gif", "image/jpeg", "image/png",
+		"image/svg+xml", "image/vnd.microsoft.icon", "image/webp", "image/x-icon":
+		return PreviewKindImage
+	case "model/gltf-binary", "model/gltf+json", "model/obj", "model/stl", "model/3mf":
+		return PreviewKindModel
+	}
+	if strings.HasPrefix(mimeType, "video/") {
+		return PreviewKindVideo
+	}
+	if strings.HasPrefix(mimeType, "audio/") {
+		return PreviewKindAudio
+	}
+	return PreviewKindNone
+}
+
 type Mode string
 
 const (

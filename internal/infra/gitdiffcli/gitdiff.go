@@ -478,7 +478,7 @@ func detectFileContentType(filePath string, body []byte) string {
 	if modelMIMEType := filetype.ModelMIMEType(filePath); modelMIMEType != "" {
 		return modelMIMEType
 	}
-	detected := strings.ToLower(http.DetectContentType(body))
+	detected := filetype.RefineBrowserMediaMIMEType(filePath, http.DetectContentType(body), body)
 	if detected != "application/octet-stream" {
 		return detected
 	}

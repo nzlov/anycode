@@ -70,6 +70,24 @@ func TestValidateWebPDimensions(t *testing.T) {
 	}
 }
 
+func TestValidateBMPDimensions(t *testing.T) {
+	header := make([]byte, 26)
+	copy(header[:2], "BM")
+	binary.LittleEndian.PutUint32(header[14:18], 40)
+	binary.LittleEndian.PutUint32(header[18:22], 100)
+	binary.LittleEndian.PutUint32(header[22:26], 100)
+	if err := validateImageDimensions(bytes.NewReader(header), "image/bmp", "image.bmp"); err != nil {
+		t.Fatalf("validateImageDimensions() small BMP error = %v", err)
+	}
+	binary.LittleEndian.PutUint32(header[18:22], 10_000)
+	binary.LittleEndian.PutUint32(header[22:26], 10_000)
+	err := validateImageDimensions(bytes.NewReader(header), "image/bmp", "image.bmp")
+	var storeErr *Error
+	if !errors.As(err, &storeErr) || storeErr.Code != "image_too_large" {
+		t.Fatalf("validateImageDimensions() large BMP error = %v", err)
+	}
+}
+
 func webPVP8XHeader(width, height int) []byte {
 	header := make([]byte, 30)
 	copy(header[0:4], "RIFF")
@@ -98,7 +116,11 @@ func TestPreviewable(t *testing.T) {
 		{"application/problem+json", true},
 		{"model/gltf-binary", true},
 		{"model/3mf", true},
-		{"image/svg+xml", false},
+		{"image/svg+xml", true},
+		{"image/avif", true},
+		{"image/bmp", true},
+		{"image/x-icon", true},
+		{"image/tiff", false},
 		{"application/octet-stream", false},
 	}
 	for _, tc := range cases {
@@ -117,6 +139,21 @@ func TestDetectMimeTypeDoesNotTrustPreviewableExtension(t *testing.T) {
 	}
 	if got := detectMimeType(strings.NewReader("\x00\x01\x02"), "forged.yml"); got != "application/octet-stream" {
 		t.Fatalf("detectMimeType() binary YAML = %q", got)
+	}
+	if got := detectMimeType(strings.NewReader("plain text"), "forged.svg"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("detectMimeType() forged SVG = %q", got)
+	}
+}
+
+func TestDetectMimeTypeRecognizesBrowserMedia(t *testing.T) {
+	if got := detectMimeType(strings.NewReader("<svg xmlns=\"http://www.w3.org/2000/svg\"/>"), "diagram.svg"); got != "image/svg+xml" {
+		t.Fatalf("detectMimeType() SVG = %q", got)
+	}
+	if got := detectMimeType(strings.NewReader("OggS\x00audio"), "sound.oga"); got != "audio/ogg" {
+		t.Fatalf("detectMimeType() Ogg audio = %q", got)
+	}
+	if got := detectMimeType(strings.NewReader("fLaCdata"), "sound.flac"); got != "audio/flac" {
+		t.Fatalf("detectMimeType() FLAC = %q", got)
 	}
 }
 
@@ -160,8 +197,11 @@ func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 		{"model/stl", session.ArtifactKindModel, session.PreviewKindModel},
 		{"model/3mf", session.ArtifactKindModel, session.PreviewKindModel},
 		{"application/octet-stream", session.ArtifactKindFile, session.PreviewKindNone},
-		{"image/svg+xml", session.ArtifactKindImage, session.PreviewKindNone},
-		{"image/bmp", session.ArtifactKindImage, session.PreviewKindNone},
+		{"image/svg+xml", session.ArtifactKindImage, session.PreviewKindImage},
+		{"image/avif", session.ArtifactKindImage, session.PreviewKindImage},
+		{"image/bmp", session.ArtifactKindImage, session.PreviewKindImage},
+		{"image/x-icon", session.ArtifactKindImage, session.PreviewKindImage},
+		{"image/tiff", session.ArtifactKindImage, session.PreviewKindNone},
 	}
 	for _, test := range tests {
 		kind, preview := classifyArtifact(test.mime)
@@ -195,6 +235,26 @@ func TestInspectArtifactPreviewsTextFiles(t *testing.T) {
 				t.Fatalf("InspectArtifact(%q) = kind %q, preview %q, previewable %v", name, artifact.ArtifactKind, artifact.PreviewKind, artifact.Previewable)
 			}
 		})
+	}
+}
+
+func TestInspectArtifactPreviewsSVG(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(outputDir, "diagram.svg")
+	if err := os.WriteFile(path, []byte("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><path d=\"M0 0h10v10z\"/></svg>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{SessionID: "session-1", SourcePath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact.MimeType != "image/svg+xml" || artifact.ArtifactKind != session.ArtifactKindImage || artifact.PreviewKind != session.PreviewKindImage || !artifact.Previewable {
+		t.Fatalf("InspectArtifact() SVG = %#v", artifact)
 	}
 }
 

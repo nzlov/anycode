@@ -99,10 +99,18 @@ func TestOpenSessionDiffFileRejectsMissingAndNonMediaVersions(t *testing.T) {
 	}
 }
 
-func TestPreviewableMediaTypeAllowsModels(t *testing.T) {
-	for _, mimeType := range []string{"model/gltf-binary", "model/gltf+json", "model/obj", "model/stl", "model/3mf"} {
+func TestPreviewableMediaTypeUsesBrowserPreviewFormats(t *testing.T) {
+	for _, mimeType := range []string{
+		"image/svg+xml", "image/avif", "image/bmp", "image/x-icon", "application/pdf",
+		"audio/ogg", "video/webm", "model/gltf-binary", "model/gltf+json", "model/obj", "model/stl", "model/3mf",
+	} {
 		if !previewableMediaType(mimeType) {
 			t.Fatalf("previewableMediaType(%q) = false", mimeType)
+		}
+	}
+	for _, mimeType := range []string{"image/tiff", "image/heic", "application/octet-stream", "text/html"} {
+		if previewableMediaType(mimeType) {
+			t.Fatalf("previewableMediaType(%q) = true", mimeType)
 		}
 	}
 }

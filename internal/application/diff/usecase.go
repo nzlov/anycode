@@ -275,16 +275,7 @@ func changedFile(files []gitdiff.DiffFile, path string) (gitdiff.DiffFile, bool)
 }
 
 func previewableMediaType(mimeType string) bool {
-	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
-	if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") || strings.HasPrefix(mimeType, "model/") {
-		return true
-	}
-	switch mimeType {
-	case "image/gif", "image/jpeg", "image/png", "image/webp":
-		return true
-	default:
-		return false
-	}
+	return session.BrowserPreviewKind(mimeType) != session.PreviewKindNone
 }
 
 func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (SessionDiffDTO, error) {

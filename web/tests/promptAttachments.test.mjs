@@ -146,6 +146,19 @@ test('local 3D model attachments use the shared model preview', () => {
   );
 
   assert.match(composerSource, /<ModelFilePreview/);
-  assert.match(composerSource, /modelFileFormat\(file\.name\)/);
-  assert.match(composerSource, /previewKind\.value = 'model'/);
+  assert.match(composerSource, /browserPreviewKind\(file\.name, file\.type\)/);
+  assert.match(composerSource, /previewKind\.value = browserPreviewKind\(file\.name, file\.type\)/);
+});
+
+test('local browser media attachments share image, audio, video, PDF, and model previews', () => {
+  const composerSource = readFileSync(
+    new URL('../src/components/PromptComposer.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(composerSource, /previewKind === 'image'/);
+  assert.match(composerSource, /previewKind === 'audio'/);
+  assert.match(composerSource, /previewKind === 'video'/);
+  assert.match(composerSource, /previewKind === 'pdf'/);
+  assert.match(composerSource, /previewKind === 'model'/);
 });

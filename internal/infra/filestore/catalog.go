@@ -599,7 +599,7 @@ func (s *Store) artifactFromFile(root *os.Root, sessionID session.ID, logicalPat
 func (s *Store) artifactFromOpenFile(sessionID session.ID, logicalPath string, path string, file *os.File, info os.FileInfo) session.SessionFile {
 	mimeType := detectMimeType(file, info.Name())
 	artifactKind, kind := classifyArtifact(mimeType)
-	if kind == session.PreviewKindImage {
+	if kind == session.PreviewKindImage && imageNeedsDimensionValidation(mimeType) {
 		if _, err := file.Seek(0, 0); err != nil || validateImageDimensions(file, mimeType, path) != nil {
 			kind = session.PreviewKindNone
 		}

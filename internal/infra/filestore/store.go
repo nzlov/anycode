@@ -218,7 +218,9 @@ func (s *Store) ArtifactDir(sessionID session.ID) string {
 func validateImageDimensions(reader io.Reader, mimeType string, path string) error {
 	width, height := 0, 0
 	var err error
-	if mimeType == "image/webp" {
+	if mimeType == "image/bmp" {
+		width, height, err = decodeBMPDimensions(reader)
+	} else if mimeType == "image/webp" {
 		width, height, err = decodeWebPDimensions(reader)
 	} else {
 		var config image.Config
@@ -232,6 +234,38 @@ func validateImageDimensions(reader io.Reader, mimeType string, path string) err
 		return &Error{Code: "image_too_large", Path: path}
 	}
 	return nil
+}
+
+func imageNeedsDimensionValidation(mimeType string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
+	switch mimeType {
+	case "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func decodeBMPDimensions(reader io.Reader) (int, int, error) {
+	var header [26]byte
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
+		return 0, 0, err
+	}
+	if string(header[:2]) != "BM" {
+		return 0, 0, errors.New("invalid BMP header")
+	}
+	if binary.LittleEndian.Uint32(header[14:18]) == 12 {
+		return int(binary.LittleEndian.Uint16(header[18:20])), int(binary.LittleEndian.Uint16(header[20:22])), nil
+	}
+	width := int64(int32(binary.LittleEndian.Uint32(header[18:22])))
+	height := int64(int32(binary.LittleEndian.Uint32(header[22:26])))
+	if height < 0 {
+		height = -height
+	}
+	if width <= 0 || height <= 0 || width > int64(^uint(0)>>1) || height > int64(^uint(0)>>1) {
+		return 0, 0, errors.New("invalid BMP dimensions")
+	}
+	return int(width), int(height), nil
 }
 
 func decodeWebPDimensions(reader io.Reader) (int, int, error) {
@@ -486,17 +520,21 @@ func detectMimeType(reader io.Reader, filename string) string {
 	detected := "application/octet-stream"
 	hasSample := false
 	if reader != nil {
-		buffer := make([]byte, 512)
+		buffer := make([]byte, 32<<10)
 		read, _ := reader.Read(buffer)
 		if read > 0 {
 			hasSample = true
-			detected = http.DetectContentType(buffer[:read])
+			sniffLength := min(read, 512)
+			detected = filetype.RefineBrowserMediaMIMEType(filename, http.DetectContentType(buffer[:sniffLength]), buffer[:read])
 			if detected != "application/octet-stream" && detected != "text/plain; charset=utf-8" {
 				return detected
 			}
 		}
 	}
 	if detected == "text/plain; charset=utf-8" {
+		if strings.EqualFold(strings.TrimSpace(strings.Split(byExtension, ";")[0]), "image/svg+xml") {
+			return detected
+		}
 		if isTextMimeType(byExtension) {
 			return byExtension
 		}
@@ -518,12 +556,7 @@ func classifyArtifact(mimeType string) (session.ArtifactKind, session.PreviewKin
 	case mimeType == "application/pdf":
 		return session.ArtifactKindPDF, session.PreviewKindPDF
 	case strings.HasPrefix(mimeType, "image/"):
-		switch mimeType {
-		case "image/png", "image/jpeg", "image/webp", "image/gif":
-			return session.ArtifactKindImage, session.PreviewKindImage
-		default:
-			return session.ArtifactKindImage, session.PreviewKindNone
-		}
+		return session.ArtifactKindImage, session.BrowserPreviewKind(mimeType)
 	case strings.HasPrefix(mimeType, "video/"):
 		return session.ArtifactKindVideo, session.PreviewKindVideo
 	case strings.HasPrefix(mimeType, "audio/"):

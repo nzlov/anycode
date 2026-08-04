@@ -63,8 +63,10 @@ inside the output directory remain available through the directory catalog.
   endpoints. The access key is sent as a Bearer header and is never placed in a URL. Browser image
   previews first exchange that Bearer credential at `/files/<id>/preview-token`, then load the image
   directly with a one-minute token restricted to that file's preview operation.
-- Preview supports safe raster images, PDF, browser-supported audio/video, and escaped text.
-  SVG is not rendered inline. Archives and unknown files are download-only and are never extracted.
+- Preview supports the browser image formats APNG, AVIF, BMP, GIF, ICO, JPEG, PNG, SVG, and WebP,
+  plus PDF, browser-supported audio/video, 3D models, and escaped text. SVG is loaded only through
+  the sandboxed image preview path. TIFF, HEIC, archives, and unknown files remain download-only and
+  are never extracted.
 - Text preview is limited to 1 MiB in the UI. Image preview rejects PNG/JPEG/GIF dimensions above
   40 million pixels, including VP8, VP8L, and VP8X WebP images.
 - File responses use `nosniff`, a restrictive CSP, safe content disposition, Last-Modified,

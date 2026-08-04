@@ -1,4 +1,4 @@
-export type DiffMediaKind = 'image' | 'audio' | 'video' | 'model';
+export type DiffMediaKind = 'image' | 'audio' | 'video' | 'pdf' | 'model';
 export type DiffMediaVersion = 'old' | 'new';
 
 export interface DiffMediaPreviewTarget {

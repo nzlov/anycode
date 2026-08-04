@@ -491,6 +491,27 @@ func TestDetectFileContentTypeRecognizesModelExtensions(t *testing.T) {
 	}
 }
 
+func TestDetectFileContentTypeRecognizesBrowserMedia(t *testing.T) {
+	tests := []struct {
+		filename string
+		body     string
+		want     string
+	}{
+		{"diagram.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>", "image/svg+xml"},
+		{"sound.oga", "OggS\x00audio", "audio/ogg"},
+		{"clip.ogv", "OggS\x00video", "video/ogg"},
+		{"sound.flac", "fLaCdata", "audio/flac"},
+		{"forged.svg", "plain text", "text/plain; charset=utf-8"},
+	}
+	for _, test := range tests {
+		t.Run(test.filename, func(t *testing.T) {
+			if got := detectFileContentType(test.filename, []byte(test.body)); got != test.want {
+				t.Fatalf("detectFileContentType() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestUntrackedMediaDoesNotBecomeTextDiff(t *testing.T) {
 	repo := initRepo(t)
 	writeFile(t, repo, "README.md", "initial\n")

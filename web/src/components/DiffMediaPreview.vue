@@ -23,6 +23,12 @@
         controls
         preload="metadata"
       />
+      <iframe
+        v-else-if="kind === 'pdf'"
+        :src="states[version].url"
+        class="diff-media-preview__frame"
+        :title="`${version === 'old' ? '旧' : '新'}版本 PDF ${filePath}`"
+      />
       <ModelFilePreview
         v-else-if="kind === 'model'"
         :src="states[version].url"
@@ -143,6 +149,14 @@ onBeforeUnmount(clear);
   border-radius: 6px;
   background: var(--ac-diff-bg);
   object-fit: contain;
+}
+
+.diff-media-preview__frame {
+  width: 100%;
+  height: min(60vh, 720px);
+  border: 0;
+  border-radius: 6px;
+  background: var(--ac-diff-bg);
 }
 
 .diff-media-preview__audio {

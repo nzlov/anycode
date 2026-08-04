@@ -6,6 +6,29 @@ import (
 	"time"
 )
 
+func TestBrowserPreviewKindUsesExplicitBrowserFormats(t *testing.T) {
+	tests := []struct {
+		mime string
+		want PreviewKind
+	}{
+		{"image/svg+xml", PreviewKindImage},
+		{"IMAGE/AVIF; charset=binary", PreviewKindImage},
+		{"image/bmp", PreviewKindImage},
+		{"image/x-icon", PreviewKindImage},
+		{"audio/ogg", PreviewKindAudio},
+		{"video/webm", PreviewKindVideo},
+		{"application/pdf", PreviewKindPDF},
+		{"image/tiff", PreviewKindNone},
+		{"image/heic", PreviewKindNone},
+		{"application/octet-stream", PreviewKindNone},
+	}
+	for _, test := range tests {
+		if got := BrowserPreviewKind(test.mime); got != test.want {
+			t.Errorf("BrowserPreviewKind(%q) = %q, want %q", test.mime, got, test.want)
+		}
+	}
+}
+
 func TestQueueExecutionOwnsQueueState(t *testing.T) {
 	now := time.Unix(20, 0).UTC()
 	session := Session{Status: StatusStopped}
