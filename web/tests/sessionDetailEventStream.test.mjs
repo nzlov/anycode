@@ -359,10 +359,19 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
   assert.match(
     pageSource,
-    /async function initializeSessionDetail\(\)[\s\S]*?startLiveUpdates\(\);[\s\S]*?await scrollEventsToBottom\(\)/,
+    /async function initializeSessionDetail\(\)[\s\S]*?startLiveUpdates\(\);[\s\S]*?await scrollEventsToBottom\(true\)/,
   );
-  assert.match(pageSource, /function isEventStreamAtBottom\(body: HTMLElement\)[\s\S]*?<= 1/);
-  assert.match(pageSource, /\{ flush: 'pre' \}/);
+  assert.match(pageSource, /let followingLatestEvent = true/);
+  assert.match(
+    pageSource,
+    /if \(!loadingOlderEvents\.value && !preservingOlderEventScroll\) \{\s*followingLatestEvent = isEventStreamAtBottom\(body\);\s*\}/,
+  );
+  assert.match(
+    pageSource,
+    /watch\(latestStreamEvent,[\s\S]*?if \(followingLatestEvent\) void scrollEventsToBottom\(\)/,
+  );
+  assert.match(pageSource, /async function scrollEventsToBottom\(force = false\)/);
+  assert.match(pageSource, /if \(!force && !followingLatestEvent\) return/);
   assert.doesNotMatch(pageSource, /< 96/);
   assert.match(pageSource, /let preservingOlderEventScroll = false/);
   assert.match(

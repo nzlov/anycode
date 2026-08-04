@@ -194,3 +194,22 @@ func TestProjectorMergesQuestionsDynamicToolCompletion(t *testing.T) {
 		t.Fatalf("questions completion content = %#v", completed.Content)
 	}
 }
+
+func TestProjectorCorrelatesQuestionsCompletionWithoutMatchingPayloadCopy(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	lines := []string{
+		`{"timestamp":"2026-07-24T11:53:14Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"outer-call","name":"exec","input":"const answer = await tools.questions({questions:[{body:\"Continue?\",options:[{label:\"Yes\"}]}]}); text(answer);"}}`,
+		`{"timestamp":"2026-07-24T11:54:24Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"DynamicToolCall","id":"question-request","tool":"questions","arguments":{"questions":[{"body":"Continue?","type":"choice","options":[{"id":"generated-yes","label":"Yes"}]}]},"status":"completed","content_items":[{"type":"inputText","text":"{\"requestId\":\"question-request\"}"}],"success":true}}}`,
+	}
+
+	var got []codexLogEvent
+	for index, line := range lines {
+		got = append(got, projector.project(parseSessionLogLine([]byte(line), "/workspace", "rollout.jsonl", int64(index)))...)
+	}
+	if len(got) != 2 {
+		t.Fatalf("projected events = %#v, want questions start and completion", got)
+	}
+	if got[1].CorrelationID != "outer-call" {
+		t.Fatalf("questions completion correlation = %q, want outer-call", got[1].CorrelationID)
+	}
+}

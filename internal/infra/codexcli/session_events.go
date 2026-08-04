@@ -292,7 +292,6 @@ type codexTranscriptProjector struct {
 	transportCalls map[string]string
 	tools          map[string]process.CodexToolContent
 	// GLUE: Rollouts give outer exec and inner questions calls different IDs; remove this alias when nested dynamic calls expose their transport call ID.
-	pendingQuestionSignature   string
 	pendingQuestionCorrelation string
 	recentCanonical            []transcriptCanonicalMessage
 	pendingMessages            []pendingTranscriptMessage
@@ -414,30 +413,23 @@ func (p *codexTranscriptProjector) correlateNestedTool(event *codexLogEvent) {
 		return
 	}
 	if event.Phase == process.CodexPhaseStarted {
-		arguments, ok := extractExecToolArgument(tool.Input.Text, "tools.questions")
-		if !ok {
+		if _, ok := extractExecToolArgument(tool.Input.Text, "tools.questions"); !ok {
 			return
 		}
-		if encoded, err := json.Marshal(arguments); err == nil {
-			p.pendingQuestionSignature = string(encoded)
-			p.pendingQuestionCorrelation = event.CorrelationID
-		}
+		p.pendingQuestionCorrelation = event.CorrelationID
 		return
 	}
-	if tool.QualifiedName != "questions" || !isTerminalCodexPhase(event.Phase) {
+	if !isTerminalCodexPhase(event.Phase) {
 		return
 	}
-	var arguments any
-	if json.Unmarshal([]byte(tool.Input.Text), &arguments) != nil {
+	if tool.QualifiedName == "questions" && p.pendingQuestionCorrelation != "" {
+		event.CorrelationID = p.pendingQuestionCorrelation
+		p.pendingQuestionCorrelation = ""
 		return
 	}
-	encoded, err := json.Marshal(arguments)
-	if err != nil || string(encoded) != p.pendingQuestionSignature {
-		return
+	if event.CorrelationID == p.pendingQuestionCorrelation {
+		p.pendingQuestionCorrelation = ""
 	}
-	event.CorrelationID = p.pendingQuestionCorrelation
-	p.pendingQuestionSignature = ""
-	p.pendingQuestionCorrelation = ""
 }
 
 func (p *codexTranscriptProjector) fillOccurredAt(event *codexLogEvent) {

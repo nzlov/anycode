@@ -732,6 +732,7 @@ let eventResourceRequest = 0;
 let mounted = false;
 let preservingOlderEventScroll = false;
 let previousEventScrollTop = Number.POSITIVE_INFINITY;
+let followingLatestEvent = true;
 
 function readPreferredRightPanelWidth() {
   try {
@@ -1276,17 +1277,10 @@ function isEventStreamAtBottom(body: HTMLElement) {
   return body.scrollHeight - body.scrollTop - body.clientHeight <= 1;
 }
 
-watch(
-  () => events.value.length,
-  () => {
-    if (loadingOlderEvents.value || preservingOlderEventScroll) return;
-    const body = streamBodyRef.value;
-    if (body && isEventStreamAtBottom(body)) {
-      void scrollEventsToBottom();
-    }
-  },
-  { flush: 'pre' },
-);
+watch(latestStreamEvent, () => {
+  if (loadingOlderEvents.value || preservingOlderEventScroll) return;
+  if (followingLatestEvent) void scrollEventsToBottom();
+});
 
 watch(latestTunnelEventId, (eventId) => {
   if (eventId) void refreshSessionTunnels();
@@ -1341,13 +1335,16 @@ async function initializeSessionDetail() {
     if (!eventsPageInfo.value.nextCursor || eventsPageInfo.value.nextCursor === requestedCursor)
       break;
   }
-  await scrollEventsToBottom();
+  await scrollEventsToBottom(true);
 }
 
 async function onEventScroll() {
   const body = streamBodyRef.value;
   if (!body) return;
   const currentScrollTop = body.scrollTop;
+  if (!loadingOlderEvents.value && !preservingOlderEventScroll) {
+    followingLatestEvent = isEventStreamAtBottom(body);
+  }
   const scrollingUp = currentScrollTop < previousEventScrollTop;
   previousEventScrollTop = currentScrollTop;
   if (!scrollingUp || currentScrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
@@ -1399,12 +1396,14 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
   return true;
 }
 
-async function scrollEventsToBottom() {
+async function scrollEventsToBottom(force = false) {
   await nextTick();
+  if (!force && !followingLatestEvent) return;
   const body = streamBodyRef.value;
   if (!body) return;
   body.scrollTop = body.scrollHeight;
   previousEventScrollTop = body.scrollTop;
+  followingLatestEvent = true;
 }
 </script>
 
