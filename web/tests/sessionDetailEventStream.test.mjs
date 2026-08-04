@@ -483,6 +483,12 @@ test('assistant markdown is parsed and sanitized at the rendering boundary', () 
   assert.match(markdownSource, /DOMPurify\.sanitize/);
   assert.match(markdownSource, /ALLOWED_TAGS:/);
   assert.match(markdownSource, /ALLOWED_ATTR: \['href', 'title', 'src', 'alt'\]/);
+  assert.match(markdownSource, /:deep\(h1\)[\s\S]*font-size: 28px;/);
+  assert.match(markdownSource, /:deep\(h2\)[\s\S]*font-size: 24px;/);
+  assert.match(markdownSource, /:deep\(h3\)[\s\S]*font-size: 20px;/);
+  assert.match(markdownSource, /:deep\(h4\)[\s\S]*font-size: 18px;/);
+  assert.match(markdownSource, /:deep\(h5\)[\s\S]*font-size: 16px;/);
+  assert.match(markdownSource, /:deep\(h6\)[\s\S]*font-size: 14px;/);
   assert.match(markdownSource, /:deep\(img\)[\s\S]*max-width: 100%;[\s\S]*height: auto;/);
   assert.match(markdownSource, /:deep\(table\)[\s\S]*max-width: 100%;[\s\S]*overflow-x: auto;/);
   const sanitizeConfig = markdownSource.slice(

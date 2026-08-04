@@ -106,6 +106,40 @@ function openResource(event: MouseEvent) {
   margin: 0 0 8px;
 }
 
+.markdown-content :deep(h1),
+.markdown-content :deep(h2),
+.markdown-content :deep(h3),
+.markdown-content :deep(h4),
+.markdown-content :deep(h5),
+.markdown-content :deep(h6) {
+  margin: 16px 0 8px;
+  line-height: 1.35;
+}
+
+.markdown-content :deep(h1) {
+  font-size: 28px;
+}
+
+.markdown-content :deep(h2) {
+  font-size: 24px;
+}
+
+.markdown-content :deep(h3) {
+  font-size: 20px;
+}
+
+.markdown-content :deep(h4) {
+  font-size: 18px;
+}
+
+.markdown-content :deep(h5) {
+  font-size: 16px;
+}
+
+.markdown-content :deep(h6) {
+  font-size: 14px;
+}
+
 .markdown-content :deep(:last-child) {
   margin-bottom: 0;
 }
