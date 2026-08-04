@@ -200,6 +200,7 @@ type CodexInputItem struct {
 	Text string
 	Path string
 	Name string
+	Data []byte
 }
 
 type CodexAction string

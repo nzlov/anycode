@@ -3,6 +3,7 @@ package codexcli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -832,15 +833,56 @@ func TestSlashCommandsMatchesAppServerActions(t *testing.T) {
 }
 
 func TestAppServerInputUsesStructuredMentions(t *testing.T) {
-	items, err := appServerInput([]process.CodexInputItem{
+	items, cleanup, err := appServerInput([]process.CodexInputItem{
 		{Type: "text", Text: "inspect the selected file"},
 		{Type: "mention", Name: "src/main.go", Path: "/workspace/src/main.go"},
 	}, "")
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 2 || items[1]["type"] != "mention" || items[1]["name"] != "src/main.go" || items[1]["path"] != "/workspace/src/main.go" {
 		t.Fatalf("input = %#v", items)
+	}
+}
+
+func TestAppServerInputMaterializesInlineFilesAndCleansThem(t *testing.T) {
+	items, cleanup, err := appServerInput([]process.CodexInputItem{
+		{Type: "localImage", Name: "screen.png", Data: []byte("image")},
+		{Type: "localAudio", Name: "note.wav", Data: []byte("audio")},
+		{Type: "mention", Name: "clip.mp4", Data: []byte("video")},
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 3 || items[0]["type"] != "localImage" || items[1]["type"] != "localAudio" || items[2]["type"] != "mention" {
+		cleanup()
+		t.Fatalf("input = %#v", items)
+	}
+	paths := make([]string, 0, len(items))
+	for index, item := range items {
+		path, _ := item["path"].(string)
+		paths = append(paths, path)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			cleanup()
+			t.Fatal(err)
+		}
+		if string(content) != []string{"image", "audio", "video"}[index] {
+			cleanup()
+			t.Fatalf("materialized content = %q", content)
+		}
+	}
+	routeContext, cancelRoute := context.WithCancel(context.Background())
+	route := &appServerRun{
+		ctx: routeContext, cancel: cancelRoute, closed: make(chan struct{}), events: make(chan process.CodexEvent),
+	}
+	route.retainInputCleanup(cleanup)
+	route.close()
+	for _, path := range paths {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("temporary prompt file still exists: %s", path)
+		}
 	}
 }
 
@@ -853,7 +895,8 @@ func TestAppServerInputResolvesRelativeMentionInsideWorkdir(t *testing.T) {
 	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	items, err := appServerInput([]process.CodexInputItem{{Type: "mention", Name: "src/main.go", Path: "src/main.go"}}, root)
+	items, cleanup, err := appServerInput([]process.CodexInputItem{{Type: "mention", Name: "src/main.go", Path: "src/main.go"}}, root)
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -867,7 +910,8 @@ func TestAppServerInputResolvesRelativeMentionInsideWorkdir(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := appServerInput([]process.CodexInputItem{{Type: "mention", Name: "link.txt", Path: "link.txt"}}, root); err == nil {
+	if _, cleanup, err := appServerInput([]process.CodexInputItem{{Type: "mention", Name: "link.txt", Path: "link.txt"}}, root); err == nil {
+		cleanup()
 		t.Fatal("symlink escaping workdir was accepted")
 	}
 }

@@ -14,9 +14,16 @@ import (
 
 type UseCase interface {
 	StageAttachment(ctx context.Context, input StageAttachmentInput) (AttachmentDTO, error)
+	StageAnnotation(ctx context.Context, input StageAnnotationInput) (AttachmentDTO, error)
 	DeleteStagedAttachment(ctx context.Context, id domain.StagedAttachmentID) error
 	DeleteSessionAttachment(ctx context.Context, id domain.SessionAttachmentID) error
 	OpenAttachment(ctx context.Context, id domain.AttachmentID, mode OpenMode) (Stream, error)
+}
+
+type StageAnnotationInput struct {
+	OwnerKeyHash string
+	Filename     string
+	Content      string
 }
 
 type StageAttachmentInput struct {
@@ -41,6 +48,7 @@ var (
 
 type AttachmentDTO struct {
 	ID          string
+	Kind        string
 	Filename    string
 	MimeType    string
 	Size        int64
@@ -66,6 +74,36 @@ func New(repo domain.StagedAttachmentRepository, store domain.AttachmentStore) *
 }
 
 func (s *Service) StageAttachment(ctx context.Context, input StageAttachmentInput) (AttachmentDTO, error) {
+	return s.stage(ctx, domain.StageAttachmentInput{
+		OwnerKeyHash: input.OwnerKeyHash,
+		Kind:         domain.AttachmentKindUpload,
+		Filename:     input.Filename,
+		MimeType:     input.MimeType,
+		Size:         input.Size,
+		Reader:       input.Reader,
+	})
+}
+
+func (s *Service) StageAnnotation(ctx context.Context, input StageAnnotationInput) (AttachmentDTO, error) {
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return AttachmentDTO{}, errors.New("annotation content is required")
+	}
+	filename := strings.TrimSpace(input.Filename)
+	if filename == "" {
+		filename = "preview-annotation.md"
+	}
+	return s.stage(ctx, domain.StageAttachmentInput{
+		OwnerKeyHash: input.OwnerKeyHash,
+		Kind:         domain.AttachmentKindAnnotation,
+		Filename:     filename,
+		MimeType:     "text/markdown",
+		Size:         int64(len(content)),
+		Reader:       strings.NewReader(content),
+	})
+}
+
+func (s *Service) stage(ctx context.Context, input domain.StageAttachmentInput) (AttachmentDTO, error) {
 	if s == nil {
 		return AttachmentDTO{}, errors.New("attachment usecase: nil service")
 	}
@@ -81,13 +119,7 @@ func (s *Service) StageAttachment(ctx context.Context, input StageAttachmentInpu
 	if strings.TrimSpace(input.Filename) == "" {
 		return AttachmentDTO{}, errors.New("attachment filename is required")
 	}
-	staged, err := s.store.Stage(ctx, domain.StageAttachmentInput{
-		OwnerKeyHash: input.OwnerKeyHash,
-		Filename:     input.Filename,
-		MimeType:     input.MimeType,
-		Size:         input.Size,
-		Reader:       input.Reader,
-	})
+	staged, err := s.store.Stage(ctx, input)
 	if err != nil {
 		return AttachmentDTO{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "stage attachment file failed").WithRetryable(true)
 	}
@@ -183,6 +215,7 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 func toAttachmentDTO(attachment domain.StagedAttachment) AttachmentDTO {
 	return AttachmentDTO{
 		ID:          string(attachment.ID),
+		Kind:        string(attachment.Kind),
 		Filename:    attachment.Filename,
 		MimeType:    attachment.MimeType,
 		Size:        attachment.Size,

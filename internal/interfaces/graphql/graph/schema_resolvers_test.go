@@ -1028,13 +1028,20 @@ func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 		},
 	}
 	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+	sessionFileID := "file-1"
+	filePath := "media/demo.mp4"
+	version := "old"
 
 	got, err := resolver.AppendPrompt(context.Background(), model.AppendPromptInput{
 		SessionID:           "session-1",
 		Body:                "continue",
 		StagedAttachmentIds: []string{"staged-1", "staged-2"},
 		ArtifactIds:         []string{"artifact-1", "artifact-2"},
-		Mentions:            []*model.PromptMentionInput{{Path: "src/main.go"}},
+		FileReferences: []*model.PromptFileReferenceInput{
+			{Kind: "session_file", SessionFileID: stringPtr(&sessionFileID)},
+			{Kind: "diff", FilePath: stringPtr(&filePath), Version: stringPtr(&version)},
+		},
+		Mentions: []*model.PromptMentionInput{{Path: "src/main.go"}},
 	})
 	if err != nil {
 		t.Fatalf("AppendPrompt() error = %v", err)
@@ -1050,6 +1057,9 @@ func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(sessions.gotAppend.Mentions, []sessiondomain.PromptMention{{Path: "src/main.go"}}) {
 		t.Fatalf("AppendPrompt() mentions = %#v", sessions.gotAppend.Mentions)
+	}
+	if len(sessions.gotAppend.FileReferences) != 2 || sessions.gotAppend.FileReferences[0].SessionFileID != "file-1" || sessions.gotAppend.FileReferences[1].Version != "old" {
+		t.Fatalf("AppendPrompt() file references = %#v", sessions.gotAppend.FileReferences)
 	}
 }
 

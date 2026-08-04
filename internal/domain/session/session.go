@@ -17,6 +17,7 @@ var (
 	ErrInvalidWorktreeCleanup  = errors.New("invalid worktree cleanup transition")
 	ErrWorktreeUnavailable     = errors.New("session worktree is unavailable")
 	ErrSessionFileNotFound     = errors.New("session file not found")
+	ErrPromptFileUnavailable   = errors.New("prompt file unavailable")
 )
 
 type ID string
@@ -29,6 +30,13 @@ type SessionFileID string
 type SessionAttachmentID = SessionFileID
 
 type AttachmentSourceType string
+
+type AttachmentKind string
+
+const (
+	AttachmentKindUpload     AttachmentKind = "upload"
+	AttachmentKindAnnotation AttachmentKind = "annotation"
+)
 
 const (
 	AttachmentSourceRequirement  AttachmentSourceType = "requirement"
@@ -509,7 +517,7 @@ type SessionFile struct {
 	Role         FileRole
 	SourceType   AttachmentSourceType
 	SourceID     string
-	Kind         string
+	Kind         AttachmentKind
 	ArtifactKind ArtifactKind
 	LogicalPath  string
 	Filename     string
@@ -518,6 +526,8 @@ type SessionFile struct {
 	Size         int64
 	Previewable  bool
 	PreviewKind  PreviewKind
+	ContextText  string
+	InlineData   []byte
 	CreatedAt    time.Time
 }
 
@@ -561,6 +571,7 @@ type ArtifactOutputDirectory struct {
 type StagedAttachment struct {
 	ID           StagedAttachmentID
 	OwnerKeyHash string
+	Kind         AttachmentKind
 	Filename     string
 	Path         string
 	MimeType     string
@@ -571,6 +582,7 @@ type StagedAttachment struct {
 
 type StageAttachmentInput struct {
 	OwnerKeyHash string
+	Kind         AttachmentKind
 	Filename     string
 	MimeType     string
 	Size         int64
@@ -604,10 +616,35 @@ type PromptAppend struct {
 	Attachments            []SessionAttachment
 	ArtifactIDs            []SessionFileID
 	Artifacts              []SessionFile
+	FileReferences         []PromptFileReference
 }
 
 type PromptMention struct {
 	Path string `json:"path"`
+}
+
+type PromptFileReferenceKind string
+
+const (
+	PromptFileReferenceSessionFile PromptFileReferenceKind = "session_file"
+	PromptFileReferenceDiff        PromptFileReferenceKind = "diff"
+)
+
+type PromptFileReference struct {
+	Kind          PromptFileReferenceKind `json:"kind"`
+	SessionFileID SessionFileID           `json:"sessionFileId,omitempty"`
+	FilePath      string                  `json:"filePath,omitempty"`
+	Version       string                  `json:"version,omitempty"`
+}
+
+type PromptFileContent struct {
+	Filename string
+	MimeType string
+	Data     []byte
+}
+
+type PromptFileReader interface {
+	OpenPromptFile(ctx context.Context, sessionID ID, reference PromptFileReference) (PromptFileContent, error)
 }
 
 type MergeRecord struct {

@@ -30,6 +30,22 @@ func promptMentionsFromInput(input []*model.PromptMentionInput) []sessiondomain.
 	return mentions
 }
 
+func promptFileReferencesFromInput(input []*model.PromptFileReferenceInput) []sessiondomain.PromptFileReference {
+	references := make([]sessiondomain.PromptFileReference, 0, len(input))
+	for _, reference := range input {
+		if reference == nil {
+			continue
+		}
+		references = append(references, sessiondomain.PromptFileReference{
+			Kind:          sessiondomain.PromptFileReferenceKind(reference.Kind),
+			SessionFileID: sessiondomain.SessionFileID(stringValue(reference.SessionFileID, "")),
+			FilePath:      stringValue(reference.FilePath, ""),
+			Version:       stringValue(reference.Version, ""),
+		})
+	}
+	return references
+}
+
 func buildListSessionsInput(input *model.ListSessionsInput) sessionapp.ListSessionsInput {
 	if input == nil {
 		return sessionapp.ListSessionsInput{}

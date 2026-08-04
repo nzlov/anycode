@@ -67,21 +67,24 @@ type appServerRuntime struct {
 }
 
 type appServerRun struct {
-	handle     process.CodexHandle
-	sessionID  process.SessionID
-	workdir    string
-	ctx        context.Context
-	cancel     context.CancelFunc
-	events     chan process.CodexEvent
-	eventsMu   sync.RWMutex
-	sequence   atomic.Int64
-	turnMu     sync.RWMutex
-	turnID     string
-	claimed    bool
-	closed     chan struct{}
-	closeOnce  sync.Once
-	finished   chan process.ExitResult
-	finishOnce sync.Once
+	handle      process.CodexHandle
+	sessionID   process.SessionID
+	workdir     string
+	ctx         context.Context
+	cancel      context.CancelFunc
+	events      chan process.CodexEvent
+	eventsMu    sync.RWMutex
+	sequence    atomic.Int64
+	turnMu      sync.RWMutex
+	turnID      string
+	cleanupMu   sync.Mutex
+	cleanups    []func()
+	cleanupDone bool
+	claimed     bool
+	closed      chan struct{}
+	closeOnce   sync.Once
+	finished    chan process.ExitResult
+	finishOnce  sync.Once
 }
 
 func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRuntime, error) {
@@ -450,11 +453,32 @@ func (r *appServerRun) emit(event process.CodexEvent) {
 func (r *appServerRun) close() {
 	r.closeOnce.Do(func() {
 		r.cancel()
+		r.cleanupMu.Lock()
+		cleanups := r.cleanups
+		r.cleanups = nil
+		r.cleanupDone = true
+		r.cleanupMu.Unlock()
+		for _, cleanup := range cleanups {
+			cleanup()
+		}
 		close(r.closed)
 		r.eventsMu.Lock()
 		close(r.events)
 		r.eventsMu.Unlock()
 	})
+}
+
+func (r *appServerRun) retainInputCleanup(cleanup func()) {
+	if cleanup == nil {
+		return
+	}
+	r.cleanupMu.Lock()
+	defer r.cleanupMu.Unlock()
+	if r.cleanupDone {
+		cleanup()
+		return
+	}
+	r.cleanups = append(r.cleanups, cleanup)
 }
 
 func (r *appServerRun) finish(result process.ExitResult) {

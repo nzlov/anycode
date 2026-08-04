@@ -123,6 +123,7 @@ type AppendPromptInput struct {
 	Body                string
 	StagedAttachmentIDs []domain.StagedAttachmentID
 	ArtifactIDs         []domain.SessionFileID
+	FileReferences      []domain.PromptFileReference
 	Mentions            []domain.PromptMention
 }
 
@@ -316,6 +317,7 @@ type Service struct {
 	workflows               domain.WorkflowStarter
 	merge                   gitdiffdomain.MergePort
 	diffCounter             sessionDiffCounter
+	promptFileReader        domain.PromptFileReader
 	processes               processdomain.Repository
 	codex                   processdomain.CodexProcess
 	terminal                terminaldomain.Runtime
@@ -435,6 +437,12 @@ func WithMergePort(merge gitdiffdomain.MergePort) Option {
 func WithDiffCounter(counter sessionDiffCounter) Option {
 	return func(s *Service) {
 		s.diffCounter = counter
+	}
+}
+
+func WithPromptFileReader(reader domain.PromptFileReader) Option {
+	return func(s *Service) {
+		s.promptFileReader = reader
 	}
 }
 
@@ -4046,23 +4054,31 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 }
 
 func codexInput(prompt string, files []domain.SessionFile, mentions []domain.PromptMention) []processdomain.CodexInputItem {
-	mediaInput := make([]processdomain.CodexInputItem, 0, len(files))
+	fileInput := make([]processdomain.CodexInputItem, 0, len(files))
 	localFiles := make([]string, 0, len(files)+len(mentions))
 	seen := make(map[string]struct{}, len(files))
 	for _, file := range files {
+		if file.Kind == domain.AttachmentKindAnnotation {
+			if contextText := strings.TrimSpace(file.ContextText); contextText != "" {
+				fileInput = append(fileInput, processdomain.CodexInputItem{Type: "text", Text: contextText})
+			}
+			continue
+		}
 		path := strings.TrimSpace(file.Path)
-		if path == "" {
+		if path == "" && len(file.InlineData) == 0 {
 			continue
 		}
-		if _, ok := seen[path]; ok {
+		key := sessionFileDedupKey(file)
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[path] = struct{}{}
+		seen[key] = struct{}{}
+		mimeType := strings.ToLower(strings.TrimSpace(file.MimeType))
 		switch {
-		case strings.HasPrefix(strings.ToLower(file.MimeType), "image/"):
-			mediaInput = append(mediaInput, processdomain.CodexInputItem{Type: "localImage", Path: path})
-		case strings.HasPrefix(strings.ToLower(file.MimeType), "audio/"):
-			mediaInput = append(mediaInput, processdomain.CodexInputItem{Type: "localAudio", Path: path})
+		case mimeType == "image/png", mimeType == "image/jpeg", mimeType == "image/webp":
+			fileInput = append(fileInput, processdomain.CodexInputItem{Type: "localImage", Path: path, Name: file.Filename, Data: file.InlineData})
+		case strings.HasPrefix(mimeType, "audio/"):
+			fileInput = append(fileInput, processdomain.CodexInputItem{Type: "localAudio", Path: path, Name: file.Filename, Data: file.InlineData})
 		default:
 			name := strings.TrimSpace(file.LogicalPath)
 			if name == "" {
@@ -4071,7 +4087,11 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 			if name == "" {
 				name = filepath.Base(path)
 			}
-			localFiles = append(localFiles, fmt.Sprintf("- name=%q path=%q mime=%q", name, path, strings.TrimSpace(file.MimeType)))
+			if len(file.InlineData) > 0 {
+				fileInput = append(fileInput, processdomain.CodexInputItem{Type: "mention", Path: path, Name: name, Data: file.InlineData})
+			} else {
+				localFiles = append(localFiles, fmt.Sprintf("- name=%q path=%q mime=%q", name, path, strings.TrimSpace(file.MimeType)))
+			}
 		}
 	}
 	for _, mention := range mentions {
@@ -4089,11 +4109,11 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 		// GLUE: App Server has no generic local-file input; remove this manifest when it adds one.
 		prompt = joinPromptParts(prompt, "本轮可读取的本地文件如下。请直接使用文件工具读取这些路径；除非读取失败，否则不要要求用户重新上传。\n"+strings.Join(localFiles, "\n"))
 	}
-	input := make([]processdomain.CodexInputItem, 0, 1+len(mediaInput))
+	input := make([]processdomain.CodexInputItem, 0, 1+len(fileInput))
 	if prompt != "" {
 		input = append(input, processdomain.CodexInputItem{Type: "text", Text: prompt})
 	}
-	input = append(input, mediaInput...)
+	input = append(input, fileInput...)
 	return input
 }
 
@@ -4130,21 +4150,32 @@ func codexAction(prompt string) (string, processdomain.CodexAction, string) {
 func appendUniqueSessionFiles(files []domain.SessionFile, additions ...domain.SessionFile) []domain.SessionFile {
 	seen := make(map[string]struct{}, len(files)+len(additions))
 	for _, file := range files {
-		if file.Path != "" {
-			seen[file.Path] = struct{}{}
+		if key := sessionFileDedupKey(file); key != "" {
+			seen[key] = struct{}{}
 		}
 	}
 	for _, file := range additions {
-		if file.Path == "" {
+		key := sessionFileDedupKey(file)
+		if key == "" {
 			continue
 		}
-		if _, ok := seen[file.Path]; ok {
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[file.Path] = struct{}{}
+		seen[key] = struct{}{}
 		files = append(files, file)
 	}
 	return files
+}
+
+func sessionFileDedupKey(file domain.SessionFile) string {
+	if file.Path != "" {
+		return "path:" + file.Path
+	}
+	if file.ID != "" {
+		return "id:" + string(file.ID)
+	}
+	return ""
 }
 
 func appendUniquePromptMentions(mentions []domain.PromptMention, additions ...domain.PromptMention) []domain.PromptMention {
@@ -4207,7 +4238,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	if err != nil {
 		return codexStartOptions{}, fmt.Errorf("list prompt appends: %w", err)
 	}
-	pendingPrompt, pendingIDs, promptFiles, promptMentions, cancelledIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
+	pendingPrompt, pendingIDs, promptFiles, promptMentions, cancelledIDs, err := s.pendingPromptInput(ctx, session, appends)
 	if err != nil {
 		return codexStartOptions{}, err
 	}
@@ -4252,7 +4283,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	return options, nil
 }
 
-func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, []domain.SessionFile, []domain.PromptMention, []string, error) {
+func (s *Service) pendingPromptInput(ctx context.Context, session domain.Session, appends []domain.PromptAppend) (string, []string, []domain.SessionFile, []domain.PromptMention, []string, error) {
 	parts := make([]string, 0, len(appends))
 	ids := make([]string, 0, len(appends))
 	inputFiles := make([]domain.SessionFile, 0)
@@ -4262,15 +4293,20 @@ func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, a
 		if promptAppend.Status != domain.PromptAppendPending {
 			continue
 		}
-		attachments, err := s.listPromptAppendAttachments(ctx, sessionID, promptAppend.ID)
+		attachments, err := s.listPromptAppendAttachments(ctx, session.ID, promptAppend.ID)
 		if err != nil {
 			return "", nil, nil, nil, nil, err
 		}
-		artifacts, err := s.resolvePromptArtifacts(ctx, sessionID, promptAppend.ArtifactIDs, true)
+		artifacts, err := s.resolvePromptArtifacts(ctx, session.ID, promptAppend.ArtifactIDs, true)
 		if err != nil {
 			return "", nil, nil, nil, nil, err
 		}
 		currentFiles := append(append([]domain.SessionFile(nil), attachments...), artifacts...)
+		referencedFiles, err := s.resolvePromptFiles(ctx, session, promptAppend.FileReferences, true)
+		if err != nil {
+			return "", nil, nil, nil, nil, err
+		}
+		currentFiles = appendUniqueSessionFiles(currentFiles, referencedFiles...)
 		body := strings.TrimSpace(promptAppend.Body)
 		if body == "" && len(currentFiles) == 0 && len(promptAppend.Mentions) == 0 {
 			cancelledIDs = append(cancelledIDs, promptAppend.ID)
@@ -7326,6 +7362,10 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
+	fileReferences, err := normalizePromptFileReferences(input.FileReferences)
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
 	mentions, err := normalizePromptMentions(input.Mentions)
 	if err != nil {
 		return PromptAppendDTO{}, err
@@ -7335,7 +7375,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	if body == "" {
-		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(mentions) == 0 {
+		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(fileReferences) == 0 && len(mentions) == 0 {
 			return PromptAppendDTO{}, errors.New("prompt append body is required")
 		}
 	}
@@ -7367,6 +7407,10 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if err != nil {
 			return err
 		}
+		referencedFiles, err := s.resolvePromptFiles(ctx, session, fileReferences, false)
+		if err != nil {
+			return err
+		}
 		id, err := s.generateID()
 		if err != nil {
 			return fmt.Errorf("generate prompt append id: %w", err)
@@ -7376,15 +7420,16 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			return err
 		}
 		append = domain.PromptAppend{
-			ID:          string(id),
-			SessionID:   input.SessionID,
-			Body:        body,
-			Mentions:    mentions,
-			Status:      domain.PromptAppendPending,
-			CreatedAt:   s.now(),
-			Attachments: archivedAttachments,
-			ArtifactIDs: artifactIDs,
-			Artifacts:   artifacts,
+			ID:             string(id),
+			SessionID:      input.SessionID,
+			Body:           body,
+			Mentions:       mentions,
+			Status:         domain.PromptAppendPending,
+			CreatedAt:      s.now(),
+			Attachments:    archivedAttachments,
+			ArtifactIDs:    artifactIDs,
+			Artifacts:      artifacts,
+			FileReferences: fileReferences,
 		}
 		if session.Mode == domain.ModeChat && session.Status == domain.StatusStopped {
 			options := codexStartOptions{queueKind: domain.QueueKindPromptAppend}
@@ -7417,6 +7462,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 				files := make([]domain.SessionFile, len(archivedAttachments))
 				copy(files, archivedAttachments)
 				files = appendUniqueSessionFiles(files, artifacts...)
+				files = appendUniqueSessionFiles(files, referencedFiles...)
 				if err := s.codex.Steer(ctx, processdomain.CodexSteerInput{
 					ProcessRunID: active.ID,
 					Input:        codexInput(body, files, mentions),
@@ -7463,6 +7509,86 @@ func normalizeArtifactIDs(ids []domain.SessionFileID) ([]domain.SessionFileID, e
 		result = append(result, id)
 	}
 	return result, nil
+}
+
+func normalizePromptFileReferences(references []domain.PromptFileReference) ([]domain.PromptFileReference, error) {
+	normalized := make([]domain.PromptFileReference, 0, len(references))
+	seen := make(map[string]struct{}, len(references))
+	for _, reference := range references {
+		switch reference.Kind {
+		case domain.PromptFileReferenceSessionFile:
+			if reference.SessionFileID == "" || reference.FilePath != "" || reference.Version != "" {
+				return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session file reference is invalid")
+			}
+			reference = domain.PromptFileReference{Kind: reference.Kind, SessionFileID: reference.SessionFileID}
+		case domain.PromptFileReferenceDiff:
+			paths, err := normalizePromptMentions([]domain.PromptMention{{Path: reference.FilePath}})
+			if err != nil || len(paths) != 1 || reference.SessionFileID != "" || reference.Version != "old" && reference.Version != "new" {
+				return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "diff file reference is invalid")
+			}
+			reference = domain.PromptFileReference{Kind: reference.Kind, FilePath: paths[0].Path, Version: reference.Version}
+		default:
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "file reference kind is invalid")
+		}
+		key, _ := json.Marshal(reference)
+		if _, ok := seen[string(key)]; ok {
+			continue
+		}
+		seen[string(key)] = struct{}{}
+		normalized = append(normalized, reference)
+	}
+	return normalized, nil
+}
+
+func (s *Service) resolvePromptFiles(ctx context.Context, session domain.Session, references []domain.PromptFileReference, allowMissing bool) ([]domain.SessionFile, error) {
+	files := make([]domain.SessionFile, 0, len(references))
+	for _, reference := range references {
+		if reference.Kind == domain.PromptFileReferenceSessionFile {
+			if s.files == nil {
+				return nil, errors.New("session file store is required")
+			}
+			file, err := s.files.FindSessionFile(ctx, reference.SessionFileID)
+			if err != nil {
+				if allowMissing && errors.Is(err, domain.ErrSessionFileNotFound) {
+					continue
+				}
+				return nil, fmt.Errorf("find prompt file %s: %w", reference.SessionFileID, err)
+			}
+			if file.SessionID != session.ID {
+				if allowMissing {
+					continue
+				}
+				return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "prompt file is unavailable")
+			}
+			files = appendUniqueSessionFiles(files, file)
+			continue
+		}
+		if s.promptFileReader == nil {
+			return nil, errors.New("prompt file reader is required")
+		}
+		content, err := s.promptFileReader.OpenPromptFile(ctx, session.ID, reference)
+		if err != nil {
+			if allowMissing && errors.Is(err, domain.ErrPromptFileUnavailable) {
+				continue
+			}
+			return nil, fmt.Errorf("open prompt diff file: %w", err)
+		}
+		if len(content.Data) == 0 {
+			if allowMissing {
+				continue
+			}
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "prompt file is unavailable")
+		}
+		files = appendUniqueSessionFiles(files, domain.SessionFile{
+			ID:         domain.SessionFileID("diff:" + reference.Version + ":" + reference.FilePath),
+			SessionID:  session.ID,
+			Filename:   content.Filename,
+			MimeType:   content.MimeType,
+			Size:       int64(len(content.Data)),
+			InlineData: content.Data,
+		})
+	}
+	return files, nil
 }
 
 func (s *Service) resolvePromptArtifacts(ctx context.Context, sessionID domain.ID, ids []domain.SessionFileID, allowMissing bool) ([]domain.SessionFile, error) {

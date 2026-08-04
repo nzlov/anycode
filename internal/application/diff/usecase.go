@@ -85,11 +85,12 @@ type CommitHistoryDTO struct {
 }
 
 const (
-	defaultPage     = 1
-	defaultPageSize = 20
-	maxPageSize     = 100
-	modeSingle      = "single"
-	modeAll         = "all"
+	defaultPage        = 1
+	defaultPageSize    = 20
+	maxPageSize        = 100
+	maxPromptFileBytes = 128 << 20
+	modeSingle         = "single"
+	modeAll            = "all"
 )
 
 type Service struct {
@@ -210,6 +211,10 @@ func (s *Service) CountSessionChangedFiles(ctx context.Context, sessionID sessio
 }
 
 func (s *Service) OpenSessionDiffFile(ctx context.Context, input OpenSessionDiffFileInput) (FileStream, error) {
+	return s.openSessionDiffFile(ctx, input, true)
+}
+
+func (s *Service) openSessionDiffFile(ctx context.Context, input OpenSessionDiffFileInput, requireBrowserPreview bool) (FileStream, error) {
 	if s == nil || s.sessions == nil || s.projects == nil || s.diff == nil {
 		return FileStream{}, errors.New("diff usecase is unavailable")
 	}
@@ -258,11 +263,40 @@ func (s *Service) OpenSessionDiffFile(ctx context.Context, input OpenSessionDiff
 		}
 		return FileStream{}, err
 	}
-	if !previewableMediaType(content.MimeType) {
+	if requireBrowserPreview && !previewableMediaType(content.MimeType) {
 		content.Reader.Close()
 		return FileStream{}, ErrDiffFileNotMedia
 	}
 	return FileStream{Filename: content.Filename, MimeType: content.MimeType, Size: content.Size, Reader: content.Reader, Seeker: content.Seeker}, nil
+}
+
+func (s *Service) OpenPromptFile(ctx context.Context, sessionID session.ID, reference session.PromptFileReference) (session.PromptFileContent, error) {
+	if reference.Kind != session.PromptFileReferenceDiff {
+		return session.PromptFileContent{}, session.ErrPromptFileUnavailable
+	}
+	stream, err := s.openSessionDiffFile(ctx, OpenSessionDiffFileInput{
+		SessionID: sessionID,
+		FilePath:  reference.FilePath,
+		Version:   gitdiff.FileVersion(reference.Version),
+	}, false)
+	if err != nil {
+		if errors.Is(err, ErrDiffFileNotFound) || errors.Is(err, ErrDiffFileVersionMissing) || errors.Is(err, ErrDiffFileNotMedia) {
+			return session.PromptFileContent{}, session.ErrPromptFileUnavailable
+		}
+		return session.PromptFileContent{}, err
+	}
+	defer stream.Reader.Close()
+	if stream.Size > maxPromptFileBytes {
+		return session.PromptFileContent{}, session.ErrPromptFileUnavailable
+	}
+	data, err := io.ReadAll(io.LimitReader(stream.Reader, maxPromptFileBytes+1))
+	if err != nil {
+		return session.PromptFileContent{}, fmt.Errorf("read prompt diff file: %w", err)
+	}
+	if len(data) == 0 || len(data) > maxPromptFileBytes {
+		return session.PromptFileContent{}, session.ErrPromptFileUnavailable
+	}
+	return session.PromptFileContent{Filename: stream.Filename, MimeType: stream.MimeType, Data: data}, nil
 }
 
 func changedFile(files []gitdiff.DiffFile, path string) (gitdiff.DiffFile, bool) {

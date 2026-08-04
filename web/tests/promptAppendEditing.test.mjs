@@ -76,5 +76,5 @@ test('empty prompt append sends continue', () => {
   );
 
   assert.match(appendBlock, /const text = body\.trim\(\) \|\| 'continue';/);
-  assert.match(appendBlock, /await appendPrompt\(sessionId, text,/);
+  assert.match(appendBlock, /await appendPrompt\(\s*sessionId,\s*text,/);
 });

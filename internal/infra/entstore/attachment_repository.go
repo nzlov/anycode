@@ -20,6 +20,7 @@ func (r *AttachmentRepository) SaveStagedAttachment(ctx context.Context, attachm
 	create := r.client.StagedAttachment.Create().
 		SetID(string(attachment.ID)).
 		SetOwnerKeyHash(attachment.OwnerKeyHash).
+		SetKind(string(attachment.Kind)).
 		SetFilename(attachment.Filename).
 		SetPath(attachment.Path).
 		SetMimeType(attachment.MimeType).
@@ -53,6 +54,7 @@ func toDomainStagedAttachment(row *ent.StagedAttachment) domainsession.StagedAtt
 	return domainsession.StagedAttachment{
 		ID:           domainsession.StagedAttachmentID(row.ID),
 		OwnerKeyHash: row.OwnerKeyHash,
+		Kind:         domainsession.AttachmentKind(row.Kind),
 		Filename:     row.Filename,
 		Path:         row.Path,
 		MimeType:     row.MimeType,

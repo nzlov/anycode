@@ -98,6 +98,7 @@ func (s *Store) Stage(ctx context.Context, input session.StageAttachmentInput) (
 	return session.StagedAttachment{
 		ID:           session.StagedAttachmentID(id),
 		OwnerKeyHash: input.OwnerKeyHash,
+		Kind:         normalizeAttachmentKind(input.Kind),
 		Filename:     filename,
 		Path:         path,
 		MimeType:     mimeType,
@@ -116,7 +117,8 @@ func (s *Store) Promote(ctx context.Context, input session.PromoteAttachmentInpu
 		return session.SessionFile{}, &Error{Code: "missing_staged_id", Path: staged.Path}
 	}
 	id := session.SessionFileID(staged.ID)
-	dir := s.sessionInputDir(input.SessionID, input.SourceType, input.SourceID, id)
+	kind := normalizeAttachmentKind(staged.Kind)
+	dir := s.sessionInputDir(input.SessionID, input.SourceType, input.SourceID, kind, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return session.SessionFile{}, &Error{Code: classify(err), Path: dir, Err: err}
 	}
@@ -129,21 +131,37 @@ func (s *Store) Promote(ctx context.Context, input session.PromoteAttachmentInpu
 		}
 	}
 	_ = os.Remove(filepath.Dir(staged.Path))
+	contextText := ""
+	if kind == session.AttachmentKindAnnotation {
+		content, err := os.ReadFile(target)
+		if err != nil {
+			return session.SessionFile{}, &Error{Code: classify(err), Path: target, Err: err}
+		}
+		contextText = string(content)
+	}
 	return session.SessionFile{
 		ID:          id,
 		SessionID:   input.SessionID,
 		Role:        session.FileRoleInput,
 		SourceType:  input.SourceType,
 		SourceID:    input.SourceID,
-		Kind:        "file",
+		Kind:        kind,
 		Filename:    filename,
 		Path:        target,
 		MimeType:    staged.MimeType,
 		Size:        staged.Size,
 		Previewable: staged.Previewable,
 		PreviewKind: previewKind(staged.MimeType),
+		ContextText: contextText,
 		CreatedAt:   time.Now().UTC(),
 	}, nil
+}
+
+func normalizeAttachmentKind(kind session.AttachmentKind) session.AttachmentKind {
+	if kind == session.AttachmentKindAnnotation {
+		return kind
+	}
+	return session.AttachmentKindUpload
 }
 
 func (s *Store) DeleteStaged(ctx context.Context, id session.StagedAttachmentID) error {
@@ -449,7 +467,7 @@ func (s *Store) StagedPath(id session.StagedAttachmentID, filename string) strin
 }
 
 func (s *Store) SessionPath(sessionID session.ID, id session.SessionFileID, filename string) string {
-	return filepath.Join(s.sessionInputDir(sessionID, session.AttachmentSourceRequirement, string(sessionID), id), cleanFilename(filename))
+	return filepath.Join(s.sessionInputDir(sessionID, session.AttachmentSourceRequirement, string(sessionID), session.AttachmentKindUpload, id), cleanFilename(filename))
 }
 
 func (s *Store) attachmentsRoot() string {

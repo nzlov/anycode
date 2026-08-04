@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
+	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
@@ -468,6 +469,7 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 		Body:                input.Body,
 		StagedAttachmentIDs: stagedAttachmentIDs,
 		ArtifactIDs:         artifactIDs,
+		FileReferences:      promptFileReferencesFromInput(input.FileReferences),
 		Mentions:            promptMentionsFromInput(input.Mentions),
 	})
 	if err != nil {
@@ -499,6 +501,23 @@ func (r *mutationResolver) StageAttachment(ctx context.Context, file graphql.Upl
 	}
 	principal, _ := PrincipalFromContext(ctx)
 	dto, err := r.UseCases.Attachments.StageAttachment(ctx, attachmentInput(file, principal.KeyHash))
+	if err != nil {
+		return nil, err
+	}
+	return mapAttachment(dto), nil
+}
+
+// StageAnnotation is the resolver for the stageAnnotation field.
+func (r *mutationResolver) StageAnnotation(ctx context.Context, input model.StageAnnotationInput) (*model.Attachment, error) {
+	if r.UseCases.Attachments == nil {
+		return nil, missingUseCase("attachments")
+	}
+	principal, _ := PrincipalFromContext(ctx)
+	dto, err := r.UseCases.Attachments.StageAnnotation(ctx, attachmentapp.StageAnnotationInput{
+		OwnerKeyHash: principal.KeyHash,
+		Filename:     input.Filename,
+		Content:      input.Content,
+	})
 	if err != nil {
 		return nil, err
 	}

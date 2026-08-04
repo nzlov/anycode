@@ -19,7 +19,12 @@
       <q-card-section class="surface-page__body">
         <q-spinner v-if="loading" color="primary" size="32px" />
         <q-banner v-else-if="error" dense class="text-negative">{{ error }}</q-banner>
-        <SessionFilePreview v-else-if="file" :file="file" />
+        <SessionFilePreview
+          v-else-if="file"
+          :file="file"
+          :annotation-session-id="sessionId"
+          :annotation-source="`临时文件 ${file.logicalPath || file.filename}`"
+        />
       </q-card-section>
     </q-card>
   </q-page>

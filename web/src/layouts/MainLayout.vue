@@ -283,6 +283,7 @@ import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
 import { getAppVersionStatus, type AppRelease } from '@/services/appVersion';
 import { disablePushNotifications } from '@/services/pushNotifications';
+import { provideAnnotationDraftInjector } from '@/services/annotationDraftInjection';
 
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
@@ -332,6 +333,31 @@ const availableReleasePublishedAt = computed(() => {
   if (Number.isNaN(publishedAt.getTime())) return '';
   return publishedAt.toLocaleDateString();
 });
+
+// GLUE: standalone preview routes hand one transient annotation attachment to the owning session composer.
+// Remove when those previews live inside the session detail route.
+provideAnnotationDraftInjector({
+  canInject: (sessionId) => Boolean(sessionId || annotationRouteSessionId()),
+  inject: (attachment, sessionId) => {
+    const targetSessionId = sessionId || annotationRouteSessionId();
+    if (!targetSessionId || !attachment.content.trim()) return;
+    void router.push({
+      name: 'session-detail',
+      params: { id: targetSessionId },
+      state: { annotationAttachment: JSON.stringify(attachment) },
+    });
+  },
+});
+
+function annotationRouteSessionId() {
+  if (route.name === 'session-artifacts' || route.name === 'session-artifact') {
+    return String(route.params.id ?? '');
+  }
+  if (route.name === 'diff') {
+    return typeof route.query.sessionId === 'string' ? route.query.sessionId : '';
+  }
+  return '';
+}
 
 onMounted(() => {
   void loadProjects()

@@ -357,6 +357,10 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 		ArtifactIDs: []session.SessionFileID{
 			"artifact-2", "artifact-1",
 		},
+		FileReferences: []session.PromptFileReference{
+			{Kind: session.PromptFileReferenceSessionFile, SessionFileID: "file-1"},
+			{Kind: session.PromptFileReferenceDiff, FilePath: "media/demo.mp4", Version: "old"},
+		},
 		Status:    session.PromptAppendPending,
 		CreatedAt: appendAt,
 	}); err != nil {
@@ -374,6 +378,9 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	}
 	if len(appends[0].Mentions) != 1 || appends[0].Mentions[0].Path != "docs/testing.md" {
 		t.Fatalf("prompt append mentions = %#v", appends[0].Mentions)
+	}
+	if len(appends[0].FileReferences) != 2 || appends[0].FileReferences[0].SessionFileID != "file-1" || appends[0].FileReferences[1].Version != "old" {
+		t.Fatalf("prompt append file references = %#v", appends[0].FileReferences)
 	}
 	pending, err := repo.ListPendingPromptAppends(ctx, input.ID)
 	if err != nil {

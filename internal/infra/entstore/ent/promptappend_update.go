@@ -88,6 +88,24 @@ func (_u *PromptAppendUpdate) AppendArtifactIds(v []string) *PromptAppendUpdate 
 	return _u
 }
 
+// SetFileReferences sets the "file_references" field.
+func (_u *PromptAppendUpdate) SetFileReferences(v []session.PromptFileReference) *PromptAppendUpdate {
+	_u.mutation.SetFileReferences(v)
+	return _u
+}
+
+// AppendFileReferences appends value to the "file_references" field.
+func (_u *PromptAppendUpdate) AppendFileReferences(v []session.PromptFileReference) *PromptAppendUpdate {
+	_u.mutation.AppendFileReferences(v)
+	return _u
+}
+
+// ClearFileReferences clears the value of the "file_references" field.
+func (_u *PromptAppendUpdate) ClearFileReferences() *PromptAppendUpdate {
+	_u.mutation.ClearFileReferences()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *PromptAppendUpdate) SetStatus(v string) *PromptAppendUpdate {
 	_u.mutation.SetStatus(v)
@@ -215,6 +233,17 @@ func (_u *PromptAppendUpdate) sqlSave(ctx context.Context) (_node int, err error
 			sqljson.Append(u, promptappend.FieldArtifactIds, value)
 		})
 	}
+	if value, ok := _u.mutation.FileReferences(); ok {
+		_spec.SetField(promptappend.FieldFileReferences, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedFileReferences(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldFileReferences, value)
+		})
+	}
+	if _u.mutation.FileReferencesCleared() {
+		_spec.ClearField(promptappend.FieldFileReferences, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
 	}
@@ -302,6 +331,24 @@ func (_u *PromptAppendUpdateOne) SetArtifactIds(v []string) *PromptAppendUpdateO
 // AppendArtifactIds appends value to the "artifact_ids" field.
 func (_u *PromptAppendUpdateOne) AppendArtifactIds(v []string) *PromptAppendUpdateOne {
 	_u.mutation.AppendArtifactIds(v)
+	return _u
+}
+
+// SetFileReferences sets the "file_references" field.
+func (_u *PromptAppendUpdateOne) SetFileReferences(v []session.PromptFileReference) *PromptAppendUpdateOne {
+	_u.mutation.SetFileReferences(v)
+	return _u
+}
+
+// AppendFileReferences appends value to the "file_references" field.
+func (_u *PromptAppendUpdateOne) AppendFileReferences(v []session.PromptFileReference) *PromptAppendUpdateOne {
+	_u.mutation.AppendFileReferences(v)
+	return _u
+}
+
+// ClearFileReferences clears the value of the "file_references" field.
+func (_u *PromptAppendUpdateOne) ClearFileReferences() *PromptAppendUpdateOne {
+	_u.mutation.ClearFileReferences()
 	return _u
 }
 
@@ -461,6 +508,17 @@ func (_u *PromptAppendUpdateOne) sqlSave(ctx context.Context) (_node *PromptAppe
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, promptappend.FieldArtifactIds, value)
 		})
+	}
+	if value, ok := _u.mutation.FileReferences(); ok {
+		_spec.SetField(promptappend.FieldFileReferences, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedFileReferences(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldFileReferences, value)
+		})
+	}
+	if _u.mutation.FileReferencesCleared() {
+		_spec.ClearField(promptappend.FieldFileReferences, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

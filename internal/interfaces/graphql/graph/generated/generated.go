@@ -54,6 +54,7 @@ type ComplexityRoot struct {
 	Attachment struct {
 		Filename    func(childComplexity int) int
 		ID          func(childComplexity int) int
+		Kind        func(childComplexity int) int
 		MimeType    func(childComplexity int) int
 		Previewable func(childComplexity int) int
 		Size        func(childComplexity int) int
@@ -255,6 +256,7 @@ type ComplexityRoot struct {
 		SaveWorkflowDefinition      func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
 		SetDefaultWorkflow          func(childComplexity int, input model.SetDefaultWorkflowInput) int
 		SetSessionPriority          func(childComplexity int, input model.SetSessionPriorityInput) int
+		StageAnnotation             func(childComplexity int, input model.StageAnnotationInput) int
 		StageAttachment             func(childComplexity int, file graphql.Upload) int
 		StartSession                func(childComplexity int, id string, force *bool) int
 		StopSession                 func(childComplexity int, id string) int
@@ -830,6 +832,7 @@ type MutationResolver interface {
 	AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error)
 	UpdatePromptAppend(ctx context.Context, input model.UpdatePromptAppendInput) (*model.PromptAppend, error)
 	StageAttachment(ctx context.Context, file graphql.Upload) (*model.Attachment, error)
+	StageAnnotation(ctx context.Context, input model.StageAnnotationInput) (*model.Attachment, error)
 	DeleteStagedAttachment(ctx context.Context, id string) (bool, error)
 	DeleteSessionAttachment(ctx context.Context, id string) (bool, error)
 	DeleteSessionFile(ctx context.Context, id string) (bool, error)
@@ -951,6 +954,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Attachment.ID(childComplexity), true
+	case "Attachment.kind":
+		if e.ComplexityRoot.Attachment.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Attachment.Kind(childComplexity), true
 	case "Attachment.mimeType":
 		if e.ComplexityRoot.Attachment.MimeType == nil {
 			break
@@ -1847,6 +1856,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetSessionPriority(childComplexity, args["input"].(model.SetSessionPriorityInput)), true
+	case "Mutation.stageAnnotation":
+		if e.ComplexityRoot.Mutation.StageAnnotation == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_stageAnnotation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StageAnnotation(childComplexity, args["input"].(model.StageAnnotationInput)), true
 	case "Mutation.stageAttachment":
 		if e.ComplexityRoot.Mutation.StageAttachment == nil {
 			break
@@ -4286,6 +4306,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMindMapOperationInput,
 		ec.unmarshalInputMindMapPageInput,
 		ec.unmarshalInputPromptFileMatchInput,
+		ec.unmarshalInputPromptFileReferenceInput,
 		ec.unmarshalInputPromptMentionInput,
 		ec.unmarshalInputQuestionAnswerInput,
 		ec.unmarshalInputRegisterPushSubscriptionInput,
@@ -4299,6 +4320,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionTranscriptEventInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
+		ec.unmarshalInputStageAnnotationInput,
 		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
@@ -4492,6 +4514,7 @@ type Mutation {
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
+  stageAnnotation(input: StageAnnotationInput!): Attachment!
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
   deleteSessionFile(id: ID!): Boolean!
@@ -4879,10 +4902,16 @@ input ListSessionFilesInput {
 
 type Attachment {
   id: ID!
+  kind: String!
   filename: String!
   mimeType: String!
   size: Int64!
   previewable: Boolean!
+}
+
+input StageAnnotationInput {
+  filename: String!
+  content: String!
 }
 
 type PromptAppend {
@@ -5414,7 +5443,15 @@ input AppendPromptInput {
   body: String!
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
+  fileReferences: [PromptFileReferenceInput!]
   mentions: [PromptMentionInput!]
+}
+
+input PromptFileReferenceInput {
+  kind: String!
+  sessionFileId: ID
+  filePath: String
+  version: String
 }
 
 input UpdatePromptAppendInput {
@@ -5800,6 +5837,17 @@ func (ec *executionContext) field_Mutation_setSessionPriority_args(ctx context.C
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_stageAnnotation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNStageAnnotationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStageAnnotationInput)
 	if err != nil {
 		return nil, err
 	}
@@ -6548,6 +6596,35 @@ func (ec *executionContext) fieldContext_Attachment_id(_ context.Context, field 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Attachment_kind(ctx context.Context, field graphql.CollectedField, obj *model.Attachment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Attachment_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Attachment_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Attachment",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -11507,6 +11584,8 @@ func (ec *executionContext) fieldContext_Mutation_stageAttachment(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Attachment_id(ctx, field)
+			case "kind":
+				return ec.fieldContext_Attachment_kind(ctx, field)
 			case "filename":
 				return ec.fieldContext_Attachment_filename(ctx, field)
 			case "mimeType":
@@ -11527,6 +11606,61 @@ func (ec *executionContext) fieldContext_Mutation_stageAttachment(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_stageAttachment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_stageAnnotation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_stageAnnotation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StageAnnotation(ctx, fc.Args["input"].(model.StageAnnotationInput))
+		},
+		nil,
+		ec.marshalNAttachment2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAttachment,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_stageAnnotation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Attachment_id(ctx, field)
+			case "kind":
+				return ec.fieldContext_Attachment_kind(ctx, field)
+			case "filename":
+				return ec.fieldContext_Attachment_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_Attachment_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_Attachment_size(ctx, field)
+			case "previewable":
+				return ec.fieldContext_Attachment_previewable(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Attachment", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_stageAnnotation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -25054,7 +25188,7 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds", "mentions"}
+	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds", "fileReferences", "mentions"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -25089,6 +25223,13 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 				return it, err
 			}
 			it.ArtifactIds = data
+		case "fileReferences":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fileReferences"))
+			data, err := ec.unmarshalOPromptFileReferenceInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FileReferences = data
 		case "mentions":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mentions"))
 			data, err := ec.unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx, v)
@@ -25997,6 +26138,57 @@ func (ec *executionContext) unmarshalInputPromptFileMatchInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputPromptFileReferenceInput(ctx context.Context, obj any) (model.PromptFileReferenceInput, error) {
+	var it model.PromptFileReferenceInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"kind", "sessionFileId", "filePath", "version"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
+		case "sessionFileId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionFileId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionFileID = data
+		case "filePath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filePath"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilePath = data
+		case "version":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("version"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Version = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputPromptMentionInput(ctx context.Context, obj any) (model.PromptMentionInput, error) {
 	var it model.PromptMentionInput
 	if obj == nil {
@@ -26536,6 +26728,43 @@ func (ec *executionContext) unmarshalInputSetSessionPriorityInput(ctx context.Co
 				return it, err
 			}
 			it.Priority = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputStageAnnotationInput(ctx context.Context, obj any) (model.StageAnnotationInput, error) {
+	var it model.StageAnnotationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"filename", "content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "filename":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filename"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Filename = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
 		}
 	}
 	return it, nil
@@ -27497,6 +27726,11 @@ func (ec *executionContext) _Attachment(ctx context.Context, sel ast.SelectionSe
 			out.Values[i] = graphql.MarshalString("Attachment")
 		case "id":
 			out.Values[i] = ec._Attachment_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._Attachment_kind(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -29063,6 +29297,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "stageAttachment":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_stageAttachment(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stageAnnotation":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_stageAnnotation(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -34452,6 +34693,11 @@ func (ec *executionContext) unmarshalNPromptFileMatchInput2githubᚗcomᚋnzlov�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNPromptFileReferenceInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInput(ctx context.Context, v any) (*model.PromptFileReferenceInput, error) {
+	res, err := ec.unmarshalInputPromptFileReferenceInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNPromptMentionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInput(ctx context.Context, v any) (*model.PromptMentionInput, error) {
 	res, err := ec.unmarshalInputPromptMentionInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
@@ -34902,6 +35148,11 @@ func (ec *executionContext) unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzl
 
 func (ec *executionContext) unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput(ctx context.Context, v any) (model.SetSessionPriorityInput, error) {
 	res, err := ec.unmarshalInputSetSessionPriorityInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNStageAnnotationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStageAnnotationInput(ctx context.Context, v any) (model.StageAnnotationInput, error) {
+	res, err := ec.unmarshalInputStageAnnotationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -35868,6 +36119,24 @@ func (ec *executionContext) marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋan
 		return graphql.Null
 	}
 	return ec._PendingApproval(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOPromptFileReferenceInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInputᚄ(ctx context.Context, v any) ([]*model.PromptFileReferenceInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.PromptFileReferenceInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPromptFileReferenceInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx context.Context, v any) ([]*model.PromptMentionInput, error) {

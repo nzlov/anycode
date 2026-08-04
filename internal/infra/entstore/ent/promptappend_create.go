@@ -53,6 +53,12 @@ func (_c *PromptAppendCreate) SetArtifactIds(v []string) *PromptAppendCreate {
 	return _c
 }
 
+// SetFileReferences sets the "file_references" field.
+func (_c *PromptAppendCreate) SetFileReferences(v []session.PromptFileReference) *PromptAppendCreate {
+	_c.mutation.SetFileReferences(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *PromptAppendCreate) SetStatus(v string) *PromptAppendCreate {
 	_c.mutation.SetStatus(v)
@@ -247,6 +253,10 @@ func (_c *PromptAppendCreate) createSpec() (*PromptAppend, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.ArtifactIds(); ok {
 		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)
 		_node.ArtifactIds = value
+	}
+	if value, ok := _c.mutation.FileReferences(); ok {
+		_spec.SetField(promptappend.FieldFileReferences, field.TypeJSON, value)
+		_node.FileReferences = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

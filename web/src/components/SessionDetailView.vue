@@ -108,6 +108,7 @@
               v-else
               v-model:prompt="appendText"
               v-model:files="appendFiles"
+              v-model:annotations="appendAnnotations"
               v-model:artifacts="appendArtifacts"
               v-model:mentions="appendMentions"
               v-model:model="composerModel"
@@ -410,10 +411,10 @@
                             dense
                             square
                             outline
-                            icon="attach_file"
+                            :icon="attachment.kind === 'annotation' ? 'rate_review' : 'attach_file'"
                             color="primary"
                             text-color="primary"
-                            :label="attachment.filename"
+                            :label="`${attachment.kind === 'annotation' ? '批注' : '上传'} · ${attachment.filename}`"
                           />
                         </div>
                         <div v-if="item.artifacts.length" class="append-history__attachments">
@@ -581,6 +582,8 @@
             v-else
             :file="eventResourceFile"
             :zoomable="isMobileLayout"
+            :annotation-session-id="sessionId"
+            :annotation-source="`临时文件 ${eventResourceTitle}`"
           />
         </q-card-section>
         <q-btn
@@ -615,8 +618,10 @@ import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
-import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
+import { deleteStagedAttachment, stageAnnotation, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
+import { provideAnnotationDraftInjector } from '@/services/annotationDraftInjection';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import type { DiffFile, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import { getSessionDiffFiles } from '@/services/diff';
 import {
@@ -694,6 +699,7 @@ const rightPanelWidth = computed(() =>
 const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
+const appendAnnotations = ref<PreviewAnnotationAttachment[]>([]);
 const appendArtifacts = ref<SessionFile[]>([]);
 const appendMentions = ref<PromptMention[]>([]);
 const appendUploading = ref(false);
@@ -932,6 +938,10 @@ const canCancelQueue = computed(
   () => session.value?.status === 'queued' && session.value.availableActions.includes('stop'),
 );
 const isClosed = computed(() => session.value?.status === 'closed');
+provideAnnotationDraftInjector({
+  canInject: () => !isClosed.value,
+  inject: (attachment) => appendAnnotationAttachment(attachment),
+});
 const isWaitingForAnswer = computed(
   () => !isClosed.value && session.value?.status === 'waiting_user',
 );
@@ -996,6 +1006,7 @@ const composerAction = computed(() => {
   if (
     appendText.value.trim().length > 0 ||
     appendFiles.value.length > 0 ||
+    appendAnnotations.value.length > 0 ||
     appendArtifacts.value.length > 0
   ) {
     return {
@@ -1189,14 +1200,20 @@ async function sendAppend() {
   if (isClosed.value || appendUploading.value || appending.value) return;
   const text = appendText.value;
   const selectedFiles = [...appendFiles.value];
+  const selectedAnnotations = [...appendAnnotations.value];
   const selectedArtifacts = [...appendArtifacts.value];
   const stagedAttachmentIds: string[] = [];
-  let phase: 'upload' | 'append' = selectedFiles.length > 0 ? 'upload' : 'append';
-  appendUploading.value = selectedFiles.length > 0;
+  let phase: 'upload' | 'append' =
+    selectedFiles.length > 0 || selectedAnnotations.length > 0 ? 'upload' : 'append';
+  appendUploading.value = selectedFiles.length > 0 || selectedAnnotations.length > 0;
   try {
     await saveComposerConfig();
     for (const file of selectedFiles) {
       const attachment = await stageAttachment(file);
+      stagedAttachmentIds.push(attachment.id);
+    }
+    for (const annotation of selectedAnnotations) {
+      const attachment = await stageAnnotation(annotation);
       stagedAttachmentIds.push(attachment.id);
     }
     appendUploading.value = false;
@@ -1206,10 +1223,12 @@ async function sendAppend() {
       text,
       stagedAttachmentIds,
       selectedArtifacts.map((artifact) => artifact.id),
+      selectedAnnotations.flatMap((annotation) => annotation.fileReferences ?? []),
       appendMentions.value,
     );
     appendText.value = '';
     appendFiles.value = [];
+    appendAnnotations.value = [];
     appendArtifacts.value = [];
     appendMentions.value = [];
     composerCollapsed.value = true;
@@ -1227,6 +1246,30 @@ function referenceArtifact(artifact: SessionFile) {
     appendArtifacts.value = [...appendArtifacts.value, artifact];
   }
   if (isMobileLayout.value) detailView.value = 'session';
+}
+
+function appendAnnotationAttachment(attachment: PreviewAnnotationAttachment) {
+  if (!attachment.content.trim()) return;
+  appendAnnotations.value = [...appendAnnotations.value, attachment];
+  composerCollapsed.value = false;
+  if (isMobileLayout.value) detailView.value = 'session';
+}
+
+function consumeNavigationAnnotationAttachment() {
+  const state = window.history.state as Record<string, unknown> | null;
+  const serialized = state?.annotationAttachment;
+  if (typeof serialized !== 'string') return;
+  let attachment: PreviewAnnotationAttachment;
+  try {
+    attachment = JSON.parse(serialized) as PreviewAnnotationAttachment;
+  } catch {
+    return;
+  }
+  if (!attachment?.id || !attachment.content) return;
+  appendAnnotationAttachment(attachment);
+  const nextState = { ...state };
+  delete nextState.annotationAttachment;
+  window.history.replaceState(nextState, '');
 }
 
 function handleArtifactDeleted(artifact: SessionFile) {
@@ -1311,6 +1354,7 @@ watch(
 
 onMounted(() => {
   mounted = true;
+  consumeNavigationAnnotationAttachment();
   void initializeSessionDetail();
 });
 
@@ -1347,8 +1391,8 @@ async function onEventScroll() {
   }
   const scrollingUp = currentScrollTop < previousEventScrollTop;
   previousEventScrollTop = currentScrollTop;
-  if (!scrollingUp || currentScrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
-    return;
+  if (!scrollingUp || currentScrollTop > 64) return;
+  if (loadingOlderEvents.value || preservingOlderEventScroll) return;
   const previousHeight = body.scrollHeight;
   const anchor = captureEventScrollAnchor(body);
   preservingOlderEventScroll = true;

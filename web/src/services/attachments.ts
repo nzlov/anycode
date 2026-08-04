@@ -1,7 +1,9 @@
 import { graphqlFetch, graphqlMultipartFetch } from '@/services/graphqlClient';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 export interface StagedAttachment {
   id: string;
+  kind: 'upload' | 'annotation';
   filename: string;
   mimeType: string;
   size: number;
@@ -10,6 +12,7 @@ export interface StagedAttachment {
 
 const attachmentFields = `
   id
+  kind
   filename
   mimeType
   size
@@ -36,6 +39,24 @@ export async function stageAttachment(file: File) {
 
   const data = await graphqlMultipartFetch<{ stageAttachment: StagedAttachment }>(body);
   return data.stageAttachment;
+}
+
+export async function stageAnnotation(annotation: PreviewAnnotationAttachment) {
+  const filename = `批注-${annotation.source.replaceAll('/', '-').slice(0, 80) || '当前内容'}.md`;
+  const data = await graphqlFetch<
+    { stageAnnotation: StagedAttachment },
+    { input: { filename: string; content: string } }
+  >({
+    query: `
+      mutation StageAnnotation($input: StageAnnotationInput!) {
+        stageAnnotation(input: $input) {
+          ${attachmentFields}
+        }
+      }
+    `,
+    variables: { input: { filename, content: annotation.content } },
+  });
+  return data.stageAnnotation;
 }
 
 export async function deleteStagedAttachment(id: string, options: { notify?: boolean } = {}) {

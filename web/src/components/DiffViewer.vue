@@ -53,46 +53,61 @@
           :kind="mediaPreviewFor(file.path)!.kind"
         />
       </q-card-section>
-      <q-card-section
+      <PreviewAnnotator
         v-else-if="!isCollapsed(file.path) && fileDiffFor(file.path)"
-        class="diff-code"
+        mode="text"
+        :source="`变更 ${file.path}`"
+        :session-id="annotationSessionIds[file.path] ?? ''"
+        :content-key="fileDiffFor(file.path)"
+        :file-references="[
+          { kind: 'diff', filePath: file.path, version: 'old' },
+          { kind: 'diff', filePath: file.path, version: 'new' },
+        ]"
       >
-        <template
-          v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
-          :key="`${file.path}:${hunk.id}`"
-        >
-          <div v-if="hunk.canExpandBefore" class="diff-expand-row">
-            <q-btn
-              flat
-              dense
-              no-caps
-              icon="expand_less"
-              label="向上展开 20 行"
-              @click="$emit('expand', file.path, 'before')"
-            />
-          </div>
-          <div
-            v-for="line in hunk.lines"
-            :key="`${file.path}:${hunk.id}:${line.id}`"
-            class="diff-line"
-            :class="lineClass(line.kind)"
+        <q-card-section class="diff-code">
+          <template
+            v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
+            :key="`${file.path}:${hunk.id}`"
           >
-            <span class="line-number">{{ line.oldLine ?? '' }}</span>
-            <span class="line-number">{{ line.newLine ?? '' }}</span>
-            <pre>{{ line.content }}</pre>
-          </div>
-          <div v-if="hunk.canExpandAfter" class="diff-expand-row">
-            <q-btn
-              flat
-              dense
-              no-caps
-              icon="expand_more"
-              label="向下展开 20 行"
-              @click="$emit('expand', file.path, 'after')"
-            />
-          </div>
-        </template>
-      </q-card-section>
+            <div v-if="hunk.canExpandBefore" class="diff-expand-row">
+              <q-btn
+                flat
+                dense
+                no-caps
+                icon="expand_less"
+                label="向上展开 20 行"
+                @click="$emit('expand', file.path, 'before')"
+              />
+            </div>
+            <div
+              v-for="line in hunk.lines"
+              :key="`${file.path}:${hunk.id}:${line.id}`"
+              class="diff-line"
+              :class="lineClass(line.kind)"
+            >
+              <span class="line-number">{{ line.oldLine ?? '' }}</span>
+              <span class="line-number">{{ line.newLine ?? '' }}</span>
+              <pre
+                :data-annotation-text="
+                  line.oldLine !== null || line.newLine !== null ? '' : undefined
+                "
+                :data-annotation-line="line.newLine ?? line.oldLine ?? undefined"
+                :data-annotation-revision="line.newLine !== null ? 'new' : 'old'"
+                >{{ line.content }}</pre>
+            </div>
+            <div v-if="hunk.canExpandAfter" class="diff-expand-row">
+              <q-btn
+                flat
+                dense
+                no-caps
+                icon="expand_more"
+                label="向下展开 20 行"
+                @click="$emit('expand', file.path, 'after')"
+              />
+            </div>
+          </template>
+        </q-card-section>
+      </PreviewAnnotator>
     </q-card>
   </div>
 </template>
@@ -101,6 +116,7 @@
 import { computed } from 'vue';
 
 import DiffMediaPreview from '@/components/DiffMediaPreview.vue';
+import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
 import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
 
@@ -113,6 +129,7 @@ const props = withDefaults(
     collapsedPaths?: string[];
     loadingPaths?: string[];
     mediaPreviews?: Record<string, DiffMediaPreviewTarget>;
+    annotationSessionIds?: Record<string, string>;
   }>(),
   {
     files: () => [],
@@ -121,6 +138,7 @@ const props = withDefaults(
     collapsedPaths: () => [],
     loadingPaths: () => [],
     mediaPreviews: () => ({}),
+    annotationSessionIds: () => ({}),
   },
 );
 

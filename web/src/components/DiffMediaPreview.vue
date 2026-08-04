@@ -10,12 +10,20 @@
       <q-banner v-else-if="states[version].error" dense class="app-feedback app-feedback--danger">
         {{ states[version].error }}
       </q-banner>
-      <img
+      <PreviewAnnotator
         v-else-if="kind === 'image'"
-        :src="states[version].url"
-        :alt="`${version === 'old' ? '旧' : '新'}版本 ${filePath}`"
-        class="diff-media-preview__image"
-      />
+        mode="image"
+        :source="`变更 ${filePath}（${version === 'old' ? '旧版本' : '新版本'}）`"
+        :session-id="sessionId"
+        :content-key="states[version].url"
+        :file-references="[{ kind: 'diff', filePath, version }]"
+      >
+        <img
+          :src="states[version].url"
+          :alt="`${version === 'old' ? '旧' : '新'}版本 ${filePath}`"
+          class="diff-media-preview__image"
+        />
+      </PreviewAnnotator>
       <video
         v-else-if="kind === 'video'"
         :src="states[version].url"
@@ -49,6 +57,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, reactive, watch } from 'vue';
 
+import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import { fetchDiffMedia } from '@/services/diffMedia';
 import { diffMediaVersions } from '@/services/diffMediaModel';
 import type { DiffMediaKind, DiffMediaVersion } from '@/services/diffMediaModel';

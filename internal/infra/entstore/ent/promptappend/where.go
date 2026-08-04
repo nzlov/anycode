@@ -234,6 +234,16 @@ func MentionsNotNil() predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldNotNull(FieldMentions))
 }
 
+// FileReferencesIsNil applies the IsNil predicate on the "file_references" field.
+func FileReferencesIsNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIsNull(FieldFileReferences))
+}
+
+// FileReferencesNotNil applies the NotNil predicate on the "file_references" field.
+func FileReferencesNotNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotNull(FieldFileReferences))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldEQ(FieldStatus, v))

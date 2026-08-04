@@ -27,6 +27,8 @@ type PromptAppend struct {
 	Mentions []session.PromptMention `json:"mentions,omitempty"`
 	// ArtifactIds holds the value of the "artifact_ids" field.
 	ArtifactIds []string `json:"artifact_ids,omitempty"`
+	// FileReferences holds the value of the "file_references" field.
+	FileReferences []session.PromptFileReference `json:"file_references,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// DispatchedAt holds the value of the "dispatched_at" field.
@@ -43,7 +45,7 @@ func (*PromptAppend) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case promptappend.FieldMentions, promptappend.FieldArtifactIds:
+		case promptappend.FieldMentions, promptappend.FieldArtifactIds, promptappend.FieldFileReferences:
 			values[i] = new([]byte)
 		case promptappend.FieldID, promptappend.FieldSessionID, promptappend.FieldBody, promptappend.FieldStatus, promptappend.FieldDispatchedProcessRunID:
 			values[i] = new(sql.NullString)
@@ -96,6 +98,14 @@ func (_m *PromptAppend) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.ArtifactIds); err != nil {
 					return fmt.Errorf("unmarshal field artifact_ids: %w", err)
+				}
+			}
+		case promptappend.FieldFileReferences:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field file_references", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.FileReferences); err != nil {
+					return fmt.Errorf("unmarshal field file_references: %w", err)
 				}
 			}
 		case promptappend.FieldStatus:
@@ -170,6 +180,9 @@ func (_m *PromptAppend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("artifact_ids=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ArtifactIds))
+	builder.WriteString(", ")
+	builder.WriteString("file_references=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FileReferences))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

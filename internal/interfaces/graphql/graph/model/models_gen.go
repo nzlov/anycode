@@ -24,11 +24,12 @@ type AppearanceSettings struct {
 }
 
 type AppendPromptInput struct {
-	SessionID           string                `json:"sessionId"`
-	Body                string                `json:"body"`
-	StagedAttachmentIds []string              `json:"stagedAttachmentIds,omitempty"`
-	ArtifactIds         []string              `json:"artifactIds,omitempty"`
-	Mentions            []*PromptMentionInput `json:"mentions,omitempty"`
+	SessionID           string                      `json:"sessionId"`
+	Body                string                      `json:"body"`
+	StagedAttachmentIds []string                    `json:"stagedAttachmentIds,omitempty"`
+	ArtifactIds         []string                    `json:"artifactIds,omitempty"`
+	FileReferences      []*PromptFileReferenceInput `json:"fileReferences,omitempty"`
+	Mentions            []*PromptMentionInput       `json:"mentions,omitempty"`
 }
 
 type ApprovalConfig struct {
@@ -43,6 +44,7 @@ type ApprovalConfigInput struct {
 
 type Attachment struct {
 	ID          string `json:"id"`
+	Kind        string `json:"kind"`
 	Filename    string `json:"filename"`
 	MimeType    string `json:"mimeType"`
 	Size        int64  `json:"size"`
@@ -385,6 +387,13 @@ type PromptFileMatchInput struct {
 	Query     string  `json:"query"`
 }
 
+type PromptFileReferenceInput struct {
+	Kind          string  `json:"kind"`
+	SessionFileID *string `json:"sessionFileId,omitempty"`
+	FilePath      *string `json:"filePath,omitempty"`
+	Version       *string `json:"version,omitempty"`
+}
+
 type PromptMentionInput struct {
 	Path string `json:"path"`
 }
@@ -671,6 +680,11 @@ type SetDefaultWorkflowInput struct {
 type SetSessionPriorityInput struct {
 	SessionID string `json:"sessionId"`
 	Priority  string `json:"priority"`
+}
+
+type StageAnnotationInput struct {
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
 }
 
 type SubmitQuestionRequestInput struct {

@@ -180,6 +180,7 @@
           :collapsed-paths="collapseState.collapsedPaths"
           :loading-paths="fileLoadingPaths"
           :media-previews="mediaPreviews"
+          :annotation-session-ids="annotationSessionIds"
           @expand="expandDiff"
           @toggle-collapse="toggleFileCollapsed"
         >
@@ -318,17 +319,21 @@ const visibleDiffs = computed<FileDiff[]>(() => {
 const visibleFiles = computed<DiffFile[]>(() =>
   metadataFirst.value && diff.value?.available ? diff.value.files : [],
 );
+const annotationSessionIds = computed<Record<string, string>>(() => {
+  const sessionIds: Record<string, string> = {};
+  for (const file of diff.value?.files ?? []) {
+    const sessionId = sessionIdForFile(file.path);
+    if (sessionId) sessionIds[file.path] = sessionId;
+  }
+  return sessionIds;
+});
 const mediaPreviews = computed<Record<string, DiffMediaPreviewTarget>>(() => {
   const previews: Record<string, DiffMediaPreviewTarget> = {};
   for (const file of diff.value?.files ?? []) {
     const filePath = filePathWithoutPrefix(file.path);
     const kind = diffMediaKind(filePath);
-    if (!kind) continue;
-    const sessionId =
-      props.target.kind === 'session'
-        ? props.target.sessionId
-        : sessionPrefixMap.value[sessionPrefix(file.path)];
-    if (sessionId) previews[file.path] = { sessionId, filePath, kind };
+    const sessionId = annotationSessionIds.value[file.path];
+    if (kind && sessionId) previews[file.path] = { sessionId, filePath, kind };
   }
   return previews;
 });
@@ -352,6 +357,12 @@ const fileCountLabel = computed(() => {
   if (!diff.value) return '等待加载';
   return `共 ${diff.value.files.length} 个文件`;
 });
+
+function sessionIdForFile(filePath: string) {
+  return props.target.kind === 'session'
+    ? props.target.sessionId
+    : sessionPrefixMap.value[sessionPrefix(filePath)] || '';
+}
 
 function updateState(patch: Partial<DiffWorkspaceState>) {
   const next = { ...props.modelValue, ...patch };

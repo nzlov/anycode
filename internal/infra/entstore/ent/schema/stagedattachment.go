@@ -16,6 +16,7 @@ func (StagedAttachment) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
 		field.String("owner_key_hash").Default(""),
+		field.String("kind").Default("upload"),
 		field.String("filename").NotEmpty(),
 		field.String("path").NotEmpty(),
 		field.String("mime_type").Default("application/octet-stream"),

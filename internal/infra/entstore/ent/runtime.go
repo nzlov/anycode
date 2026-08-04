@@ -378,15 +378,15 @@ func init() {
 	// promptappend.DefaultArtifactIds holds the default value on creation for the artifact_ids field.
 	promptappend.DefaultArtifactIds = promptappendDescArtifactIds.Default.([]string)
 	// promptappendDescStatus is the schema descriptor for status field.
-	promptappendDescStatus := promptappendFields[5].Descriptor()
+	promptappendDescStatus := promptappendFields[6].Descriptor()
 	// promptappend.DefaultStatus holds the default value on creation for the status field.
 	promptappend.DefaultStatus = promptappendDescStatus.Default.(string)
 	// promptappendDescDispatchedProcessRunID is the schema descriptor for dispatched_process_run_id field.
-	promptappendDescDispatchedProcessRunID := promptappendFields[7].Descriptor()
+	promptappendDescDispatchedProcessRunID := promptappendFields[8].Descriptor()
 	// promptappend.DefaultDispatchedProcessRunID holds the default value on creation for the dispatched_process_run_id field.
 	promptappend.DefaultDispatchedProcessRunID = promptappendDescDispatchedProcessRunID.Default.(string)
 	// promptappendDescCreatedAt is the schema descriptor for created_at field.
-	promptappendDescCreatedAt := promptappendFields[8].Descriptor()
+	promptappendDescCreatedAt := promptappendFields[9].Descriptor()
 	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
 	pushsubscriptionFields := schema.PushSubscription{}.Fields()
@@ -631,28 +631,32 @@ func init() {
 	stagedattachmentDescOwnerKeyHash := stagedattachmentFields[1].Descriptor()
 	// stagedattachment.DefaultOwnerKeyHash holds the default value on creation for the owner_key_hash field.
 	stagedattachment.DefaultOwnerKeyHash = stagedattachmentDescOwnerKeyHash.Default.(string)
+	// stagedattachmentDescKind is the schema descriptor for kind field.
+	stagedattachmentDescKind := stagedattachmentFields[2].Descriptor()
+	// stagedattachment.DefaultKind holds the default value on creation for the kind field.
+	stagedattachment.DefaultKind = stagedattachmentDescKind.Default.(string)
 	// stagedattachmentDescFilename is the schema descriptor for filename field.
-	stagedattachmentDescFilename := stagedattachmentFields[2].Descriptor()
+	stagedattachmentDescFilename := stagedattachmentFields[3].Descriptor()
 	// stagedattachment.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
 	stagedattachment.FilenameValidator = stagedattachmentDescFilename.Validators[0].(func(string) error)
 	// stagedattachmentDescPath is the schema descriptor for path field.
-	stagedattachmentDescPath := stagedattachmentFields[3].Descriptor()
+	stagedattachmentDescPath := stagedattachmentFields[4].Descriptor()
 	// stagedattachment.PathValidator is a validator for the "path" field. It is called by the builders before save.
 	stagedattachment.PathValidator = stagedattachmentDescPath.Validators[0].(func(string) error)
 	// stagedattachmentDescMimeType is the schema descriptor for mime_type field.
-	stagedattachmentDescMimeType := stagedattachmentFields[4].Descriptor()
+	stagedattachmentDescMimeType := stagedattachmentFields[5].Descriptor()
 	// stagedattachment.DefaultMimeType holds the default value on creation for the mime_type field.
 	stagedattachment.DefaultMimeType = stagedattachmentDescMimeType.Default.(string)
 	// stagedattachmentDescSize is the schema descriptor for size field.
-	stagedattachmentDescSize := stagedattachmentFields[5].Descriptor()
+	stagedattachmentDescSize := stagedattachmentFields[6].Descriptor()
 	// stagedattachment.DefaultSize holds the default value on creation for the size field.
 	stagedattachment.DefaultSize = stagedattachmentDescSize.Default.(int64)
 	// stagedattachmentDescPreviewable is the schema descriptor for previewable field.
-	stagedattachmentDescPreviewable := stagedattachmentFields[6].Descriptor()
+	stagedattachmentDescPreviewable := stagedattachmentFields[7].Descriptor()
 	// stagedattachment.DefaultPreviewable holds the default value on creation for the previewable field.
 	stagedattachment.DefaultPreviewable = stagedattachmentDescPreviewable.Default.(bool)
 	// stagedattachmentDescCreatedAt is the schema descriptor for created_at field.
-	stagedattachmentDescCreatedAt := stagedattachmentFields[7].Descriptor()
+	stagedattachmentDescCreatedAt := stagedattachmentFields[8].Descriptor()
 	// stagedattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
 	stagedattachment.DefaultCreatedAt = stagedattachmentDescCreatedAt.Default.(func() time.Time)
 	systemconfigurationFields := schema.SystemConfiguration{}.Fields()

@@ -9919,6 +9919,8 @@ type PromptAppendMutation struct {
 	appendmentions            []session.PromptMention
 	artifact_ids              *[]string
 	appendartifact_ids        []string
+	file_references           *[]session.PromptFileReference
+	appendfile_references     []session.PromptFileReference
 	status                    *string
 	dispatched_at             *time.Time
 	dispatched_process_run_id *string
@@ -10221,6 +10223,71 @@ func (m *PromptAppendMutation) ResetArtifactIds() {
 	m.appendartifact_ids = nil
 }
 
+// SetFileReferences sets the "file_references" field.
+func (m *PromptAppendMutation) SetFileReferences(sfr []session.PromptFileReference) {
+	m.file_references = &sfr
+	m.appendfile_references = nil
+}
+
+// FileReferences returns the value of the "file_references" field in the mutation.
+func (m *PromptAppendMutation) FileReferences() (r []session.PromptFileReference, exists bool) {
+	v := m.file_references
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFileReferences returns the old "file_references" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldFileReferences(ctx context.Context) (v []session.PromptFileReference, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFileReferences is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFileReferences requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFileReferences: %w", err)
+	}
+	return oldValue.FileReferences, nil
+}
+
+// AppendFileReferences adds sfr to the "file_references" field.
+func (m *PromptAppendMutation) AppendFileReferences(sfr []session.PromptFileReference) {
+	m.appendfile_references = append(m.appendfile_references, sfr...)
+}
+
+// AppendedFileReferences returns the list of values that were appended to the "file_references" field in this mutation.
+func (m *PromptAppendMutation) AppendedFileReferences() ([]session.PromptFileReference, bool) {
+	if len(m.appendfile_references) == 0 {
+		return nil, false
+	}
+	return m.appendfile_references, true
+}
+
+// ClearFileReferences clears the value of the "file_references" field.
+func (m *PromptAppendMutation) ClearFileReferences() {
+	m.file_references = nil
+	m.appendfile_references = nil
+	m.clearedFields[promptappend.FieldFileReferences] = struct{}{}
+}
+
+// FileReferencesCleared returns if the "file_references" field was cleared in this mutation.
+func (m *PromptAppendMutation) FileReferencesCleared() bool {
+	_, ok := m.clearedFields[promptappend.FieldFileReferences]
+	return ok
+}
+
+// ResetFileReferences resets all changes to the "file_references" field.
+func (m *PromptAppendMutation) ResetFileReferences() {
+	m.file_references = nil
+	m.appendfile_references = nil
+	delete(m.clearedFields, promptappend.FieldFileReferences)
+}
+
 // SetStatus sets the "status" field.
 func (m *PromptAppendMutation) SetStatus(s string) {
 	m.status = &s
@@ -10412,7 +10479,7 @@ func (m *PromptAppendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptAppendMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.session_id != nil {
 		fields = append(fields, promptappend.FieldSessionID)
 	}
@@ -10424,6 +10491,9 @@ func (m *PromptAppendMutation) Fields() []string {
 	}
 	if m.artifact_ids != nil {
 		fields = append(fields, promptappend.FieldArtifactIds)
+	}
+	if m.file_references != nil {
+		fields = append(fields, promptappend.FieldFileReferences)
 	}
 	if m.status != nil {
 		fields = append(fields, promptappend.FieldStatus)
@@ -10453,6 +10523,8 @@ func (m *PromptAppendMutation) Field(name string) (ent.Value, bool) {
 		return m.Mentions()
 	case promptappend.FieldArtifactIds:
 		return m.ArtifactIds()
+	case promptappend.FieldFileReferences:
+		return m.FileReferences()
 	case promptappend.FieldStatus:
 		return m.Status()
 	case promptappend.FieldDispatchedAt:
@@ -10478,6 +10550,8 @@ func (m *PromptAppendMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldMentions(ctx)
 	case promptappend.FieldArtifactIds:
 		return m.OldArtifactIds(ctx)
+	case promptappend.FieldFileReferences:
+		return m.OldFileReferences(ctx)
 	case promptappend.FieldStatus:
 		return m.OldStatus(ctx)
 	case promptappend.FieldDispatchedAt:
@@ -10522,6 +10596,13 @@ func (m *PromptAppendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetArtifactIds(v)
+		return nil
+	case promptappend.FieldFileReferences:
+		v, ok := value.([]session.PromptFileReference)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFileReferences(v)
 		return nil
 	case promptappend.FieldStatus:
 		v, ok := value.(string)
@@ -10584,6 +10665,9 @@ func (m *PromptAppendMutation) ClearedFields() []string {
 	if m.FieldCleared(promptappend.FieldMentions) {
 		fields = append(fields, promptappend.FieldMentions)
 	}
+	if m.FieldCleared(promptappend.FieldFileReferences) {
+		fields = append(fields, promptappend.FieldFileReferences)
+	}
 	if m.FieldCleared(promptappend.FieldDispatchedAt) {
 		fields = append(fields, promptappend.FieldDispatchedAt)
 	}
@@ -10603,6 +10687,9 @@ func (m *PromptAppendMutation) ClearField(name string) error {
 	switch name {
 	case promptappend.FieldMentions:
 		m.ClearMentions()
+		return nil
+	case promptappend.FieldFileReferences:
+		m.ClearFileReferences()
 		return nil
 	case promptappend.FieldDispatchedAt:
 		m.ClearDispatchedAt()
@@ -10626,6 +10713,9 @@ func (m *PromptAppendMutation) ResetField(name string) error {
 		return nil
 	case promptappend.FieldArtifactIds:
 		m.ResetArtifactIds()
+		return nil
+	case promptappend.FieldFileReferences:
+		m.ResetFileReferences()
 		return nil
 	case promptappend.FieldStatus:
 		m.ResetStatus()
@@ -16254,6 +16344,7 @@ type StagedAttachmentMutation struct {
 	typ            string
 	id             *string
 	owner_key_hash *string
+	kind           *string
 	filename       *string
 	_path          *string
 	mime_type      *string
@@ -16405,6 +16496,42 @@ func (m *StagedAttachmentMutation) OldOwnerKeyHash(ctx context.Context) (v strin
 // ResetOwnerKeyHash resets all changes to the "owner_key_hash" field.
 func (m *StagedAttachmentMutation) ResetOwnerKeyHash() {
 	m.owner_key_hash = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *StagedAttachmentMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *StagedAttachmentMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the StagedAttachment entity.
+// If the StagedAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StagedAttachmentMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *StagedAttachmentMutation) ResetKind() {
+	m.kind = nil
 }
 
 // SetFilename sets the "filename" field.
@@ -16677,9 +16804,12 @@ func (m *StagedAttachmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *StagedAttachmentMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.owner_key_hash != nil {
 		fields = append(fields, stagedattachment.FieldOwnerKeyHash)
+	}
+	if m.kind != nil {
+		fields = append(fields, stagedattachment.FieldKind)
 	}
 	if m.filename != nil {
 		fields = append(fields, stagedattachment.FieldFilename)
@@ -16709,6 +16839,8 @@ func (m *StagedAttachmentMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case stagedattachment.FieldOwnerKeyHash:
 		return m.OwnerKeyHash()
+	case stagedattachment.FieldKind:
+		return m.Kind()
 	case stagedattachment.FieldFilename:
 		return m.Filename()
 	case stagedattachment.FieldPath:
@@ -16732,6 +16864,8 @@ func (m *StagedAttachmentMutation) OldField(ctx context.Context, name string) (e
 	switch name {
 	case stagedattachment.FieldOwnerKeyHash:
 		return m.OldOwnerKeyHash(ctx)
+	case stagedattachment.FieldKind:
+		return m.OldKind(ctx)
 	case stagedattachment.FieldFilename:
 		return m.OldFilename(ctx)
 	case stagedattachment.FieldPath:
@@ -16759,6 +16893,13 @@ func (m *StagedAttachmentMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOwnerKeyHash(v)
+		return nil
+	case stagedattachment.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
 		return nil
 	case stagedattachment.FieldFilename:
 		v, ok := value.(string)
@@ -16868,6 +17009,9 @@ func (m *StagedAttachmentMutation) ResetField(name string) error {
 	switch name {
 	case stagedattachment.FieldOwnerKeyHash:
 		m.ResetOwnerKeyHash()
+		return nil
+	case stagedattachment.FieldKind:
+		m.ResetKind()
 		return nil
 	case stagedattachment.FieldFilename:
 		m.ResetFilename()

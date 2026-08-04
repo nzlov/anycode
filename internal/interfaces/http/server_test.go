@@ -721,6 +721,10 @@ func (u *fakeAttachmentUseCase) StageAttachment(context.Context, attachmentapp.S
 	return attachmentapp.AttachmentDTO{}, nil
 }
 
+func (u *fakeAttachmentUseCase) StageAnnotation(context.Context, attachmentapp.StageAnnotationInput) (attachmentapp.AttachmentDTO, error) {
+	return attachmentapp.AttachmentDTO{}, nil
+}
+
 func (u *fakeAttachmentUseCase) DeleteStagedAttachment(context.Context, sessiondomain.StagedAttachmentID) error {
 	return nil
 }

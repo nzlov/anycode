@@ -99,6 +99,31 @@ func TestOpenSessionDiffFileRejectsMissingAndNonMediaVersions(t *testing.T) {
 	}
 }
 
+func TestOpenPromptFileReadsGenericDiffFileContent(t *testing.T) {
+	diffPort := &fakeMediaDiffPort{
+		fakeDiffPort: fakeDiffPort{files: []gitdiff.DiffFile{{Path: "notes.txt", Status: "modified"}}},
+		content: gitdiff.FileContent{
+			Filename: "notes.txt", MimeType: "text/plain", Size: 4,
+			Reader: io.NopCloser(strings.NewReader("note")),
+		},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main", WorktreeBaseCommit: "base"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		diffPort,
+	)
+
+	content, err := service.OpenPromptFile(context.Background(), "session-1", sessiondomain.PromptFileReference{
+		Kind: sessiondomain.PromptFileReferenceDiff, FilePath: "notes.txt", Version: "new",
+	})
+	if err != nil {
+		t.Fatalf("OpenPromptFile() error = %v", err)
+	}
+	if content.Filename != "notes.txt" || content.MimeType != "text/plain" || string(content.Data) != "note" {
+		t.Fatalf("OpenPromptFile() = %#v", content)
+	}
+}
+
 func TestPreviewableMediaTypeUsesBrowserPreviewFormats(t *testing.T) {
 	for _, mimeType := range []string{
 		"image/svg+xml", "image/avif", "image/bmp", "image/x-icon", "application/pdf",

@@ -47,7 +47,11 @@
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
         </q-card-section>
         <q-separator v-if="!$q.screen.lt.md" />
-        <SessionFilePreview :file="selectedPreview" :zoomable="$q.screen.lt.md" />
+        <SessionFilePreview
+          :file="selectedPreview"
+          :zoomable="$q.screen.lt.md"
+          :annotation-source="`临时文件 ${filename}`"
+        />
         <q-btn
           v-if="$q.screen.lt.md"
           v-close-popup

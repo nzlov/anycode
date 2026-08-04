@@ -108,7 +108,10 @@ test('images use short-lived direct preview URLs while other previews keep authe
 test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
   assert.match(panel, /:maximized="\$q\.screen\.lt\.md"/);
   assert.match(panel, /v-if="!\$q\.screen\.lt\.md" class="artifact-preview-header"/);
-  assert.match(panel, /<SessionFilePreview :file="selected" :zoomable="\$q\.screen\.lt\.md"/);
+  assert.match(
+    panel,
+    /<SessionFilePreview[\s\S]*?:file="selected"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
+  );
   assert.match(panel, /artifact-preview-dialog__close/);
   assert.match(
     panel,
@@ -118,7 +121,7 @@ test('mobile artifact previews are titleless full-screen dialogs with draggable 
   assert.match(event, /v-if="!\$q\.screen\.lt\.md" class="artifact-event-preview__header"/);
   assert.match(
     event,
-    /<SessionFilePreview :file="selectedPreview" :zoomable="\$q\.screen\.lt\.md"/,
+    /<SessionFilePreview[\s\S]*?:file="selectedPreview"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
   );
   assert.match(event, /artifact-event-preview__close/);
   assert.doesNotMatch(event, /useRouter|name: 'session-artifact'/);

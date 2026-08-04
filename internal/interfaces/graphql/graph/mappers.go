@@ -420,7 +420,7 @@ func mapSessionAttachment(attachment sessiondomain.SessionAttachment) *model.Ses
 	return &model.SessionAttachment{
 		ID:          string(attachment.ID),
 		SessionID:   string(attachment.SessionID),
-		Kind:        attachment.Kind,
+		Kind:        string(attachment.Kind),
 		Filename:    attachment.Filename,
 		MimeType:    attachment.MimeType,
 		Size:        attachment.Size,
@@ -451,6 +451,7 @@ func mapPromptAppend(dto sessionapp.PromptAppendDTO) *model.PromptAppend {
 func mapAttachment(dto attachmentapp.AttachmentDTO) *model.Attachment {
 	return &model.Attachment{
 		ID:          dto.ID,
+		Kind:        dto.Kind,
 		Filename:    dto.Filename,
 		MimeType:    dto.MimeType,
 		Size:        dto.Size,

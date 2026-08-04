@@ -4487,7 +4487,7 @@ func TestPendingPromptInputUsesLiveArtifactsAndCancelsEmptyStaleAppend(t *testin
 	}
 	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
 
-	prompt, ids, inputFiles, mentions, cancelled, err := service.pendingPromptInput(context.Background(), "session-1", appends)
+	prompt, ids, inputFiles, mentions, cancelled, err := service.pendingPromptInput(context.Background(), domain.Session{ID: "session-1"}, appends)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7465,6 +7465,104 @@ func TestStartSessionPassesArchivedAttachmentsToCodex(t *testing.T) {
 	}
 	if paths := codexInputPaths(codex.startInput.Input, "mention"); len(paths) != 0 {
 		t.Fatalf("local files must not use mention input: %#v", codex.startInput.Input)
+	}
+}
+
+func TestStartSessionAppendsAnnotationAttachmentAsTextContext(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Requirement: "implement session",
+		Status: domain.StatusCreated, WorktreePath: "/workspace/session-1",
+	}
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["annotation-1"] = domain.SessionAttachment{
+		ID: "annotation-1", SessionID: "session-1", Role: domain.FileRoleInput,
+		Kind: domain.AttachmentKindAnnotation, Path: "/data/annotation.md",
+		ContextText: "预览标注：变更 app.go\n1. 选中文字：foo",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	annotationFound := false
+	for _, item := range codex.startInput.Input {
+		annotationFound = annotationFound || (item.Type == "text" && strings.Contains(item.Text, "预览标注：变更 app.go"))
+	}
+	if !annotationFound {
+		t.Fatalf("Codex input lacks annotation context: %#v", codex.startInput.Input)
+	}
+	if paths := codexInputPaths(codex.startInput.Input, "mention"); len(paths) != 0 {
+		t.Fatalf("annotation was sent as file mention: %#v", paths)
+	}
+}
+
+func TestCodexInputUsesAttachmentKindForContextShape(t *testing.T) {
+	input := codexInput("continue", []domain.SessionFile{
+		{Kind: domain.AttachmentKindUpload, Path: "/data/note.md", Filename: "note.md", MimeType: "text/markdown"},
+		{Kind: domain.AttachmentKindAnnotation, Path: "/data/annotation.md", ContextText: "预览标注：变更 app.go"},
+	}, nil)
+	if prompt := codexInputText(input); !strings.Contains(prompt, "/data/note.md") {
+		t.Fatalf("upload context = %#v", input)
+	}
+	if paths := codexInputPaths(input, "mention"); len(paths) != 0 {
+		t.Fatalf("archived upload must not use mention input: %#v", input)
+	}
+	annotationFound := false
+	for _, item := range input {
+		annotationFound = annotationFound || (item.Type == "text" && item.Text == "预览标注：变更 app.go")
+	}
+	if !annotationFound {
+		t.Fatalf("annotation context = %#v", input)
+	}
+}
+
+func TestCodexInputRoutesInlineFilesByMimeType(t *testing.T) {
+	input := codexInput("continue", []domain.SessionFile{
+		{ID: "image", Filename: "screen.png", MimeType: "image/png", InlineData: []byte("image")},
+		{ID: "svg", Filename: "diagram.svg", MimeType: "image/svg+xml", InlineData: []byte("svg")},
+		{ID: "audio", Filename: "note.wav", MimeType: "audio/wav", InlineData: []byte("audio")},
+		{ID: "video", Filename: "clip.mp4", MimeType: "video/mp4", InlineData: []byte("video")},
+		{ID: "model", Filename: "scene.glb", MimeType: "model/gltf-binary", InlineData: []byte("model")},
+	}, nil)
+	if len(input) != 6 || input[1].Type != "localImage" || input[2].Type != "mention" || input[3].Type != "localAudio" || input[4].Type != "mention" || input[5].Type != "mention" {
+		t.Fatalf("Codex input routing = %#v", input)
+	}
+	if string(input[1].Data) != "image" || string(input[2].Data) != "svg" || string(input[3].Data) != "audio" || string(input[4].Data) != "video" || string(input[5].Data) != "model" {
+		t.Fatalf("Codex inline data = %#v", input)
+	}
+}
+
+func TestResolvePromptFilesReusesSessionFileAndReadsDiffVersion(t *testing.T) {
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["existing"] = domain.SessionFile{
+		ID: "existing", SessionID: "session-1", Path: "/archive/manual.pdf", Filename: "manual.pdf", MimeType: "application/pdf",
+	}
+	reader := &fakePromptFileReader{content: domain.PromptFileContent{
+		Filename: "old-video.mp4", MimeType: "video/mp4", Data: []byte("old-video"),
+	}}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithAttachments(newFakeRepository(), files), WithPromptFileReader(reader))
+	references, err := normalizePromptFileReferences([]domain.PromptFileReference{
+		{Kind: domain.PromptFileReferenceSessionFile, SessionFileID: "existing"},
+		{Kind: domain.PromptFileReferenceDiff, FilePath: "media/demo.mp4", Version: "old"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := service.resolvePromptFiles(context.Background(), domain.Session{ID: "session-1"}, references, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolved) != 2 || resolved[0].Path != "/archive/manual.pdf" || string(resolved[1].InlineData) != "old-video" {
+		t.Fatalf("resolved prompt files = %#v", resolved)
+	}
+	if len(reader.references) != 1 || reader.references[0].FilePath != "media/demo.mp4" || reader.references[0].Version != "old" {
+		t.Fatalf("reader references = %#v", reader.references)
 	}
 }
 
@@ -12386,6 +12484,17 @@ type fakeAttachmentStore struct {
 	lastPromptAppendAttachmentSessionID domain.ID
 	lastPromptAppendAttachmentID        string
 	promoteErr                          error
+}
+
+type fakePromptFileReader struct {
+	content    domain.PromptFileContent
+	err        error
+	references []domain.PromptFileReference
+}
+
+func (r *fakePromptFileReader) OpenPromptFile(_ context.Context, _ domain.ID, reference domain.PromptFileReference) (domain.PromptFileContent, error) {
+	r.references = append(r.references, reference)
+	return r.content, r.err
 }
 
 type fakeInlineArtifactPublisher struct {

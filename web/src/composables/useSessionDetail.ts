@@ -22,8 +22,9 @@ import {
   submitWorkflowApproval as submitWorkflowApprovalRequest,
   type QuestionAnswerInput,
   type QuestionRequest,
-	type PageInfo,
-	type PromptMention,
+  type PageInfo,
+  type PromptFileReference,
+  type PromptMention,
   stopSession as stopSessionRequest,
   updateSessionConfig,
   updatePromptAppend,
@@ -136,15 +137,23 @@ export function useSessionDetail(sessionId: string) {
   async function appendDescription(
     body: string,
     stagedAttachmentIds: string[] = [],
-		artifactIds: string[] = [],
-		mentions: PromptMention[] = [],
-	) {
-		const text = body.trim() || 'continue';
+    artifactIds: string[] = [],
+    fileReferences: PromptFileReference[] = [],
+    mentions: PromptMention[] = [],
+  ) {
+    const text = body.trim() || 'continue';
 
     appending.value = true;
     error.value = '';
     try {
-			await appendPrompt(sessionId, text, stagedAttachmentIds, artifactIds, mentions);
+      await appendPrompt(
+        sessionId,
+        text,
+        stagedAttachmentIds,
+        artifactIds,
+        fileReferences,
+        mentions,
+      );
       await loadSessionState();
     } catch (err) {
       const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);

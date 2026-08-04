@@ -84,6 +84,7 @@ type Mutation {
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
+  stageAnnotation(input: StageAnnotationInput!): Attachment!
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
   deleteSessionFile(id: ID!): Boolean!
@@ -471,10 +472,16 @@ input ListSessionFilesInput {
 
 type Attachment {
   id: ID!
+  kind: String!
   filename: String!
   mimeType: String!
   size: Int64!
   previewable: Boolean!
+}
+
+input StageAnnotationInput {
+  filename: String!
+  content: String!
 }
 
 type PromptAppend {
@@ -1006,7 +1013,15 @@ input AppendPromptInput {
   body: String!
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
+  fileReferences: [PromptFileReferenceInput!]
   mentions: [PromptMentionInput!]
+}
+
+input PromptFileReferenceInput {
+  kind: String!
+  sessionFileId: ID
+  filePath: String
+  version: String
 }
 
 input UpdatePromptAppendInput {

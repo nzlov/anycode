@@ -15,6 +15,8 @@ const (
 	FieldID = "id"
 	// FieldOwnerKeyHash holds the string denoting the owner_key_hash field in the database.
 	FieldOwnerKeyHash = "owner_key_hash"
+	// FieldKind holds the string denoting the kind field in the database.
+	FieldKind = "kind"
 	// FieldFilename holds the string denoting the filename field in the database.
 	FieldFilename = "filename"
 	// FieldPath holds the string denoting the path field in the database.
@@ -35,6 +37,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldOwnerKeyHash,
+	FieldKind,
 	FieldFilename,
 	FieldPath,
 	FieldMimeType,
@@ -56,6 +59,8 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultOwnerKeyHash holds the default value on creation for the "owner_key_hash" field.
 	DefaultOwnerKeyHash string
+	// DefaultKind holds the default value on creation for the "kind" field.
+	DefaultKind string
 	// FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
 	FilenameValidator func(string) error
 	// PathValidator is a validator for the "path" field. It is called by the builders before save.
@@ -81,6 +86,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByOwnerKeyHash orders the results by the owner_key_hash field.
 func ByOwnerKeyHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerKeyHash, opts...).ToFunc()
+}
+
+// ByKind orders the results by the kind field.
+func ByKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKind, opts...).ToFunc()
 }
 
 // ByFilename orders the results by the filename field.

@@ -116,7 +116,7 @@ func (c *Client) start(
 	}
 	runtime.register(route)
 	go runtime.followSessionLog(route, transcriptPath, transcriptOffset)
-	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite)
+	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, route.retainInputCleanup)
 	if err != nil {
 		runtime.removeRoute(route)
 		return process.CodexHandle{}, err
@@ -376,7 +376,7 @@ func mindMapOperationSchema(kind string, required []string, fields map[string]an
 	}
 }
 
-func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string, workspaceWrite *workspaceWriteSettings) (string, bool, error) {
+func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string, workspaceWrite *workspaceWriteSettings, retainInputCleanup func(func())) (string, bool, error) {
 	switch action {
 	case process.CodexActionCompact:
 		if err := r.request(ctx, "thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
@@ -421,11 +421,12 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 		}
 		collaborationMode = map[string]any{"mode": "plan", "settings": settings}
 	}
-	items, err := appServerInput(input, workdir)
+	items, cleanup, err := appServerInput(input, workdir)
 	if err != nil {
 		return "", false, err
 	}
 	if len(items) == 0 {
+		cleanup()
 		return "", false, nil
 	}
 	params := map[string]any{"threadId": threadID, "input": items}
@@ -441,14 +442,45 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 		} `json:"turn"`
 	}
 	if err := r.request(ctx, "turn/start", params, &response); err != nil {
+		cleanup()
 		return "", false, fmt.Errorf("start codex turn: %w", err)
 	}
+	retainInputCleanup(cleanup)
 	return response.Turn.ID, true, nil
 }
 
-func appServerInput(input []process.CodexInputItem, workdir string) ([]map[string]any, error) {
+func appServerInput(input []process.CodexInputItem, workdir string) ([]map[string]any, func(), error) {
 	result := make([]map[string]any, 0, len(input))
+	temporaryPaths := make([]string, 0)
+	cleanup := func() {
+		for _, path := range temporaryPaths {
+			_ = os.Remove(path)
+		}
+	}
 	for _, item := range input {
+		path := item.Path
+		if len(item.Data) > 0 {
+			extension := filepath.Ext(filepath.Base(item.Name))
+			if len(extension) > 16 {
+				extension = ""
+			}
+			file, err := os.CreateTemp("", "anycode-prompt-file-*"+extension)
+			if err != nil {
+				cleanup()
+				return nil, func() {}, fmt.Errorf("create temporary prompt file: %w", err)
+			}
+			path = file.Name()
+			temporaryPaths = append(temporaryPaths, path)
+			if _, err := file.Write(item.Data); err != nil {
+				file.Close()
+				cleanup()
+				return nil, func() {}, fmt.Errorf("write temporary prompt file: %w", err)
+			}
+			if err := file.Close(); err != nil {
+				cleanup()
+				return nil, func() {}, fmt.Errorf("close temporary prompt file: %w", err)
+			}
+		}
 		switch item.Type {
 		case "text":
 			if item.Text == "" {
@@ -456,20 +488,21 @@ func appServerInput(input []process.CodexInputItem, workdir string) ([]map[strin
 			}
 			result = append(result, map[string]any{"type": "text", "text": item.Text})
 		case "localImage", "localAudio":
-			if item.Path != "" {
-				result = append(result, map[string]any{"type": item.Type, "path": item.Path})
+			if path != "" {
+				result = append(result, map[string]any{"type": item.Type, "path": path})
 			}
 		case "mention":
-			if item.Path != "" && item.Name != "" {
-				path, err := appServerMentionPath(item.Path, workdir)
+			if path != "" && item.Name != "" {
+				path, err := appServerMentionPath(path, workdir)
 				if err != nil {
-					return nil, err
+					cleanup()
+					return nil, func() {}, err
 				}
 				result = append(result, map[string]any{"type": "mention", "path": path, "name": item.Name})
 			}
 		}
 	}
-	return result, nil
+	return result, cleanup, nil
 }
 
 func appServerMentionPath(path string, workdir string) (string, error) {
@@ -509,11 +542,12 @@ func (c *Client) Steer(ctx context.Context, input process.CodexSteerInput) error
 	if turnID == "" {
 		return process.ErrProcessNotFound
 	}
-	items, err := appServerInput(input.Input, route.workdir)
+	items, cleanup, err := appServerInput(input.Input, route.workdir)
 	if err != nil {
 		return err
 	}
 	if len(items) == 0 {
+		cleanup()
 		return errors.New("codex steer input is required")
 	}
 	var response struct {
@@ -522,11 +556,14 @@ func (c *Client) Steer(ctx context.Context, input process.CodexSteerInput) error
 	if err := runtime.request(ctx, "turn/steer", map[string]any{
 		"threadId": route.handle.CodexSessionID, "expectedTurnId": turnID, "input": items,
 	}, &response); err != nil {
+		cleanup()
 		return fmt.Errorf("steer codex turn: %w", err)
 	}
 	if response.TurnID != "" && response.TurnID != turnID {
+		cleanup()
 		return fmt.Errorf("steer codex turn returned unexpected turn id %q", response.TurnID)
 	}
+	route.retainInputCleanup(cleanup)
 	return nil
 }
 

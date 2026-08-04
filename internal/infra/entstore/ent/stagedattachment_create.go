@@ -34,6 +34,20 @@ func (_c *StagedAttachmentCreate) SetNillableOwnerKeyHash(v *string) *StagedAtta
 	return _c
 }
 
+// SetKind sets the "kind" field.
+func (_c *StagedAttachmentCreate) SetKind(v string) *StagedAttachmentCreate {
+	_c.mutation.SetKind(v)
+	return _c
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_c *StagedAttachmentCreate) SetNillableKind(v *string) *StagedAttachmentCreate {
+	if v != nil {
+		_c.SetKind(*v)
+	}
+	return _c
+}
+
 // SetFilename sets the "filename" field.
 func (_c *StagedAttachmentCreate) SetFilename(v string) *StagedAttachmentCreate {
 	_c.mutation.SetFilename(v)
@@ -147,6 +161,10 @@ func (_c *StagedAttachmentCreate) defaults() {
 		v := stagedattachment.DefaultOwnerKeyHash
 		_c.mutation.SetOwnerKeyHash(v)
 	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		v := stagedattachment.DefaultKind
+		_c.mutation.SetKind(v)
+	}
 	if _, ok := _c.mutation.MimeType(); !ok {
 		v := stagedattachment.DefaultMimeType
 		_c.mutation.SetMimeType(v)
@@ -169,6 +187,9 @@ func (_c *StagedAttachmentCreate) defaults() {
 func (_c *StagedAttachmentCreate) check() error {
 	if _, ok := _c.mutation.OwnerKeyHash(); !ok {
 		return &ValidationError{Name: "owner_key_hash", err: errors.New(`ent: missing required field "StagedAttachment.owner_key_hash"`)}
+	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "StagedAttachment.kind"`)}
 	}
 	if _, ok := _c.mutation.Filename(); !ok {
 		return &ValidationError{Name: "filename", err: errors.New(`ent: missing required field "StagedAttachment.filename"`)}
@@ -236,6 +257,10 @@ func (_c *StagedAttachmentCreate) createSpec() (*StagedAttachment, *sqlgraph.Cre
 	if value, ok := _c.mutation.OwnerKeyHash(); ok {
 		_spec.SetField(stagedattachment.FieldOwnerKeyHash, field.TypeString, value)
 		_node.OwnerKeyHash = value
+	}
+	if value, ok := _c.mutation.Kind(); ok {
+		_spec.SetField(stagedattachment.FieldKind, field.TypeString, value)
+		_node.Kind = value
 	}
 	if value, ok := _c.mutation.Filename(); ok {
 		_spec.SetField(stagedattachment.FieldFilename, field.TypeString, value)

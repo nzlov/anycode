@@ -775,8 +775,19 @@ func (s *Store) sessionInputFromPath(root string, path string) (session.SessionF
 	var sourceType session.AttachmentSourceType
 	var sourceID string
 	var id session.SessionFileID
+	kind := session.AttachmentKindUpload
 	if filepath.Base(root) == "sessions" {
-		if len(parts) == 5 {
+		if len(parts) == 6 {
+			sessionID = session.ID(parts[0])
+			sourceType = session.AttachmentSourceType(parts[1])
+			sourceIDBytes, decodeErr := base64.RawURLEncoding.DecodeString(parts[2])
+			if decodeErr != nil {
+				return session.SessionFile{}, false
+			}
+			sourceID = string(sourceIDBytes)
+			kind = normalizeAttachmentKind(session.AttachmentKind(parts[3]))
+			id = session.SessionFileID(parts[4])
+		} else if len(parts) == 5 {
 			sessionID = session.ID(parts[0])
 			sourceType = session.AttachmentSourceType(parts[1])
 			sourceIDBytes, decodeErr := base64.RawURLEncoding.DecodeString(parts[2])
@@ -795,7 +806,16 @@ func (s *Store) sessionInputFromPath(root string, path string) (session.SessionF
 		}
 	} else {
 		sessionID = session.ID(filepath.Base(root))
-		if len(parts) == 4 {
+		if len(parts) == 5 {
+			sourceType = session.AttachmentSourceType(parts[0])
+			sourceIDBytes, decodeErr := base64.RawURLEncoding.DecodeString(parts[1])
+			if decodeErr != nil {
+				return session.SessionFile{}, false
+			}
+			sourceID = string(sourceIDBytes)
+			kind = normalizeAttachmentKind(session.AttachmentKind(parts[2]))
+			id = session.SessionFileID(parts[3])
+		} else if len(parts) == 4 {
 			sourceType = session.AttachmentSourceType(parts[0])
 			sourceIDBytes, decodeErr := base64.RawURLEncoding.DecodeString(parts[1])
 			if decodeErr != nil {
@@ -819,27 +839,36 @@ func (s *Store) sessionInputFromPath(root string, path string) (session.SessionF
 		return session.SessionFile{}, false
 	}
 	mimeType := detectAttachmentMimeType(path, info.Name())
-	_, kind := classifyArtifact(mimeType)
+	_, previewKind := classifyArtifact(mimeType)
+	contextText := ""
+	if kind == session.AttachmentKindAnnotation {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return session.SessionFile{}, false
+		}
+		contextText = string(content)
+	}
 	return session.SessionFile{
 		ID:          id,
 		SessionID:   sessionID,
 		Role:        session.FileRoleInput,
 		SourceType:  sourceType,
 		SourceID:    sourceID,
-		Kind:        "file",
+		Kind:        kind,
 		Filename:    info.Name(),
 		Path:        path,
 		MimeType:    mimeType,
 		Size:        info.Size(),
-		Previewable: kind != session.PreviewKindNone,
-		PreviewKind: kind,
+		Previewable: previewKind != session.PreviewKindNone,
+		PreviewKind: previewKind,
+		ContextText: contextText,
 		CreatedAt:   info.ModTime().UTC(),
 	}, true
 }
 
-func (s *Store) sessionInputDir(sessionID session.ID, sourceType session.AttachmentSourceType, sourceID string, id session.SessionFileID) string {
+func (s *Store) sessionInputDir(sessionID session.ID, sourceType session.AttachmentSourceType, sourceID string, kind session.AttachmentKind, id session.SessionFileID) string {
 	encodedSourceID := base64.RawURLEncoding.EncodeToString([]byte(sourceID))
-	return filepath.Join(s.attachmentsRoot(), "sessions", safeSessionPathComponent(sessionID), string(sourceType), encodedSourceID, string(id))
+	return filepath.Join(s.attachmentsRoot(), "sessions", safeSessionPathComponent(sessionID), string(sourceType), encodedSourceID, string(normalizeAttachmentKind(kind)), string(id))
 }
 
 func encodeArtifactID(sessionID session.ID, logicalPath string) session.SessionFileID {

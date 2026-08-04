@@ -19,6 +19,8 @@ type StagedAttachment struct {
 	ID string `json:"id,omitempty"`
 	// OwnerKeyHash holds the value of the "owner_key_hash" field.
 	OwnerKeyHash string `json:"owner_key_hash,omitempty"`
+	// Kind holds the value of the "kind" field.
+	Kind string `json:"kind,omitempty"`
 	// Filename holds the value of the "filename" field.
 	Filename string `json:"filename,omitempty"`
 	// Path holds the value of the "path" field.
@@ -43,7 +45,7 @@ func (*StagedAttachment) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case stagedattachment.FieldSize:
 			values[i] = new(sql.NullInt64)
-		case stagedattachment.FieldID, stagedattachment.FieldOwnerKeyHash, stagedattachment.FieldFilename, stagedattachment.FieldPath, stagedattachment.FieldMimeType:
+		case stagedattachment.FieldID, stagedattachment.FieldOwnerKeyHash, stagedattachment.FieldKind, stagedattachment.FieldFilename, stagedattachment.FieldPath, stagedattachment.FieldMimeType:
 			values[i] = new(sql.NullString)
 		case stagedattachment.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -73,6 +75,12 @@ func (_m *StagedAttachment) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field owner_key_hash", values[i])
 			} else if value.Valid {
 				_m.OwnerKeyHash = value.String
+			}
+		case stagedattachment.FieldKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field kind", values[i])
+			} else if value.Valid {
+				_m.Kind = value.String
 			}
 		case stagedattachment.FieldFilename:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -148,6 +156,9 @@ func (_m *StagedAttachment) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("owner_key_hash=")
 	builder.WriteString(_m.OwnerKeyHash)
+	builder.WriteString(", ")
+	builder.WriteString("kind=")
+	builder.WriteString(_m.Kind)
 	builder.WriteString(", ")
 	builder.WriteString("filename=")
 	builder.WriteString(_m.Filename)

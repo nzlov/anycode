@@ -606,7 +606,7 @@ func TestSessionDirectoriesRejectPathLikeSessionIDs(t *testing.T) {
 		if !pathWithin(outputRoot, artifactDir) || filepath.Dir(artifactDir) != outputRoot {
 			t.Fatalf("ArtifactDir(%q) escaped output root: %q", sessionID, artifactDir)
 		}
-		inputDir := store.sessionInputDir(sessionID, session.AttachmentSourceRequirement, "source", "file-1")
+		inputDir := store.sessionInputDir(sessionID, session.AttachmentSourceRequirement, "source", session.AttachmentKindUpload, "file-1")
 		inputRoot := filepath.Join(store.attachmentsRoot(), "sessions")
 		if !pathWithin(inputRoot, inputDir) {
 			t.Fatalf("sessionInputDir(%q) escaped input root: %q", sessionID, inputDir)
@@ -814,5 +814,33 @@ func TestOpenRejectsOutsideAttachmentRoot(t *testing.T) {
 	}
 	if storeErr.Code != "outside_attachment_root" {
 		t.Fatalf("Code = %q", storeErr.Code)
+	}
+}
+
+func TestPromoteAnnotationPreservesKindAndContext(t *testing.T) {
+	store := New(t.TempDir())
+	staged, err := store.Stage(context.Background(), session.StageAttachmentInput{
+		Kind: session.AttachmentKindAnnotation, Filename: "preview.md",
+		MimeType: "text/markdown", Reader: strings.NewReader("预览标注：变更 app.go"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachment, err := store.Promote(context.Background(), session.PromoteAttachmentInput{
+		Staged: staged, SessionID: "session-1",
+		SourceType: session.AttachmentSourcePromptAppend, SourceID: "append-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attachment.Kind != session.AttachmentKindAnnotation || attachment.ContextText != "预览标注：变更 app.go" {
+		t.Fatalf("promoted annotation = %#v", attachment)
+	}
+	found, err := store.FindSessionFile(context.Background(), attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Kind != session.AttachmentKindAnnotation || found.ContextText != attachment.ContextText {
+		t.Fatalf("reloaded annotation = %#v", found)
 	}
 }

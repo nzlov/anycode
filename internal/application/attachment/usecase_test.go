@@ -48,6 +48,27 @@ func TestStageAttachmentPersistsMetadataAndCleansFileOnRepositoryFailure(t *test
 	}
 }
 
+func TestStageAnnotationUsesAnnotationKindAndTextContext(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeAttachmentRepository()
+	service := New(repo, newFakeStore())
+
+	got, err := service.StageAnnotation(ctx, StageAnnotationInput{
+		OwnerKeyHash: "owner",
+		Filename:     "preview.md",
+		Content:      "预览标注：变更 app.go",
+	})
+	if err != nil {
+		t.Fatalf("StageAnnotation() error = %v", err)
+	}
+	if got.Kind != string(domain.AttachmentKindAnnotation) {
+		t.Fatalf("StageAnnotation() kind = %q", got.Kind)
+	}
+	if staged := repo.staged["staged-1"]; staged.Kind != domain.AttachmentKindAnnotation || staged.MimeType != "text/markdown" {
+		t.Fatalf("staged annotation = %#v", staged)
+	}
+}
+
 func TestDeleteAttachmentsRemovesFileAndMetadata(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeAttachmentRepository()
@@ -124,6 +145,7 @@ func (s *fakeStore) Stage(_ context.Context, input domain.StageAttachmentInput) 
 	return domain.StagedAttachment{
 		ID:           "staged-1",
 		OwnerKeyHash: input.OwnerKeyHash,
+		Kind:         input.Kind,
 		Filename:     input.Filename,
 		Path:         "/attachments/staged-1/" + input.Filename,
 		MimeType:     input.MimeType,

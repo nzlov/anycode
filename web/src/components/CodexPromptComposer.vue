@@ -2,6 +2,7 @@
   <PromptComposer
     :prompt="prompt"
     :files="files"
+    :annotations="annotations"
     :artifacts="artifacts"
     :mentions="mentions"
     :model="model"
@@ -22,6 +23,7 @@
     :completion-has-thread="completionHasThread"
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
+    @update:annotations="emit('update:annotations', $event)"
     @update:artifacts="emit('update:artifacts', $event)"
     @update:mentions="emit('update:mentions', $event)"
     @update:model="emit('update:model', $event)"
@@ -113,11 +115,13 @@ import { appendQuickCommand } from '@/services/quickCommandText';
 import { hasStoredSessionConfig } from '@/services/newSessionPreferences';
 import type { SessionFile } from '@/services/sessionFiles';
 import type { PromptMention } from '@/services/sessions';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
+    annotations?: PreviewAnnotationAttachment[];
     artifacts?: SessionFile[];
     mentions?: PromptMention[];
     model: string;
@@ -153,6 +157,7 @@ const props = withDefaults(
     completionSessionId: '',
     completionHasThread: false,
     artifacts: () => [],
+    annotations: () => [],
     mentions: () => [],
   },
 );
@@ -160,6 +165,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
+  'update:annotations': [value: PreviewAnnotationAttachment[]];
   'update:artifacts': [value: SessionFile[]];
   'update:mentions': [value: PromptMention[]];
   'update:model': [value: string];

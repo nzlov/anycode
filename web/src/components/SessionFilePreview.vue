@@ -11,16 +11,29 @@
       @pointerup="endGesture"
       @pointercancel="endGesture"
     >
-      <img
-        ref="mediaElement"
-        :src="imageURL"
-        :alt="file.filename"
-        class="session-file-preview__image"
-        :style="mediaTransform"
-        @load="finishImageLoad($event)"
-        @error="failImageLoad($event)"
-      />
-      <q-spinner v-if="loading" class="session-file-preview__loading" color="primary" size="32px" />
+      <PreviewAnnotator
+        mode="image"
+        :source="annotationSource || `临时文件 ${file.filename}`"
+        :session-id="annotationSessionId"
+        :content-key="file.id"
+        :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+      >
+        <img
+          ref="mediaElement"
+          :src="imageURL"
+          :alt="file.filename"
+          class="session-file-preview__image"
+          :style="mediaTransform"
+          @load="finishImageLoad($event)"
+          @error="failImageLoad($event)"
+        />
+        <q-spinner
+          v-if="loading"
+          class="session-file-preview__loading"
+          color="primary"
+          size="32px"
+        />
+      </PreviewAnnotator>
     </div>
     <q-spinner v-else-if="loading" color="primary" size="32px" />
     <iframe
@@ -59,9 +72,18 @@
       :filename="file.filename"
       class="session-file-preview__model"
     />
-    <pre v-else-if="file?.previewKind === 'text'" class="session-file-preview__text">{{
-      text
-    }}</pre>
+    <PreviewAnnotator
+      v-else-if="file?.previewKind === 'text'"
+      mode="text"
+      :source="annotationSource || `临时文件 ${file.filename}`"
+      :session-id="annotationSessionId"
+      :content-key="file.id"
+      :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+    >
+      <pre class="session-file-preview__text" data-annotation-text data-annotation-line="1">{{
+        text
+      }}</pre>
+    </PreviewAnnotator>
     <div v-else class="session-file-preview__state text-muted">
       <q-icon :name="file ? 'draft' : 'inventory_2'" size="36px" />
       <span>{{ file ? '此文件仅支持下载' : '暂无临时文件' }}</span>
@@ -72,6 +94,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 
+import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import {
   fetchSessionFile,
   requestSessionFilePreviewURL,
@@ -81,8 +104,13 @@ import {
 const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
 const props = withDefaults(
-  defineProps<{ file: SessionFilePreviewData | null; zoomable?: boolean }>(),
-  { zoomable: false },
+  defineProps<{
+    file: SessionFilePreviewData | null;
+    zoomable?: boolean;
+    annotationSource?: string;
+    annotationSessionId?: string;
+  }>(),
+  { zoomable: false, annotationSource: '', annotationSessionId: '' },
 );
 const loading = ref(false);
 const error = ref('');
@@ -295,6 +323,10 @@ onBeforeUnmount(clear);
   height: 100%;
   place-items: center;
   overflow: hidden;
+}
+
+.session-file-preview__zoom-surface :deep(.preview-annotator) {
+  height: 100%;
 }
 
 .session-file-preview__loading {

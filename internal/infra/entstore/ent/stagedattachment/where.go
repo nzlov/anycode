@@ -69,6 +69,11 @@ func OwnerKeyHash(v string) predicate.StagedAttachment {
 	return predicate.StagedAttachment(sql.FieldEQ(FieldOwnerKeyHash, v))
 }
 
+// Kind applies equality check predicate on the "kind" field. It's identical to KindEQ.
+func Kind(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldEQ(FieldKind, v))
+}
+
 // Filename applies equality check predicate on the "filename" field. It's identical to FilenameEQ.
 func Filename(v string) predicate.StagedAttachment {
 	return predicate.StagedAttachment(sql.FieldEQ(FieldFilename, v))
@@ -162,6 +167,71 @@ func OwnerKeyHashEqualFold(v string) predicate.StagedAttachment {
 // OwnerKeyHashContainsFold applies the ContainsFold predicate on the "owner_key_hash" field.
 func OwnerKeyHashContainsFold(v string) predicate.StagedAttachment {
 	return predicate.StagedAttachment(sql.FieldContainsFold(FieldOwnerKeyHash, v))
+}
+
+// KindEQ applies the EQ predicate on the "kind" field.
+func KindEQ(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldEQ(FieldKind, v))
+}
+
+// KindNEQ applies the NEQ predicate on the "kind" field.
+func KindNEQ(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldNEQ(FieldKind, v))
+}
+
+// KindIn applies the In predicate on the "kind" field.
+func KindIn(vs ...string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldIn(FieldKind, vs...))
+}
+
+// KindNotIn applies the NotIn predicate on the "kind" field.
+func KindNotIn(vs ...string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldNotIn(FieldKind, vs...))
+}
+
+// KindGT applies the GT predicate on the "kind" field.
+func KindGT(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldGT(FieldKind, v))
+}
+
+// KindGTE applies the GTE predicate on the "kind" field.
+func KindGTE(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldGTE(FieldKind, v))
+}
+
+// KindLT applies the LT predicate on the "kind" field.
+func KindLT(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldLT(FieldKind, v))
+}
+
+// KindLTE applies the LTE predicate on the "kind" field.
+func KindLTE(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldLTE(FieldKind, v))
+}
+
+// KindContains applies the Contains predicate on the "kind" field.
+func KindContains(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldContains(FieldKind, v))
+}
+
+// KindHasPrefix applies the HasPrefix predicate on the "kind" field.
+func KindHasPrefix(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldHasPrefix(FieldKind, v))
+}
+
+// KindHasSuffix applies the HasSuffix predicate on the "kind" field.
+func KindHasSuffix(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldHasSuffix(FieldKind, v))
+}
+
+// KindEqualFold applies the EqualFold predicate on the "kind" field.
+func KindEqualFold(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldEqualFold(FieldKind, v))
+}
+
+// KindContainsFold applies the ContainsFold predicate on the "kind" field.
+func KindContainsFold(v string) predicate.StagedAttachment {
+	return predicate.StagedAttachment(sql.FieldContainsFold(FieldKind, v))
 }
 
 // FilenameEQ applies the EQ predicate on the "filename" field.

@@ -92,6 +92,24 @@
           </q-chip>
         </template>
         <q-chip
+          v-for="annotation in annotations"
+          :key="annotation.id"
+          removable
+          square
+          :disable="disabled"
+          class="attachment-chip annotation-attachment-chip"
+          icon="rate_review"
+          @remove="removeAnnotation(annotation)"
+        >
+          <span class="ellipsis">
+            批注 · {{ annotation.source
+            }}{{ annotation.fileReferences?.length ? ' · 含原文件' : '' }}
+          </span>
+          <q-tooltip class="annotation-attachment-tooltip">
+            <div class="annotation-attachment-preview">{{ annotation.content }}</div>
+          </q-tooltip>
+        </q-chip>
+        <q-chip
           v-for="artifact in artifacts"
           :key="artifact.id"
           removable
@@ -348,6 +366,7 @@ import {
 } from '@/services/promptCompletions';
 import type { SessionFile } from '@/services/sessionFiles';
 import type { PromptMention } from '@/services/sessions';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
@@ -355,6 +374,7 @@ const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
+    annotations?: PreviewAnnotationAttachment[];
     artifacts?: SessionFile[];
     mentions?: PromptMention[];
     model: string;
@@ -388,6 +408,7 @@ const props = withDefaults(
     completionSessionId: '',
     completionHasThread: false,
     artifacts: () => [],
+    annotations: () => [],
     mentions: () => [],
   },
 );
@@ -395,6 +416,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
+  'update:annotations': [value: PreviewAnnotationAttachment[]];
   'update:artifacts': [value: SessionFile[]];
   'update:mentions': [value: PromptMention[]];
   'update:model': [value: string];
@@ -447,7 +469,9 @@ const filesModel = computed({
   set: (value: File[] | File | null) =>
     emit('update:files', Array.isArray(value) ? value : value ? [value] : []),
 });
-const attachmentCount = computed(() => props.files.length + props.artifacts.length);
+const attachmentCount = computed(
+  () => props.files.length + props.annotations.length + props.artifacts.length,
+);
 const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
 const isCollapsed = computed(() => props.collapsible && props.collapsed);
 const completionScopeReady = computed(
@@ -494,6 +518,13 @@ function fileIcon(file: File) {
 
 function isImageFile(file: File) {
   return browserPreviewKind(file.name, file.type) === 'image';
+}
+
+function removeAnnotation(annotation: PreviewAnnotationAttachment) {
+  emit(
+    'update:annotations',
+    props.annotations.filter((item) => item.id !== annotation.id),
+  );
 }
 
 function fileThumbnailUrl(file: File) {

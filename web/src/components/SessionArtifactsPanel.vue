@@ -158,7 +158,13 @@
           </q-btn>
         </q-card-section>
         <q-separator />
-        <SessionFilePreview :file="selected" />
+        <SessionFilePreview
+          :file="selected"
+          :annotation-session-id="sessionId"
+          :annotation-source="
+            selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
+          "
+        />
       </q-card>
     </div>
 
@@ -197,7 +203,14 @@
           </div>
         </q-card-section>
         <q-separator v-if="!$q.screen.lt.md" />
-        <SessionFilePreview :file="selected" :zoomable="$q.screen.lt.md" />
+        <SessionFilePreview
+          :file="selected"
+          :zoomable="$q.screen.lt.md"
+          :annotation-session-id="sessionId"
+          :annotation-source="
+            selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
+          "
+        />
         <q-btn
           v-if="$q.screen.lt.md"
           v-close-popup

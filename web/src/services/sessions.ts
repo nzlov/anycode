@@ -245,6 +245,13 @@ export interface PromptMention {
   path: string;
 }
 
+export interface PromptFileReference {
+  kind: 'session_file' | 'diff';
+  sessionFileId?: string;
+  filePath?: string;
+  version?: 'old' | 'new';
+}
+
 export interface SessionConfig {
   codexModel: string;
   reasoningEffort: string;
@@ -758,6 +765,7 @@ export async function appendPrompt(
   body: string,
   stagedAttachmentIds?: string[],
   artifactIds?: string[],
+  fileReferences?: PromptFileReference[],
   mentions?: PromptMention[],
 ) {
   const input: {
@@ -765,6 +773,7 @@ export async function appendPrompt(
     body: string;
     stagedAttachmentIds?: string[];
     artifactIds?: string[];
+    fileReferences?: PromptFileReference[];
     mentions?: PromptMention[];
   } = {
     sessionId,
@@ -774,6 +783,7 @@ export async function appendPrompt(
     input.stagedAttachmentIds = stagedAttachmentIds;
   }
   if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
+  if (fileReferences && fileReferences.length > 0) input.fileReferences = fileReferences;
   if (mentions && mentions.length > 0) input.mentions = mentions;
   return graphqlFetch<
     { appendPrompt: GraphQLPromptAppend },
@@ -783,6 +793,7 @@ export async function appendPrompt(
         body: string;
         stagedAttachmentIds?: string[];
         artifactIds?: string[];
+        fileReferences?: PromptFileReference[];
         mentions?: PromptMention[];
       };
     }
