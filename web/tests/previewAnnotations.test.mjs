@@ -94,6 +94,17 @@ test('text files and code diffs use selected-text highlights and comments', () =
   assert.match(annotator, /sourceTextRange\(range\)/);
 });
 
+test('multi-line comments include only annotation text and exclude diff line numbers', () => {
+  assert.match(annotator, /editorQuote\.value = selectedAnnotationText\(range\)/);
+  assert.match(
+    annotator,
+    /querySelectorAll<HTMLElement>\('\[data-annotation-text\]'\)[\s\S]*range\.intersectsNode\(textRoot\)/,
+  );
+  assert.match(annotator, /\.map\(\(textRoot\) => \{[\s\S]*selected\.selectNodeContents\(textRoot\)/);
+  assert.match(annotator, /\.join\('\\n'\)/);
+  assert.doesNotMatch(annotator, /editorQuote\.value = range\.toString\(\)/);
+});
+
 test('inject adds every new annotation as a typed composer attachment then clears it', () => {
   assert.match(annotator, /formatPreviewAnnotationDraft\(props\.source, annotations\.value\)/);
   assert.match(annotator, /injector\.inject[\s\S]*clearAnnotations\(\)/);

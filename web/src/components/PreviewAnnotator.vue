@@ -442,9 +442,28 @@ function openTextEditor() {
   editorKind.value = 'text';
   editorId.value = '';
   editorExisting.value = false;
-  editorQuote.value = range.toString();
+  editorQuote.value = selectedAnnotationText(range);
   editorNote.value = '';
   editorOpen.value = true;
+}
+
+function selectedAnnotationText(range: Range) {
+  const surface = surfaceElement.value;
+  if (!surface) return '';
+  return [...surface.querySelectorAll<HTMLElement>('[data-annotation-text]')]
+    .filter((textRoot) => range.intersectsNode(textRoot))
+    .map((textRoot) => {
+      const selected = document.createRange();
+      selected.selectNodeContents(textRoot);
+      if (textRoot.contains(range.startContainer)) {
+        selected.setStart(range.startContainer, range.startOffset);
+      }
+      if (textRoot.contains(range.endContainer)) {
+        selected.setEnd(range.endContainer, range.endOffset);
+      }
+      return selected.toString();
+    })
+    .join('\n');
 }
 
 function openImageEditor(annotation: ImagePreviewAnnotation, existing = true) {
