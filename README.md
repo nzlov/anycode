@@ -90,6 +90,8 @@
 
 无需克隆仓库；启动只需要 `compose.yml` 和 `.env.example`。
 
+默认推荐使用 Docker Compose。需要直接在 Linux 宿主机运行时，请参阅 [systemd 部署说明](docs/systemd.md)；每个 GitHub Release 都提供 `amd64` 和 `arm64` 二进制归档，以及 Debian、Red Hat 和 Arch Linux 安装包与校验和。
+
 ### 1. 下载部署文件并配置环境
 
 创建部署目录并下载必要文件：

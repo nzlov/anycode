@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://nfpm.goreleaser.com/schema.json
+name: anycode
+arch: ${PACKAGE_ARCH}
+platform: linux
+version: ${PACKAGE_VERSION}
+version_schema: semver
+release: "1"
+section: utils
+priority: optional
+maintainer: nzlov <me@nzlov.com>
+description: Web workspace for Codex agents
+vendor: AnyCode
+homepage: https://github.com/nzlov/anycode
+license: MIT
+
+contents:
+  - src: ${PACKAGE_BINARY}
+    dst: /usr/bin/anycode
+    expand: true
+    file_info:
+      mode: 0755
+  - src: deploy/systemd/anycode.service
+    dst: /usr/lib/systemd/user/anycode.service
+    file_info:
+      mode: 0644
+  - src: deploy/systemd/anycode.env.example
+    dst: /usr/share/anycode/anycode.env.example
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/licenses/anycode/LICENSE
+    file_info:
+      mode: 0644
+
+overrides:
+  deb:
+    depends:
+      - git
+      - libc6
+      - systemd
+  rpm:
+    depends:
+      - git
+      - glibc
+      - systemd
+  archlinux:
+    depends:
+      - git
+      - glibc
+      - systemd
+
+rpm:
+  group: Applications/System
+  summary: Web workspace for Codex agents
+
+archlinux:
+  pkgbase: anycode
+  packager: nzlov <me@nzlov.com>

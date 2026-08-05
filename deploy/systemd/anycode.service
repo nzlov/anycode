@@ -1,0 +1,19 @@
+[Unit]
+Description=AnyCode web workspace for Codex agents
+Documentation=https://github.com/nzlov/anycode/blob/master/docs/systemd.md
+
+[Service]
+Type=simple
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+Environment=ANYCODE_DATA_DIR=%h/.local/share/anycode
+EnvironmentFile=%h/.config/anycode/anycode.env
+WorkingDirectory=%h
+UMask=0077
+ExecStart=/usr/bin/anycode
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,155 @@
+name: Publish release packages
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web application
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Upload embedded web application
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-pwa
+          path: internal/interfaces/http/static/pwa
+          if-no-files-found: error
+
+  packages:
+    needs: web
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            debarch: amd64
+            rpmarch: x86_64
+            archlinuxarch: x86_64
+          - goarch: arm64
+            debarch: arm64
+            rpmarch: aarch64
+            archlinuxarch: aarch64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install nFPM
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+          echo "$GOBIN" >> "$GITHUB_PATH"
+
+      - name: Download embedded web application
+        uses: actions/download-artifact@v8
+        with:
+          name: web-pwa
+          path: internal/interfaces/http/static/pwa
+
+      - name: Build and package release assets
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          DEB_ARCH: ${{ matrix.debarch }}
+          RPM_ARCH: ${{ matrix.rpmarch }}
+          ARCHLINUX_ARCH: ${{ matrix.archlinuxarch }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          package="anycode-${GITHUB_REF_NAME}-linux-${GOARCH}"
+          mkdir -p "dist/${package}/systemd"
+          CGO_ENABLED=0 GOOS=linux go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+            -o "dist/${package}/anycode" \
+            ./cmd/anycode
+          cp LICENSE "dist/${package}/LICENSE"
+          cp deploy/systemd/anycode.service "dist/${package}/systemd/anycode.service"
+          cp deploy/systemd/anycode.env.example "dist/${package}/systemd/anycode.env.example"
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          PACKAGE_VERSION="$version" PACKAGE_ARCH="$GOARCH" PACKAGE_BINARY="dist/${package}/anycode" \
+            nfpm package --config deploy/package/nfpm.yaml --packager deb \
+            --target "dist/anycode_${version}_${DEB_ARCH}.deb"
+          PACKAGE_VERSION="$version" PACKAGE_ARCH="$GOARCH" PACKAGE_BINARY="dist/${package}/anycode" \
+            nfpm package --config deploy/package/nfpm.yaml --packager rpm \
+            --target "dist/anycode-${version}-1.${RPM_ARCH}.rpm"
+          PACKAGE_VERSION="$version" PACKAGE_ARCH="$GOARCH" PACKAGE_BINARY="dist/${package}/anycode" \
+            nfpm package --config deploy/package/nfpm.yaml --packager archlinux \
+            --target "dist/anycode-${version}-1-${ARCHLINUX_ARCH}.pkg.tar.zst"
+
+      - name: Upload packaged release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: anycode-linux-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  release:
+    needs: packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged binaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: anycode-linux-*
+          path: release
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: release
+        run: sha256sum ./*.tar.gz ./*.deb ./*.rpm ./*.pkg.tar.zst > checksums.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --generate-notes \
+              --title "$GITHUB_REF_NAME"
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            release/*.tar.gz \
+            release/*.deb \
+            release/*.rpm \
+            release/*.pkg.tar.zst \
+            release/checksums.txt \
+            --clobber

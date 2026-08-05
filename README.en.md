@@ -90,6 +90,8 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 
 You do not need to clone the repository; startup only requires `compose.yml` and `.env.example`.
 
+Docker Compose is the recommended default. To run AnyCode directly on a Linux host, see the [systemd deployment guide](docs/systemd.en.md). Each GitHub Release provides `amd64` and `arm64` binary archives, Debian, Red Hat, and Arch Linux packages, and checksums.
+
 ### 1. Download the deployment files and configure the environment
 
 Create a deployment directory and download the required files:
