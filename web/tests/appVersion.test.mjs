@@ -44,7 +44,8 @@ test('container workflow injects git describe into the Go build', () => {
 });
 
 test('top-right menu exposes the current version and release notes', () => {
-  assert.match(layoutSource, /aria-label="更多操作"[\s\S]*当前版本 \{\{ currentVersion \}\}/);
+  assert.match(layoutSource, /aria-label="更多操作"[\s\S]*\{\{ currentVersion \}\}/);
+  assert.doesNotMatch(layoutSource, /当前版本/);
   assert.match(layoutSource, /<MarkdownContent :text="availableRelease\.body"/);
   assert.match(layoutSource, /aria-label="有新版本"/);
 });

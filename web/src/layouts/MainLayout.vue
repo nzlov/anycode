@@ -131,7 +131,7 @@
                 </q-item-section>
                 <q-item-section>
                   <q-item-label>发现新版本 {{ availableRelease.version }}</q-item-label>
-                  <q-item-label caption>当前版本 {{ currentVersion }}</q-item-label>
+                  <q-item-label caption>{{ currentVersion }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-item v-else>
@@ -139,8 +139,7 @@
                   <q-icon name="info" />
                 </q-item-section>
                 <q-item-section>
-                  <q-item-label>当前版本</q-item-label>
-                  <q-item-label caption>{{ currentVersion }}</q-item-label>
+                  <q-item-label>{{ currentVersion }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-separator />

@@ -2407,8 +2407,11 @@ body.desktop
 }
 
 .global-settings-panel--quick-commands,
+.global-settings-panel--quick-commands .quick-command-manager,
 .global-settings-panel--quick-commands .quick-command-list {
   border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .global-settings-panel--quick-commands .global-settings-add-fab {
