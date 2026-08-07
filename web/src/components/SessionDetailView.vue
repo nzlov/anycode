@@ -240,7 +240,9 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>标题</q-item-label>
-                      <q-item-label>{{ session?.title ?? '会话详情' }}</q-item-label>
+                      <q-item-label class="session-requirement-title">
+                        {{ session?.summary ?? '会话详情' }}
+                      </q-item-label>
                     </q-item-section>
                   </q-item>
                   <q-item>
@@ -1822,6 +1824,11 @@ async function scrollEventsToBottom(force = false) {
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
   background: var(--ac-surface-muted);
+}
+
+.session-requirement-title {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .workflow-progress__header,

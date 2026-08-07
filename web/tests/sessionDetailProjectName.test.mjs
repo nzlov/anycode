@@ -20,3 +20,16 @@ test('session detail renders current node information only in workflow mode', ()
     /<q-item v-if="session\?\.mode === 'workflow'">\s*<q-item-section>\s*<q-item-label caption>当前节点<\/q-item-label>/,
   );
 });
+
+test('session detail information renders the complete user requirement as its title', () => {
+  const source = readFileSync(new URL('../src/components/SessionDetailView.vue', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /<q-item-label caption>标题<\/q-item-label>\s*<q-item-label class="session-requirement-title">\s*\{\{ session\?\.summary \?\? '会话详情' \}\}/,
+  );
+  assert.match(
+    source,
+    /\.session-requirement-title\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*pre-wrap;/s,
+  );
+});
