@@ -87,6 +87,10 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
     new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
+  const artifactEvent = readFileSync(
+    new URL('../src/components/SessionArtifactEvent.vue', import.meta.url),
+    'utf8',
+  );
   const focusEventArtifact = detail.match(
     /function focusEventArtifact\(file: SessionFile\) \{([\s\S]*?)\n\}/,
   )?.[1];
@@ -113,6 +117,14 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
     /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,
   );
   assert.match(detail, /event-resource-dialog__close/);
+  assert.match(
+    detail,
+    /class="event-resource-dialog__mobile-actions"[\s\S]*?event-resource-dialog__close[\s\S]*?<q-separator v-if="isMobileLayout" \/>[\s\S]*?class="event-resource-dialog__body"/,
+  );
+  assert.match(
+    artifactEvent,
+    /class="artifact-event-preview__mobile-actions"[\s\S]*?artifact-event-preview__close[\s\S]*?<q-separator v-if="\$q\.screen\.lt\.md" \/>[\s\S]*?<SessionFilePreview/,
+  );
   assert.match(
     detail,
     /\.event-resource-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,

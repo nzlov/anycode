@@ -568,6 +568,17 @@
           </div>
         </q-card-section>
         <q-separator v-if="!isMobileLayout" />
+        <div v-if="isMobileLayout" class="event-resource-dialog__mobile-actions">
+          <q-btn
+            v-close-popup
+            round
+            dense
+            class="event-resource-dialog__close"
+            icon="close"
+            aria-label="关闭"
+          />
+        </div>
+        <q-separator v-if="isMobileLayout" />
         <q-card-section
           class="event-resource-dialog__body"
           :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
@@ -588,15 +599,6 @@
             :annotation-source="`临时文件 ${eventResourceTitle}`"
           />
         </q-card-section>
-        <q-btn
-          v-if="isMobileLayout"
-          v-close-popup
-          round
-          dense
-          class="event-resource-dialog__close"
-          icon="close"
-          aria-label="关闭"
-        />
       </q-card>
     </q-dialog>
   </component>
@@ -1617,11 +1619,17 @@ async function scrollEventsToBottom(force = false) {
   max-height: 100%;
 }
 
+.event-resource-dialog__mobile-actions {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px
+    max(8px, env(safe-area-inset-left));
+}
+
 .event-resource-dialog__close {
-  position: absolute;
-  z-index: 1;
-  top: max(12px, env(safe-area-inset-top));
-  right: max(12px, env(safe-area-inset-right));
   color: var(--ac-text);
   background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
   box-shadow: var(--ac-shadow-card);

@@ -47,19 +47,21 @@
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
         </q-card-section>
         <q-separator v-if="!$q.screen.lt.md" />
+        <div v-if="$q.screen.lt.md" class="artifact-event-preview__mobile-actions">
+          <q-btn
+            v-close-popup
+            round
+            dense
+            class="artifact-event-preview__close"
+            icon="close"
+            aria-label="关闭"
+          />
+        </div>
+        <q-separator v-if="$q.screen.lt.md" />
         <SessionFilePreview
           :file="selectedPreview"
           :zoomable="$q.screen.lt.md"
           :annotation-source="`临时文件 ${filename}`"
-        />
-        <q-btn
-          v-if="$q.screen.lt.md"
-          v-close-popup
-          round
-          dense
-          class="artifact-event-preview__close"
-          icon="close"
-          aria-label="关闭"
         />
       </q-card>
     </q-dialog>
@@ -213,11 +215,17 @@ function payloadString(key: string, fallback = '') {
   max-height: 100%;
 }
 
+.artifact-event-preview__mobile-actions {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px
+    max(8px, env(safe-area-inset-left));
+}
+
 .artifact-event-preview__close {
-  position: absolute;
-  z-index: 1;
-  top: max(12px, env(safe-area-inset-top));
-  right: max(12px, env(safe-area-inset-right));
   color: var(--ac-text);
   background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
   box-shadow: var(--ac-shadow-card);
