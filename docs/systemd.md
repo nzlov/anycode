@@ -117,10 +117,24 @@ command -v codex
 
 ## 启动与检查
 
+以下 `systemctl --user` 命令必须由实际运行 AnyCode 的用户执行，不要使用 `sudo systemctl --user`。
+
+服务器常驻部署需要在主机启动后、用户未登录时也运行服务。先为当前用户显式启用 lingering；如果只需在登录期间运行，可跳过此步骤：
+
+```bash
+sudo loginctl enable-linger "$USER"
+loginctl show-user "$USER" -p Linger
+```
+
+确认输出包含 `Linger=yes`。发行版包不会自动为任何用户启用 lingering，因为这是影响该用户所有 systemd 用户服务的主机级策略。
+
+然后加载 unit、启用并检查 AnyCode：
+
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now anycode
 systemctl --user status anycode
+systemctl --user is-enabled anycode
 curl --fail http://127.0.0.1:8080/healthz
 ```
 
@@ -131,14 +145,6 @@ journalctl --user -u anycode -f
 ```
 
 如果启动日志包含 `probe codex cli`，检查 `CODEX_BIN` 和当前用户的 `codex login status`。
-
-用户服务通常在该用户登录后启动。需要主机启动后、用户未登录时也运行服务，可显式启用 lingering：
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-不再需要时可执行 `sudo loginctl disable-linger "$USER"`。Lingering 会允许该用户的 systemd manager 在未登录时持续运行，应只为可信用户启用。
 
 ## 升级
 
@@ -161,6 +167,14 @@ systemctl --user status anycode
 ```bash
 systemctl --user disable --now anycode
 ```
+
+如果此前专门为 AnyCode 启用了 lingering，并确认该用户没有其他需要在未登录时运行的用户服务，再将其关闭：
+
+```bash
+sudo loginctl disable-linger "$USER"
+```
+
+Lingering 影响该用户的所有 systemd 用户服务；如果其他服务仍依赖它，不要因卸载 AnyCode 而关闭。
 
 使用发行版包时，选择当前系统对应的一条命令：
 

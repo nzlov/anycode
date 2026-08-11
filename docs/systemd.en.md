@@ -117,10 +117,24 @@ The service listens only on `127.0.0.1:8080` by default. For remote access, keep
 
 ## Start and inspect the service
 
+Run the following `systemctl --user` commands as the user that will run AnyCode. Do not use `sudo systemctl --user`.
+
+An always-on server deployment must run after boot without an interactive login. First, explicitly enable lingering for the current user. Skip this step if AnyCode only needs to run while that user is logged in:
+
+```bash
+sudo loginctl enable-linger "$USER"
+loginctl show-user "$USER" -p Linger
+```
+
+Confirm that the output contains `Linger=yes`. Distribution packages do not automatically enable lingering for any user because it is a host-level policy that affects all systemd user services for that user.
+
+Then load the unit, enable AnyCode, and inspect it:
+
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now anycode
 systemctl --user status anycode
+systemctl --user is-enabled anycode
 curl --fail http://127.0.0.1:8080/healthz
 ```
 
@@ -131,14 +145,6 @@ journalctl --user -u anycode -f
 ```
 
 If startup logs contain `probe codex cli`, check `CODEX_BIN` and the current user's `codex login status`.
-
-A user service normally starts after that user logs in. To run it after boot without an interactive login, explicitly enable lingering:
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-Run `sudo loginctl disable-linger "$USER"` when it is no longer needed. Lingering lets the user's systemd manager continue running while logged out, so enable it only for a trusted user.
 
 ## Upgrade
 
@@ -161,6 +167,14 @@ First stop and disable the service as every user currently running AnyCode:
 ```bash
 systemctl --user disable --now anycode
 ```
+
+If lingering was enabled specifically for AnyCode, disable it only after confirming that this user has no other user services that must run while logged out:
+
+```bash
+sudo loginctl disable-linger "$USER"
+```
+
+Lingering affects all systemd user services for that user. Do not disable it when another service still depends on it.
 
 When using a distribution package, select the command for the current system:
 
