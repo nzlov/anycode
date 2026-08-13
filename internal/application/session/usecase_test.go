@@ -2184,6 +2184,141 @@ func TestAgentQuestionProcessExitKeepsWaitingAndQueuesAnsweredResume(t *testing.
 	)
 }
 
+func TestAnsweredAgentQuestionEmptyContinuationExitQueuesResume(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	now := time.Date(2026, 8, 13, 11, 32, 15, 0, time.UTC)
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+		CodexSessionID: "codex-session-1", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	run := processdomain.Run{
+		ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning,
+		CodexSessionID: "codex-session-1", StartedAt: now,
+	}
+	if err := store.Processes().CreateRun(ctx, run); err != nil {
+		t.Fatalf("create process run: %v", err)
+	}
+	originID := questiondomain.ProcessRunID(run.ID)
+	selectedOptionID := questiondomain.OptionID("continue")
+	answeredAt := now.Add(time.Second)
+	request := questiondomain.Request{
+		ID: "request-1", SessionID: "session-1", OriginProcessRunID: &originID,
+		Status: questiondomain.RequestAnswered, CreatedAt: now, AnsweredAt: &answeredAt,
+		Questions: []questiondomain.Question{{
+			ID: "request-1:0", RequestID: "request-1", Body: "Continue?", Status: string(questiondomain.RequestAnswered),
+			SelectedOptionID: &selectedOptionID,
+			Options:          []questiondomain.Option{{ID: selectedOptionID, Label: "Continue"}},
+		}},
+	}
+	if err := store.Questions().CreateRequest(ctx, request); err != nil {
+		t.Fatalf("create answered question request: %v", err)
+	}
+	eventStream := make(chan processdomain.CodexEvent, 3)
+	eventStream <- processdomain.CodexEvent{
+		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseCompleted,
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "questions",
+			Output:        processdomain.CodexStructuredText{Text: `{"answers":[{"selectedOptionId":"continue"}]}`},
+		},
+	}
+	eventStream <- completedAssistantEvent("  \n")
+	eventStream <- processdomain.CodexEvent{
+		Type: processdomain.CodexEventProcessExit,
+		Content: processdomain.ExitResult{
+			FinishedAt: now.Add(2 * time.Second),
+		},
+	}
+	close(eventStream)
+	codex := &fakeCodexProcess{events: eventStream}
+	service := New(
+		store.Sessions(),
+		newFakeProjectRepository("project-1"),
+		WithProcesses(store.Processes(), codex),
+		WithQuestions(questionapp.New(store.Questions())),
+		WithEvents(store.Events()),
+		WithUnitOfWork(store),
+	)
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	service.queueDrainScheduler = func(*Service) {}
+
+	handle := processdomain.CodexHandle{ProcessRunID: run.ID, CodexSessionID: run.CodexSessionID}
+	service.consumeCodexEvents(
+		handle,
+		session,
+		codexStartOptions{},
+		"",
+	)
+	consumerDone, ok := service.processConsumerDone(run.ID)
+	if !ok {
+		t.Fatal("process consumer was not registered")
+	}
+	select {
+	case <-consumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("process consumer did not stop")
+	}
+	queued, err := store.Sessions().Find(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("find queued session: %v", err)
+	}
+	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindResume {
+		t.Fatalf("queued session = %#v", queued)
+	}
+	if queued.Queue.ResumeCodexSessionID != run.CodexSessionID || queued.Queue.ResumeOfProcessRunID != string(run.ID) {
+		t.Fatalf("answer resume queue = %#v", queued.Queue)
+	}
+	if !strings.Contains(queued.Queue.Prompt, `"requestId":"request-1"`) || !strings.Contains(queued.Queue.Prompt, `"selectedLabel":"Continue"`) {
+		t.Fatalf("answer resume prompt = %q", queued.Queue.Prompt)
+	}
+	sessionID := eventdomain.SessionID(session.ID)
+	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID})
+	if err != nil {
+		t.Fatalf("list session events: %v", err)
+	}
+	requireSessionEventTypes(t, events, "session.queued", "process.exited", "session.answer_resume_queued", sessionStatusUpdatedEvent)
+	for _, event := range events {
+		if event.Type == "session.stopped" || event.Type == "question.answered" {
+			t.Fatalf("unexpected event after answered question exit: %#v", event)
+		}
+	}
+}
+
+func TestQuestionAnswerResumeRequiredAfterEvent(t *testing.T) {
+	required := questionAnswerResumeRequiredAfterEvent(false, processdomain.CodexEvent{
+		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseCompleted,
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "questions",
+			Output:        processdomain.CodexStructuredText{Text: `{"answers":[{"selectedOptionId":"continue"}]}`},
+		},
+	})
+	if !required {
+		t.Fatal("completed questions output should require a continuation response")
+	}
+	required = questionAnswerResumeRequiredAfterEvent(required, completedAssistantEvent("  \n"))
+	if !required {
+		t.Fatal("blank assistant output should preserve the resume requirement")
+	}
+	required = questionAnswerResumeRequiredAfterEvent(required, completedAssistantEvent("continued and completed"))
+	if required {
+		t.Fatal("non-empty assistant output should satisfy the resume requirement")
+	}
+}
+
 func TestHandleQuestionRequestAnsweredFailsMergeNode(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

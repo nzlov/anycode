@@ -3134,7 +3134,10 @@ func (s *Service) submitAgentQuestionRequest(ctx context.Context, input question
 			if origin.Status != processdomain.StatusExited {
 				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "questions turn is no longer waiting")
 			}
-			publishedEvents, err = s.queueQuestionAnswerResumeInTx(ctx, tx, persisted, origin)
+			publishedEvents, err = s.queueQuestionAnswerResumeInTx(ctx, tx, persisted, origin, sessionEventInput{
+				eventType: "question.answered",
+				payload:   map[string]any{"requestId": string(persisted.ID), "processRunId": string(origin.ID)},
+			})
 			if err != nil {
 				return err
 			}
@@ -3187,7 +3190,7 @@ func (s *Service) submitAgentQuestionRequest(ctx context.Context, input question
 	return questionRequestDTO(result), nil
 }
 
-func (s *Service) queueQuestionAnswerResumeInTx(ctx context.Context, tx port.Tx, request questiondomain.Request, origin processdomain.Run) ([]eventdomain.DomainEvent, error) {
+func (s *Service) queueQuestionAnswerResumeInTx(ctx context.Context, tx port.Tx, request questiondomain.Request, origin processdomain.Run, inputs ...sessionEventInput) ([]eventdomain.DomainEvent, error) {
 	if strings.TrimSpace(origin.CodexSessionID) == "" {
 		return nil, apperror.New(apperror.CodeResumeFailed, apperror.CategoryCodexError, "origin process has no Codex session id").WithRetryable(true)
 	}
@@ -3213,14 +3216,10 @@ func (s *Service) queueQuestionAnswerResumeInTx(ctx context.Context, tx port.Tx,
 	if hasQueuedEvent {
 		events = append(events, queuedEvent)
 	}
-	answerEvents, err := s.newSessionEvents(queued, statusUpdateInputs(
-		sessionEventInput{eventType: "question.answered", payload: map[string]any{
-			"requestId": string(request.ID), "processRunId": string(origin.ID),
-		}},
-		sessionEventInput{eventType: "session.answer_resume_queued", payload: map[string]any{
-			"requestId": string(request.ID), "originProcessRunId": string(origin.ID),
-		}},
-	))
+	inputs = append(inputs, sessionEventInput{eventType: "session.answer_resume_queued", payload: map[string]any{
+		"requestId": string(request.ID), "originProcessRunId": string(origin.ID),
+	}})
+	answerEvents, err := s.newSessionEvents(queued, statusUpdateInputs(inputs...))
 	if err != nil {
 		return nil, err
 	}
@@ -3270,20 +3269,21 @@ func questionAnswerResumePrompt(request questiondomain.Request) string {
 }
 
 type codexStartOptions struct {
-	resumeCodexSessionID    string
-	resumeOfProcessRunID    processdomain.RunID
-	sessionID               domain.ID
-	nodeRunID               *processdomain.NodeRunID
-	prompt                  string
-	fallbackPrompt          string
-	promptAppendIDs         []string
-	promptFiles             []domain.SessionFile
-	promptMentions          []domain.PromptMention
-	queueKind               domain.QueueKind
-	workflowResultRetry     bool
-	resumeAcknowledged      bool
-	reviewAfterReuseFailure bool
-	initialStart            bool
+	resumeCodexSessionID         string
+	resumeOfProcessRunID         processdomain.RunID
+	sessionID                    domain.ID
+	nodeRunID                    *processdomain.NodeRunID
+	prompt                       string
+	fallbackPrompt               string
+	promptAppendIDs              []string
+	promptFiles                  []domain.SessionFile
+	promptMentions               []domain.PromptMention
+	queueKind                    domain.QueueKind
+	workflowResultRetry          bool
+	resumeAcknowledged           bool
+	questionAnswerResumeRequired bool
+	reviewAfterReuseFailure      bool
+	initialStart                 bool
 }
 
 type executionClaimNotAcquiredError struct {
@@ -4424,6 +4424,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				exitResult = result
 			}
 			workflowResults = workflowResultsAfterEvent(workflowResults, event)
+			options.questionAnswerResumeRequired = questionAnswerResumeRequiredAfterEvent(options.questionAnswerResumeRequired, event)
 			if codexEventAcknowledgesPrompt(event) {
 				options.resumeAcknowledged = true
 			}
@@ -5085,6 +5086,15 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	if ok && active.ID != handle.ProcessRunID {
 		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
 	}
+	if current.Status == domain.StatusRunning && ok && options.questionAnswerResumeRequired {
+		queued, err := s.persistQuestionAnswerResumeAfterProcessExit(ctx, current, active, exitResult, processEvent)
+		if err != nil {
+			return domain.Session{}, false, err
+		}
+		if queued {
+			return current, false, nil
+		}
+	}
 	if current.Mode == domain.ModeWorkflow && options.sessionID != "" && options.nodeRunID != nil &&
 		options.resumeCodexSessionID != "" && !options.resumeAcknowledged &&
 		current.Status != domain.StatusStopping && current.Status != domain.StatusStopped && current.Status != domain.StatusClosed {
@@ -5244,6 +5254,55 @@ func completedAssistantOutput(event processdomain.CodexEvent) (string, bool) {
 	}
 	output := strings.TrimSpace(message.Text)
 	return output, true
+}
+
+func questionAnswerResumeRequiredAfterEvent(required bool, event processdomain.CodexEvent) bool {
+	if event.Type == processdomain.CodexEventTool && (event.Phase == processdomain.CodexPhaseCompleted || event.Phase == processdomain.CodexPhaseStandalone) {
+		if tool, ok := event.Content.(processdomain.CodexToolContent); ok && strings.EqualFold(strings.TrimSpace(tool.QualifiedName), "questions") && strings.TrimSpace(tool.Output.Text) != "" {
+			return true
+		}
+	}
+	if !required {
+		return false
+	}
+	output, ok := completedAssistantOutput(event)
+	return !ok || strings.TrimSpace(output) == ""
+}
+
+func (s *Service) persistQuestionAnswerResumeAfterProcessExit(ctx context.Context, session domain.Session, origin processdomain.Run, result processdomain.ExitResult, processEvent sessionEventInput) (bool, error) {
+	if s.uow == nil {
+		return false, errors.New("question answer exit recovery requires a unit of work")
+	}
+	var publishedEvents []eventdomain.DomainEvent
+	queued := false
+	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		request, found, err := tx.Questions().FindLatestRequestBySession(ctx, questiondomain.SessionID(session.ID))
+		if err != nil {
+			return err
+		}
+		if !found || request.Status != questiondomain.RequestAnswered || request.OriginProcessRunID == nil || processdomain.RunID(*request.OriginProcessRunID) != origin.ID {
+			return nil
+		}
+		if err := tx.Processes().MarkExited(ctx, origin.ID, result); err != nil {
+			return fmt.Errorf("mark process exited: %w", err)
+		}
+		if err := settlePromptAppends(ctx, tx.Sessions(), origin.ID, result, promptAppendSettlementAutomatic); err != nil {
+			return err
+		}
+		publishedEvents, err = s.queueQuestionAnswerResumeInTx(ctx, tx, request, origin, processEvent)
+		if err != nil {
+			return err
+		}
+		queued = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, event := range publishedEvents {
+		s.publishSessionEvent(ctx, event)
+	}
+	return queued, nil
 }
 
 func workflowResultsFromText(text string) (map[string]any, bool) {
