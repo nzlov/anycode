@@ -1129,7 +1129,7 @@ body.desktop
   overflow: hidden;
   background: var(--ac-surface);
   color: var(--ac-text);
-  border-radius: var(--ac-radius);
+  border-radius: 0;
 }
 
 .global-settings-header {

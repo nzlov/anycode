@@ -147,6 +147,10 @@ test('global quick commands remove their card surface and right-align the add ac
     /\.global-settings-panel--quick-commands,[\s\S]*?\.global-settings-panel--quick-commands \.quick-command-manager,[\s\S]*?\.global-settings-panel--quick-commands \.quick-command-list\s*{[^}]*border-radius:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none[\s\S]*?\.global-settings-panel--quick-commands \.global-settings-add-fab\s*{[^}]*align-self:\s*flex-end/s,
   );
   assert.doesNotMatch(globalSettingsSource, /global-settings-dialog--page/);
+  assert.match(
+    stylesSource,
+    /\.global-settings-dialog\s*{[^}]*border-radius:\s*0/s,
+  );
 });
 
 test('quick command actions stay aligned and reachable on mobile', () => {
