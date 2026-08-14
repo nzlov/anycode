@@ -135,7 +135,7 @@ func (s *Service) searchMindMap(ctx context.Context, call processdomain.DynamicT
 	if err != nil {
 		return processdomain.DynamicToolResult{}, err
 	}
-	return mindMapSearchResult(result)
+	return mindMapSearchResult(result), nil
 }
 
 func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
@@ -188,41 +188,63 @@ func mindMapUpdateResult(graph mindmapapp.GraphDTO, appliedOperations int) (proc
 	return textResult(payload), nil
 }
 
-func mindMapSearchResult(result mindmapapp.SearchResultDTO) (processdomain.DynamicToolResult, error) {
-	matches := make([]map[string]any, 0, len(result.Matches))
-	for _, match := range result.Matches {
-		matches = append(matches, map[string]any{
-			"id": match.Node.ID, "title": match.Node.Title, "content": match.Node.Content, "files": mindMapNodeFiles(match.Node.Files), "matchedFields": match.MatchedFields,
-		})
+func mindMapSearchResult(result mindmapapp.SearchResultDTO) processdomain.DynamicToolResult {
+	var output strings.Builder
+	output.WriteString("# mind_map_search\n")
+	fmt.Fprintf(&output, "project: %s\nsession: %s\n", result.ProjectID, result.SessionID)
+	writeMindMapMarkdownField(&output, "query", result.Query, "")
+	fmt.Fprintf(&output, "matches: %d/%d\ntruncated: %t\n", len(result.Matches), result.TotalMatches, result.Truncated)
+
+	if len(result.Matches) > 0 {
+		output.WriteString("\n## Matches\n")
+		for _, match := range result.Matches {
+			writeMindMapMarkdownNode(&output, match.Node, match.MatchedFields)
+		}
 	}
-	relatedNodes := make([]map[string]any, 0, len(result.RelatedNodes))
-	for _, node := range result.RelatedNodes {
-		relatedNodes = append(relatedNodes, map[string]any{"id": node.ID, "title": node.Title, "content": node.Content, "files": mindMapNodeFiles(node.Files)})
+
+	if len(result.RelatedNodes) > 0 {
+		output.WriteString("\n## Related\n")
+		for _, node := range result.RelatedNodes {
+			writeMindMapMarkdownNode(&output, node, nil)
+		}
 	}
-	edges := make([]map[string]any, 0, len(result.Edges))
-	for _, edge := range result.Edges {
-		edges = append(edges, map[string]any{"id": edge.ID, "sourceId": edge.SourceID, "targetId": edge.TargetID, "label": edge.Label})
+
+	if len(result.Edges) > 0 {
+		output.WriteString("\n## Edges\n")
+		for _, edge := range result.Edges {
+			fmt.Fprintf(&output, "- %s: %s -> %s", edge.ID, edge.SourceID, edge.TargetID)
+			if edge.Label != "" {
+				fmt.Fprintf(&output, " — %s", edge.Label)
+			}
+			output.WriteByte('\n')
+		}
 	}
-	payload, err := json.Marshal(map[string]any{
-		"projectId": result.ProjectID, "sessionId": result.SessionID, "query": result.Query,
-		"matches": matches, "relatedNodes": relatedNodes, "edges": edges,
-		"totalMatches": result.TotalMatches, "truncated": result.Truncated,
-	})
-	if err != nil {
-		return processdomain.DynamicToolResult{}, fmt.Errorf("encode mind map search result: %w", err)
-	}
-	return textResult(payload), nil
+	return textResult([]byte(strings.TrimSuffix(output.String(), "\n")))
 }
 
-// GLUE: Dynamic tool JSON uses lower-camel fields while the domain value object is transport-agnostic.
-func mindMapNodeFiles(files []mindmapdomain.NodeFile) []map[string]any {
-	result := make([]map[string]any, 0, len(files))
-	for _, item := range files {
-		result = append(result, map[string]any{
-			"file": item.File, "method": item.Method, "startLine": item.StartLine, "endLine": item.EndLine,
-		})
+func writeMindMapMarkdownNode(output *strings.Builder, node mindmapapp.NodeDTO, matchedFields []string) {
+	fmt.Fprintf(output, "- %s — %s\n", node.ID, node.Title)
+	if len(matchedFields) > 0 {
+		fmt.Fprintf(output, "  matched: %s\n", strings.Join(matchedFields, ", "))
 	}
-	return result
+	if node.Content != "" {
+		writeMindMapMarkdownField(output, "content", node.Content, "  ")
+	}
+	if len(node.Files) == 0 {
+		return
+	}
+	output.WriteString("  files:\n")
+	for _, file := range node.Files {
+		fmt.Fprintf(output, "  - %s:%d-%d — %s\n", file.File, file.StartLine, file.EndLine, file.Method)
+	}
+}
+
+func writeMindMapMarkdownField(output *strings.Builder, name string, value string, indent string) {
+	lines := strings.Split(value, "\n")
+	fmt.Fprintf(output, "%s%s: %s\n", indent, name, lines[0])
+	for _, line := range lines[1:] {
+		fmt.Fprintf(output, "%s  %s\n", indent, line)
+	}
 }
 
 func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {

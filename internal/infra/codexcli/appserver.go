@@ -300,7 +300,7 @@ func mindMapTagsTool() map[string]any {
 func mindMapSearchTool() map[string]any {
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapSearch),
-		"description": "Search node IDs, titles, content, and code file locations in this card's current mind map. Returns matching nodes plus their one-hop related nodes and relationships. Use this before adding, updating, deleting, or linking concepts so existing durable nodes are reused.",
+		"description": "Search node IDs, titles, content, and code file locations in this card's current mind map. Returns compact Markdown containing matching nodes, their one-hop related nodes, and relationships. Use this before adding, updating, deleting, or linking concepts so existing durable nodes are reused.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"query"},
 			"properties": map[string]any{

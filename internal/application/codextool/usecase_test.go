@@ -207,7 +207,26 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if maps.query != "tool" || maps.limit != 5 || !strings.Contains(searchResult.Content[0].Text, `"matchedFields":["title","content"]`) || !strings.Contains(searchResult.Content[0].Text, `"agent-tools"`) || !strings.Contains(searchResult.Content[0].Text, `"startLine":10`) {
+	wantSearchResult := `# mind_map_search
+project: project-1
+session: session-1
+query: tool
+matches: 1/1
+truncated: false
+
+## Matches
+- tools — Dynamic tools
+  matched: title, content
+  content: Agent tools
+  files:
+  - internal/tools.go:10-20 — Run
+
+## Related
+- agent — Agent
+
+## Edges
+- agent-tools: agent -> tools — uses`
+	if maps.query != "tool" || maps.limit != 5 || len(searchResult.Content) != 1 || searchResult.Content[0].Type != "inputText" || searchResult.Content[0].Text != wantSearchResult {
 		t.Fatalf("search = maps:%#v result:%#v", maps, searchResult)
 	}
 	call.Tool = string(processdomain.DynamicToolMindMapTags)
@@ -234,6 +253,16 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 	}
 	if maps.tagRevision != "revision-1" {
 		t.Fatalf("tag revision = %q", maps.tagRevision)
+	}
+}
+
+func TestMindMapSearchResultOmitsEmptySections(t *testing.T) {
+	result := mindMapSearchResult(mindmapapp.SearchResultDTO{
+		ProjectID: "project-1", SessionID: "session-1", Query: "missing",
+	})
+	want := "# mind_map_search\nproject: project-1\nsession: session-1\nquery: missing\nmatches: 0/0\ntruncated: false"
+	if len(result.Content) != 1 || result.Content[0].Text != want {
+		t.Fatalf("result = %#v", result)
 	}
 }
 
