@@ -154,11 +154,14 @@ test('mind map node information opens on desktop hover and mobile click with a c
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
 
   assert.match(page, /@mouseenter="showNodeInfo\(id\)"/);
-  assert.match(page, /if \(\$q\.platform\.is\.mobile\) showNodeInfo\(node\.id\)/);
+  assert.match(page, /if \(\$q\.platform\.is\.mobile\) void showNodeInfo\(node\.id\)/);
   assert.match(page, /class="mind-map-node-info"/);
   assert.match(page, /\{\{ data\.label \}\}/);
-  assert.match(page, /\{\{ data\.content \|\| '暂无节点内容' \}\}/);
-  assert.match(page, /v-if="data\.files\.length"/);
+  assert.match(page, /getProjectMindMapNode\([\s\S]*node\.entityId,[\s\S]*node\.sessionId/);
+  assert.match(page, /requestRevision !== nodeInfoRequestRevision/);
+  assert.match(page, /\{\{ nodeInfoDetail\?\.content \|\| '暂无节点内容' \}\}/);
+  assert.match(page, /nodeInfoDetail\?\.files\.length/);
+  assert.match(page, /v-for="item in nodeInfoDetail\.files"/);
   assert.match(page, /item\.method.*L\{\{ item\.startLine \}\}–\{\{ item\.endLine \}\}/s);
   assert.match(page, /\.mind-map-node-info\s*\{[^}]*overflow-x:\s*hidden/s);
   assert.match(
@@ -179,13 +182,19 @@ test('mind map combines compact card deltas and previews selected card modificat
   const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
 
   assert.match(service, /changeType: 'unchanged' \| 'added' \| 'modified' \| 'deleted'/);
-  assert.match(
-    service,
-    /nodes \{ id title content files \{ file method startLine endLine \} changeType \}/,
-  );
+  assert.match(service, /nodes \{ id title changeType \}/);
+  assert.doesNotMatch(service, /nodes \{ id title content/);
+  assert.match(service, /query ProjectMindMapNode\(\$input: MindMapNodeInput!\)/);
+  assert.match(service, /projectMindMapNode\(input: \$input\)/);
+  assert.match(service, /files \{ file method startLine endLine \}/);
   assert.match(
     schema,
-    /type MindMapNode \{[\s\S]*files: \[MindMapNodeFile!\]![\s\S]*changeType: String!/,
+    /type MindMapNode \{[\s\S]*title: String![\s\S]*changeType: String![\s\S]*\}/,
+  );
+  assert.doesNotMatch(schema, /type MindMapNode \{[^}]*content:/s);
+  assert.match(
+    schema,
+    /type MindMapNodeDetail \{[\s\S]*content: String![\s\S]*files: \[MindMapNodeFile!\]!/,
   );
   assert.match(schema, /input MindMapNodeFileInput \{[\s\S]*startLine: Int![\s\S]*endLine: Int!/);
   assert.match(page, /:disable="!nodeTitle\.trim\(\) \|\| invalidNodeFiles"/);

@@ -16,6 +16,7 @@ type Query {
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   projectMindMap(input: MindMapPageInput!): MindMapGraphPage!
+  projectMindMapNode(input: MindMapNodeInput!): MindMapNodeDetail!
   projectMindMapCards(projectId: ID!): [MindMapCard!]!
   searchProjectMindMap(input: SearchMindMapInput!): MindMapSearchResult!
   sessions(input: ListSessionsInput): SessionCardPage!
@@ -875,9 +876,20 @@ input MindMapPageInput {
 type MindMapNode {
   id: ID!
   title: String!
+  changeType: String!
+}
+
+input MindMapNodeInput {
+  projectId: ID!
+  sessionId: ID
+  nodeId: ID!
+}
+
+type MindMapNodeDetail {
+  id: ID!
+  title: String!
   content: String!
   files: [MindMapNodeFile!]!
-  changeType: String!
 }
 
 type MindMapNodeFile {

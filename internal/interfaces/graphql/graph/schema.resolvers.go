@@ -795,6 +795,22 @@ func (r *queryResolver) ProjectMindMap(ctx context.Context, input model.MindMapP
 	return mapMindMapGraphPage(dto), nil
 }
 
+// ProjectMindMapNode is the resolver for the projectMindMapNode field.
+func (r *queryResolver) ProjectMindMapNode(ctx context.Context, input model.MindMapNodeInput) (*model.MindMapNodeDetail, error) {
+	if r.UseCases.MindMaps == nil {
+		return nil, missingUseCase("mind maps")
+	}
+	dto, err := r.UseCases.MindMaps.GetNode(ctx, mindmapapp.GetNodeInput{
+		ProjectID: mindmapdomain.ProjectID(input.ProjectID),
+		SessionID: mindmapdomain.SessionID(stringValue(input.SessionID, "")),
+		NodeID:    mindmapdomain.NodeID(input.NodeID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapMindMapNodeDetail(dto), nil
+}
+
 // ProjectMindMapCards is the resolver for the projectMindMapCards field.
 func (r *queryResolver) ProjectMindMapCards(ctx context.Context, projectID string) ([]*model.MindMapCard, error) {
 	if r.UseCases.MindMaps == nil {

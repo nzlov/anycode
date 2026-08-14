@@ -276,11 +276,16 @@ type MindMapGraphPage struct {
 }
 
 type MindMapNode struct {
-	ID         string             `json:"id"`
-	Title      string             `json:"title"`
-	Content    string             `json:"content"`
-	Files      []*MindMapNodeFile `json:"files"`
-	ChangeType string             `json:"changeType"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	ChangeType string `json:"changeType"`
+}
+
+type MindMapNodeDetail struct {
+	ID      string             `json:"id"`
+	Title   string             `json:"title"`
+	Content string             `json:"content"`
+	Files   []*MindMapNodeFile `json:"files"`
 }
 
 type MindMapNodeFile struct {
@@ -295,6 +300,12 @@ type MindMapNodeFileInput struct {
 	Method    string `json:"method"`
 	StartLine int    `json:"startLine"`
 	EndLine   int    `json:"endLine"`
+}
+
+type MindMapNodeInput struct {
+	ProjectID string  `json:"projectId"`
+	SessionID *string `json:"sessionId,omitempty"`
+	NodeID    string  `json:"nodeId"`
 }
 
 type MindMapOperationInput struct {

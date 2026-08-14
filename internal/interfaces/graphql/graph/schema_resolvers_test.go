@@ -73,15 +73,42 @@ func TestQuerySearchProjectMindMapMapsScopedMatches(t *testing.T) {
 	}
 }
 
+func TestQueryProjectMindMapNodeReturnsScopedDetail(t *testing.T) {
+	sessionID := "session-1"
+	mindMaps := &fakeMindMapUseCase{nodeResult: mindmapapp.NodeDTO{
+		ID: "node-1", Title: "Node", Content: "Detail",
+		Files: []mindmapdomain.NodeFile{{File: "internal/node.go", Method: "Load", StartLine: 1, EndLine: 2}},
+	}}
+	result, err := NewResolver(UseCases{MindMaps: mindMaps}).Query().ProjectMindMapNode(
+		context.Background(), model.MindMapNodeInput{ProjectID: "project-1", SessionID: &sessionID, NodeID: "node-1"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mindMaps.nodeInput.ProjectID != "project-1" || mindMaps.nodeInput.SessionID != "session-1" || mindMaps.nodeInput.NodeID != "node-1" {
+		t.Fatalf("node input = %#v", mindMaps.nodeInput)
+	}
+	if result.ID != "node-1" || result.Content != "Detail" || len(result.Files) != 1 || result.Files[0].Method != "Load" {
+		t.Fatalf("node detail = %#v", result)
+	}
+}
+
 type fakeMindMapUseCase struct {
 	mindmapapp.UseCase
-	input  mindmapapp.SearchInput
-	result mindmapapp.ProjectSearchResultDTO
+	input      mindmapapp.SearchInput
+	result     mindmapapp.ProjectSearchResultDTO
+	nodeInput  mindmapapp.GetNodeInput
+	nodeResult mindmapapp.NodeDTO
 }
 
 func (f *fakeMindMapUseCase) Search(_ context.Context, input mindmapapp.SearchInput) (mindmapapp.ProjectSearchResultDTO, error) {
 	f.input = input
 	return f.result, nil
+}
+
+func (f *fakeMindMapUseCase) GetNode(_ context.Context, input mindmapapp.GetNodeInput) (mindmapapp.NodeDTO, error) {
+	f.nodeInput = input
+	return f.nodeResult, nil
 }
 
 func TestSubscriptionTunnelUpdatesForwardsRunningCount(t *testing.T) {

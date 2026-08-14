@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
 	domain "github.com/nzlov/anycode/internal/domain/mindmap"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
@@ -21,6 +22,7 @@ import (
 type UseCase interface {
 	Get(ctx context.Context, input GetInput) (GraphDTO, error)
 	GetPage(ctx context.Context, input GetPageInput) (GraphPageDTO, error)
+	GetNode(ctx context.Context, input GetNodeInput) (NodeDTO, error)
 	ListCards(ctx context.Context, projectID domain.ProjectID) ([]CardDTO, error)
 	Search(ctx context.Context, input SearchInput) (ProjectSearchResultDTO, error)
 	Update(ctx context.Context, input UpdateInput) (GraphDTO, error)
@@ -48,6 +50,12 @@ type GetPageInput struct {
 	IncludeNodes bool
 	IncludeEdges bool
 	PageSize     int
+}
+
+type GetNodeInput struct {
+	ProjectID domain.ProjectID
+	SessionID domain.SessionID
+	NodeID    domain.NodeID
 }
 
 type UpdateInput struct {
@@ -266,6 +274,23 @@ func (s *Service) Get(ctx context.Context, input GetInput) (GraphDTO, error) {
 		}
 	}
 	return s.loadGraph(ctx, project, input.SessionID, true)
+}
+
+func (s *Service) GetNode(ctx context.Context, input GetNodeInput) (NodeDTO, error) {
+	if strings.TrimSpace(string(input.NodeID)) == "" {
+		return NodeDTO{}, errors.New("mind map node id is required")
+	}
+	graph, err := s.Get(ctx, GetInput{ProjectID: input.ProjectID, SessionID: input.SessionID})
+	if err != nil {
+		return NodeDTO{}, err
+	}
+	for _, node := range graph.Nodes {
+		if node.ID == input.NodeID {
+			return node, nil
+		}
+	}
+	return NodeDTO{}, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "mind map node not found").
+		WithDetails(map[string]any{"nodeId": string(input.NodeID)})
 }
 
 func (s *Service) GetPage(ctx context.Context, input GetPageInput) (GraphPageDTO, error) {
@@ -1273,8 +1298,9 @@ func validateNodeFiles(files []domain.NodeFile) ([]domain.NodeFile, error) {
 
 func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 	type candidate struct {
-		match NodeMatchDTO
-		score int
+		match        NodeMatchDTO
+		matchedTerms int
+		score        int
 	}
 	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	terms := strings.Fields(normalizedQuery)
@@ -1292,14 +1318,13 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 		}
 		files := fileLocations.String()
 		searchable := id + "\n" + title + "\n" + content + files
-		matched := true
+		matchedTerms := 0
 		for _, term := range terms {
-			if !strings.Contains(searchable, term) {
-				matched = false
-				break
+			if strings.Contains(searchable, term) {
+				matchedTerms++
 			}
 		}
-		if !matched {
+		if matchedTerms == 0 {
 			continue
 		}
 		fields := make([]string, 0, 4)
@@ -1326,9 +1351,14 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 		if title == normalizedQuery {
 			score += 160
 		}
-		candidates = append(candidates, candidate{match: NodeMatchDTO{Node: node, MatchedFields: fields}, score: score})
+		candidates = append(candidates, candidate{
+			match: NodeMatchDTO{Node: node, MatchedFields: fields}, matchedTerms: matchedTerms, score: score,
+		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].matchedTerms != candidates[j].matchedTerms {
+			return candidates[i].matchedTerms > candidates[j].matchedTerms
+		}
 		if candidates[i].score != candidates[j].score {
 			return candidates[i].score > candidates[j].score
 		}

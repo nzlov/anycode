@@ -120,7 +120,7 @@ func mapMindMapGraphPage(dto mindmapapp.GraphPageDTO) *model.MindMapGraphPage {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
 		nodes = append(nodes, &model.MindMapNode{
-			ID: string(node.ID), Title: node.Title, Content: node.Content, Files: mapMindMapNodeFiles(node.Files), ChangeType: string(node.ChangeType),
+			ID: string(node.ID), Title: node.Title, ChangeType: string(node.ChangeType),
 		})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
@@ -165,7 +165,7 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
 		nodes = append(nodes, &model.MindMapNode{
-			ID: string(node.ID), Title: node.Title, Content: node.Content, Files: mapMindMapNodeFiles(node.Files), ChangeType: string(node.ChangeType),
+			ID: string(node.ID), Title: node.Title, ChangeType: string(node.ChangeType),
 		})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
@@ -191,6 +191,12 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 		HasChanges: dto.HasChanges,
 		TaskID:     taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
 		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs, DeletedEdgeIds: deletedEdgeIDs,
+	}
+}
+
+func mapMindMapNodeDetail(node mindmapapp.NodeDTO) *model.MindMapNodeDetail {
+	return &model.MindMapNodeDetail{
+		ID: string(node.ID), Title: node.Title, Content: node.Content, Files: mapMindMapNodeFiles(node.Files),
 	}
 }
 

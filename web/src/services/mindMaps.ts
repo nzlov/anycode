@@ -7,9 +7,14 @@ import {
 export interface MindMapNode {
   id: string;
   title: string;
+  changeType: 'unchanged' | 'added' | 'modified' | 'deleted';
+}
+
+export interface MindMapNodeDetail {
+  id: string;
+  title: string;
   content: string;
   files: MindMapNodeFile[];
-  changeType: 'unchanged' | 'added' | 'modified' | 'deleted';
 }
 
 export interface MindMapNodeFile {
@@ -80,7 +85,7 @@ export interface MindMapOperation {
 const graphPageFields = `
   projectId
   sessionId
-  nodes { id title content files { file method startLine endLine } changeType }
+  nodes { id title changeType }
   edges { id sourceId targetId label }
   updatedAt
   nextNodeCursor
@@ -95,7 +100,7 @@ const cardFields = `
   taskId
   taskStatus
   taskError
-  nodes { id title content files { file method startLine endLine } changeType }
+  nodes { id title changeType }
   edges { id sourceId targetId label }
   modifiedNodeIds
   deletedNodeIds
@@ -163,6 +168,31 @@ export async function listProjectMindMapCards(projectId: string) {
     variables: { projectId },
   });
   return data.projectMindMapCards;
+}
+
+export async function getProjectMindMapNode(
+  projectId: string,
+  nodeId: string,
+  sessionId = '',
+) {
+  const input = { projectId, nodeId, ...(sessionId ? { sessionId } : {}) };
+  const data = await graphqlFetch<
+    { projectMindMapNode: MindMapNodeDetail },
+    { input: typeof input }
+  >({
+    query: `
+      query ProjectMindMapNode($input: MindMapNodeInput!) {
+        projectMindMapNode(input: $input) {
+          id
+          title
+          content
+          files { file method startLine endLine }
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return data.projectMindMapNode;
 }
 
 export async function searchProjectMindMap(projectId: string, query: string) {

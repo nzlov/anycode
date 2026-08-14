@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	domain "github.com/nzlov/anycode/internal/domain/mindmap"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -84,6 +85,60 @@ func TestServiceMaintainsFreeFormGraphWithSystemRoot(t *testing.T) {
 		Kind: domain.ChangeUpsertNode, ID: "card-node", Title: &cardTitle,
 	}}}); err != nil {
 		t.Fatalf("update closed card overlay: %v", err)
+	}
+}
+
+func TestGetNodeReturnsMainAndCardScopedDetails(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime, MaxConcurrent: 1,
+	}}
+	project, session := saveMindMapTestProjectAndSession(t, store, "session-node-detail")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	changeIndex := 0
+	service.generateID = func() (domain.ChangeID, error) {
+		changeIndex++
+		return domain.ChangeID(fmt.Sprintf("node-detail-change-%d", changeIndex)), nil
+	}
+	mainTitle, mainContent := "Node detail", "Main content"
+	files := []domain.NodeFile{{File: "internal/node.go", Method: "Load", StartLine: 10, EndLine: 20}}
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID),
+		Operations: []OperationInput{{
+			Kind: domain.ChangeUpsertNode, ID: "node-detail", Title: &mainTitle, Content: &mainContent, Files: &files,
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cardContent := "Card content"
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID),
+		Operations: []OperationInput{{Kind: domain.ChangeUpsertNode, ID: "node-detail", Content: &cardContent}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	mainNode, err := service.GetNode(ctx, GetNodeInput{ProjectID: domain.ProjectID(project.ID), NodeID: "node-detail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mainNode.Title != mainTitle || mainNode.Content != mainContent || len(mainNode.Files) != 1 {
+		t.Fatalf("main node = %#v", mainNode)
+	}
+	cardNode, err := service.GetNode(ctx, GetNodeInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID), NodeID: "node-detail",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cardNode.Content != cardContent || len(cardNode.Files) != 1 {
+		t.Fatalf("card node = %#v", cardNode)
+	}
+	_, err = service.GetNode(ctx, GetNodeInput{ProjectID: domain.ProjectID(project.ID), NodeID: "missing"})
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeNotFound {
+		t.Fatalf("missing node error = %#v", err)
 	}
 }
 
@@ -436,6 +491,30 @@ func TestSearchGraphMatchesContentAndReturnsOneHopRelationships(t *testing.T) {
 	}
 }
 
+func TestSearchGraphMatchesAnyTermAndRanksTermCoverage(t *testing.T) {
+	graph := GraphDTO{
+		ProjectID: "project-1",
+		Nodes: []NodeDTO{
+			{ID: "durable-storage", Title: "Durable storage"},
+			{ID: "durable", Title: "Durable concepts"},
+			{ID: "storage", Title: "Storage"},
+			{ID: "unrelated", Title: "Workflow"},
+		},
+	}
+
+	result := searchGraph(graph, "durable storage", 20)
+
+	if result.TotalMatches != 3 || result.Truncated || len(result.Matches) != 3 {
+		t.Fatalf("matches = %#v", result)
+	}
+	if result.Matches[0].Node.ID != "durable-storage" {
+		t.Fatalf("first match = %#v", result.Matches[0])
+	}
+	if result.Matches[1].Node.ID != "durable" || result.Matches[2].Node.ID != "storage" {
+		t.Fatalf("partial match order = %#v", result.Matches)
+	}
+}
+
 func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
 	ctx := context.Background()
 	store := openMindMapTestStore(t)
@@ -470,14 +549,14 @@ func TestSearchReturnsMainAndVisibleCardNodeScopes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mainResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "shared search"})
+	mainResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(mainResult.Matches) != 1 || mainResult.Matches[0].NodeID != "main-node" || mainResult.Matches[0].SessionID != "" {
 		t.Fatalf("main search result = %#v", mainResult)
 	}
-	cardResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "card search"})
+	cardResult, err := service.Search(ctx, SearchInput{ProjectID: domain.ProjectID(project.ID), Query: "card"})
 	if err != nil {
 		t.Fatal(err)
 	}

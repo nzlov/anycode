@@ -192,14 +192,20 @@
                     @click="closeNodeInfo"
                   />
                 </q-card-section>
-                <q-card-section class="mind-map-node-info__content q-pt-none">
-                  {{ data.content || '暂无节点内容' }}
+                <q-card-section
+                  v-if="nodeInfoLoading"
+                  class="mind-map-node-info__content row justify-center q-pt-none"
+                >
+                  <q-spinner color="primary" size="24px" />
                 </q-card-section>
-                <template v-if="data.files.length">
+                <q-card-section v-else class="mind-map-node-info__content q-pt-none">
+                  {{ nodeInfoDetail?.content || '暂无节点内容' }}
+                </q-card-section>
+                <template v-if="!nodeInfoLoading && nodeInfoDetail?.files.length">
                   <q-separator />
                   <q-list dense class="mind-map-node-info__files">
                     <q-item
-                      v-for="item in data.files"
+                      v-for="item in nodeInfoDetail.files"
                       :key="`${item.file}:${item.method}:${item.startLine}:${item.endLine}`"
                     >
                       <q-item-section>
@@ -224,11 +230,18 @@
                 <q-item
                   v-close-popup
                   clickable
-                  :disable="id === rootNodeId || data.changeType === 'deleted'"
+                  :disable="
+                    id === rootNodeId ||
+                    data.changeType === 'deleted' ||
+                    editorLoadingNodeId === id
+                  "
                   @click="openNodeEditor(id)"
                 >
                   <q-item-section avatar><q-icon name="edit" /></q-item-section>
                   <q-item-section>编辑</q-item-section>
+                  <q-item-section v-if="editorLoadingNodeId === id" side>
+                    <q-spinner color="primary" size="18px" />
+                  </q-item-section>
                 </q-item>
                 <q-item
                   v-close-popup
@@ -370,6 +383,7 @@ import {
 } from '@/services/generalSettings';
 import {
   getProjectMindMap,
+  getProjectMindMapNode,
   listProjectMindMapCards,
   retryMindMapTask,
   searchProjectMindMap,
@@ -379,6 +393,7 @@ import {
   type MindMapEdge,
   type MindMapGraph,
   type MindMapNode,
+  type MindMapNodeDetail,
   type MindMapNodeFile,
   type MindMapOperation,
 } from '@/services/mindMaps';
@@ -418,6 +433,9 @@ const searchLoading = ref(false);
 const searchMatchNodeIds = ref<Set<string>>(new Set());
 const selectedNodeId = ref('');
 const infoNodeId = ref('');
+const nodeInfoDetail = ref<MindMapNodeDetail | null>(null);
+const nodeInfoLoading = ref(false);
+const editorLoadingNodeId = ref('');
 const menuNodeId = ref('');
 const editingNodeId = ref('');
 const deletingNodeId = ref('');
@@ -430,6 +448,8 @@ const handleSides = ['top', 'right', 'bottom', 'left'] as const;
 let graphRequestRevision = 0;
 let cardRequestRevision = 0;
 let searchRequestRevision = 0;
+let nodeInfoRequestRevision = 0;
+let editorRequestRevision = 0;
 let subscriptionRevision = 0;
 let mindMapSubscription: { unsubscribe: () => void } | null = null;
 let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -557,8 +577,6 @@ const flowNodes = computed({
       label: node.title,
       data: {
         label: node.title,
-        content: node.content,
-        files: node.files,
         changeType: node.changeType,
         cardLabel: node.cardLabel,
         isTag: isTagNodeId(node.entityId),
@@ -711,6 +729,8 @@ onBeforeUnmount(() => {
   graphRequestRevision += 1;
   cardRequestRevision += 1;
   searchRequestRevision += 1;
+  nodeInfoRequestRevision += 1;
+  editorRequestRevision += 1;
   stopMindMapSubscription();
   if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
 });
@@ -898,7 +918,7 @@ function searchDisplayNodeId(match: { nodeId: string; sessionId?: string | null 
 
 function selectNode({ node }: NodeMouseEvent) {
   selectedNodeId.value = node.id;
-  if ($q.platform.is.mobile) showNodeInfo(node.id);
+  if ($q.platform.is.mobile) void showNodeInfo(node.id);
 }
 
 function toggleCardHighlight(sessionId: string) {
@@ -906,8 +926,39 @@ function toggleCardHighlight(sessionId: string) {
   clearSelection();
 }
 
-function showNodeInfo(nodeId: string) {
+async function showNodeInfo(nodeId: string) {
+  const node = graph.value.nodes.find((item) => item.id === nodeId);
+  if (!node || (infoNodeId.value === nodeId && (nodeInfoLoading.value || nodeInfoDetail.value)))
+    return;
+  const requestedProjectId = projectId.value;
+  const requestRevision = ++nodeInfoRequestRevision;
   infoNodeId.value = nodeId;
+  nodeInfoDetail.value = null;
+  nodeInfoLoading.value = true;
+  try {
+    const detail = await getProjectMindMapNode(
+      requestedProjectId,
+      node.entityId,
+      node.sessionId,
+    );
+    if (
+      disposed ||
+      requestRevision !== nodeInfoRequestRevision ||
+      requestedProjectId !== projectId.value ||
+      infoNodeId.value !== nodeId
+    ) {
+      return;
+    }
+    nodeInfoDetail.value = detail;
+  } catch {
+    if (requestRevision === nodeInfoRequestRevision) {
+      infoNodeId.value = '';
+      nodeInfoDetail.value = null;
+      $q.notify({ type: 'negative', message: '加载节点详情失败' });
+    }
+  } finally {
+    if (requestRevision === nodeInfoRequestRevision) nodeInfoLoading.value = false;
+  }
 }
 
 function syncNodeInfo(nodeId: string, open: boolean) {
@@ -919,7 +970,10 @@ function syncNodeInfo(nodeId: string, open: boolean) {
 }
 
 function closeNodeInfo() {
+  nodeInfoRequestRevision += 1;
   infoNodeId.value = '';
+  nodeInfoDetail.value = null;
+  nodeInfoLoading.value = false;
 }
 
 function openNodeMenu(nodeId: string) {
@@ -936,6 +990,8 @@ function syncNodeMenu(nodeId: string, open: boolean) {
 }
 
 function openNewNodeDialog() {
+  editorRequestRevision += 1;
+  editorLoadingNodeId.value = '';
   editingNodeId.value = '';
   nodeTitle.value = '';
   nodeContent.value = '';
@@ -943,14 +999,37 @@ function openNewNodeDialog() {
   editDialog.value = true;
 }
 
-function openNodeEditor(nodeId: string) {
+async function openNodeEditor(nodeId: string) {
   const node = graph.value.nodes.find((item) => item.id === nodeId);
   if (!node || node.id === rootNodeId || node.changeType === 'deleted') return;
-  editingNodeId.value = node.id;
-  nodeTitle.value = node.title;
-  nodeContent.value = node.content;
-  nodeFiles.value = node.files.map((item) => ({ ...item }));
-  editDialog.value = true;
+  const requestedProjectId = projectId.value;
+  const requestRevision = ++editorRequestRevision;
+  editorLoadingNodeId.value = nodeId;
+  try {
+    const detail = await getProjectMindMapNode(
+      requestedProjectId,
+      node.entityId,
+      node.sessionId,
+    );
+    if (
+      disposed ||
+      requestRevision !== editorRequestRevision ||
+      requestedProjectId !== projectId.value
+    ) {
+      return;
+    }
+    editingNodeId.value = node.id;
+    nodeTitle.value = detail.title;
+    nodeContent.value = detail.content;
+    nodeFiles.value = detail.files.map((item) => ({ ...item }));
+    editDialog.value = true;
+  } catch {
+    if (requestRevision === editorRequestRevision) {
+      $q.notify({ type: 'negative', message: '加载节点详情失败' });
+    }
+  } finally {
+    if (requestRevision === editorRequestRevision) editorLoadingNodeId.value = '';
+  }
 }
 
 function addNodeFile() {
