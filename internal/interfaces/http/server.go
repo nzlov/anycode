@@ -22,6 +22,7 @@ import (
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	workspacefileapp "github.com/nzlov/anycode/internal/application/workspacefile"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -39,6 +40,7 @@ type handlerOptions struct {
 	graphqlHandler  http.Handler
 	attachments     attachmentapp.UseCase
 	diff            diffapp.UseCase
+	workspaceFiles  workspacefileapp.UseCase
 	settings        settingapp.UseCase
 	artifacts       artifactapp.UseCase
 	sessions        sessionapp.UseCase
@@ -79,6 +81,12 @@ func WithAttachmentUseCase(useCase attachmentapp.UseCase) HandlerOption {
 	}
 }
 
+func WithWorkspaceFileUseCase(useCase workspacefileapp.UseCase) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceFiles = useCase
+	}
+}
+
 func WithTerminalRuntime(runtime terminaldomain.Runtime) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.terminal = runtime
@@ -114,6 +122,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("GET /files/{id}/preview", filePreviewAuth(cfg.AccessKey, previewTokens, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
 	mux.Handle("GET /api/sessions/{id}/diff-media", bearerAuth(cfg.AccessKey, diffMediaHandler{useCase: opts.diff, previewMaxBytes: attachmentHandler.previewMaxBytes}))
+	mux.Handle("GET /api/sessions/{id}/workspace-file", bearerAuth(cfg.AccessKey, workspaceFileHandler{useCase: opts.workspaceFiles, previewMaxBytes: attachmentHandler.previewMaxBytes}))
 	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveAppearanceWallpaper(w, r, opts.settings)
 	})))
@@ -131,6 +140,51 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 type diffMediaHandler struct {
 	useCase         diffapp.UseCase
 	previewMaxBytes int64
+}
+
+type workspaceFileHandler struct {
+	useCase         workspacefileapp.UseCase
+	previewMaxBytes int64
+}
+
+func (h workspaceFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.useCase == nil {
+		writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "workspace file service unavailable").WithRetryable(true))
+		return
+	}
+	stream, err := h.useCase.OpenSessionWorkspaceFile(r.Context(), workspacefileapp.OpenInput{
+		SessionID: sessiondomain.ID(r.PathValue("id")),
+		Path:      r.URL.Query().Get("path"),
+	})
+	if err != nil {
+		if errors.Is(err, sessiondomain.ErrWorkspaceFileNotFound) {
+			writeApplicationError(w, http.StatusNotFound, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "workspace file not found"))
+			return
+		}
+		writeApplicationError(w, http.StatusInternalServerError, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "workspace file unavailable").WithRetryable(true))
+		return
+	}
+	defer stream.Reader.Close()
+	download := r.URL.Query().Has("download")
+	if !download && stream.Size > h.previewMaxBytes {
+		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "workspace file is too large to preview"))
+		return
+	}
+	disposition := "inline"
+	if download {
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Type", stream.MimeType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": stream.Filename}))
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'")
+	w.Header().Set("X-AnyCode-Preview-Kind", string(stream.PreviewKind))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if stream.Seeker != nil {
+		http.ServeContent(w, r, stream.Filename, stream.ModifiedAt, stream.Seeker)
+		return
+	}
+	_, _ = io.Copy(w, stream.Reader)
 }
 
 func (h diffMediaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

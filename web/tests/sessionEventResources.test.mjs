@@ -78,6 +78,9 @@ test('event stream routes local markdown and authenticated images through modal 
     /function openEventDiff\(file: DiffFile\)[\s\S]*eventDiffState\.value = \{ mode: 'single', filePath: file\.path \}/,
   );
   assert.match(detail, /resolveSessionArtifacts/);
+  assert.match(detail, /resolveSessionWorkspaceFile\(sessionId, reference\.path\)/);
+  assert.match(detail, /workspaceResult\.status === 'fulfilled'/);
+  assert.match(detail, /:annotatable="eventResourceFile\?\.sourceType !== 'workspace'"/);
   assert.match(detail, /<SessionFilePreview[\s\S]*?v-else[\s\S]*?:file="eventResourceFile"/);
   assert.match(detail, /'app-content-dialog': !isMobileLayout/);
 });
@@ -108,10 +111,7 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
     detail,
     /<q-dialog[\s\S]*?v-model="eventResourceDialogOpen"[\s\S]*?:maximized="isMobileLayout"/,
   );
-  assert.match(
-    detail,
-    /v-if="!isMobileLayout"[\s\S]*?class="event-resource-dialog__header"/,
-  );
+  assert.match(detail, /v-if="!isMobileLayout"[\s\S]*?class="event-resource-dialog__header"/);
   assert.match(
     detail,
     /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,

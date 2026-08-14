@@ -13,6 +13,7 @@
     >
       <PreviewAnnotator
         mode="image"
+        :enabled="annotatable"
         :source="annotationSource || `临时文件 ${file.filename}`"
         :session-id="annotationSessionId"
         :content-key="file.id"
@@ -75,6 +76,7 @@
     <PreviewAnnotator
       v-else-if="file?.previewKind === 'text'"
       mode="text"
+      :enabled="annotatable"
       :source="annotationSource || `临时文件 ${file.filename}`"
       :session-id="annotationSessionId"
       :content-key="file.id"
@@ -109,8 +111,9 @@ const props = withDefaults(
     zoomable?: boolean;
     annotationSource?: string;
     annotationSessionId?: string;
+    annotatable?: boolean;
   }>(),
-  { zoomable: false, annotationSource: '', annotationSessionId: '' },
+  { zoomable: false, annotationSource: '', annotationSessionId: '', annotatable: true },
 );
 const loading = ref(false);
 const error = ref('');
@@ -148,6 +151,14 @@ async function load(file: SessionFilePreviewData | null) {
   let waitForImage = false;
   try {
     if (file.previewKind === 'image') {
+      if (file.previewRequiresBearer) {
+        const blob = await fetchSessionFile(file, 'preview', request.signal);
+        if (controller !== request || props.file?.id !== file.id) return;
+        objectURL.value = URL.createObjectURL(blob);
+        imageURL.value = objectURL.value;
+        waitForImage = true;
+        return;
+      }
       const url = await requestSessionFilePreviewURL(file, request.signal);
       if (controller !== request || props.file?.id !== file.id) return;
       imageURL.value = url;

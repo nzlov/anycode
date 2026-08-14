@@ -21,6 +21,7 @@ import (
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
+	workspacefileapp "github.com/nzlov/anycode/internal/application/workspacefile"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -438,6 +439,35 @@ func TestDiffMediaPreviewRequiresBearerAndStreamsVersion(t *testing.T) {
 	}
 }
 
+func TestWorkspaceFilePreviewRequiresBearerAndReturnsMetadata(t *testing.T) {
+	useCase := &fakeWorkspaceFileUseCase{}
+	handler := NewHandler(
+		config.Config{AccessKey: "secret"},
+		WithWorkspaceFileUseCase(useCase),
+	)
+
+	req := httptest.NewRequest(http.MethodHead, "/api/sessions/session-1/workspace-file?path=%2Fworkspace%2Fsession-1%2Fsrc%2FApp.java", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || useCase.calls != 0 {
+		t.Fatalf("unauthorized response = %d, calls = %d", rec.Code, useCase.calls)
+	}
+
+	req = httptest.NewRequest(http.MethodHead, "/api/sessions/session-1/workspace-file?path=%2Fworkspace%2Fsession-1%2Fsrc%2FApp.java", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.Len() != 0 {
+		t.Fatalf("preview response = status:%d body:%q", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "text/plain; charset=utf-8" || rec.Header().Get("X-AnyCode-Preview-Kind") != "text" {
+		t.Fatalf("preview headers = type:%q kind:%q", rec.Header().Get("Content-Type"), rec.Header().Get("X-AnyCode-Preview-Kind"))
+	}
+	if useCase.input.SessionID != "session-1" || useCase.input.Path != "/workspace/session-1/src/App.java" {
+		t.Fatalf("OpenSessionWorkspaceFile input = %#v", useCase.input)
+	}
+}
+
 func TestAttachmentPreviewStreamsContent(t *testing.T) {
 	useCase := &fakeAttachmentUseCase{
 		stream: attachmentapp.Stream{
@@ -709,6 +739,21 @@ type fakeDiffMediaUseCase struct {
 	input  diffapp.OpenSessionDiffFileInput
 	err    error
 	calls  int
+}
+
+type fakeWorkspaceFileUseCase struct {
+	input workspacefileapp.OpenInput
+	calls int
+}
+
+func (u *fakeWorkspaceFileUseCase) OpenSessionWorkspaceFile(_ context.Context, input workspacefileapp.OpenInput) (sessiondomain.WorkspaceFileStream, error) {
+	u.calls++
+	u.input = input
+	reader := &testReadSeekCloser{Reader: strings.NewReader("class App {}\n")}
+	return sessiondomain.WorkspaceFileStream{
+		Filename: "App.java", MimeType: "text/plain; charset=utf-8", Size: 13,
+		PreviewKind: sessiondomain.PreviewKindText, Reader: reader, Seeker: reader,
+	}, nil
 }
 
 func (u *fakeDiffMediaUseCase) OpenSessionDiffFile(_ context.Context, input diffapp.OpenSessionDiffFileInput) (diffapp.FileStream, error) {

@@ -17,12 +17,19 @@ export interface SessionFile {
   previewUrl: string | null;
   downloadUrl: string;
   createdAt: string;
+  previewRequiresBearer?: boolean;
 }
 
 export type SessionFileAccess = Pick<SessionFile, 'filename' | 'previewUrl' | 'downloadUrl'>;
 export type SessionFilePreviewData = Pick<
   SessionFile,
-  'id' | 'filename' | 'size' | 'previewKind' | 'previewUrl' | 'downloadUrl'
+  | 'id'
+  | 'filename'
+  | 'size'
+  | 'previewKind'
+  | 'previewUrl'
+  | 'downloadUrl'
+  | 'previewRequiresBearer'
 >;
 
 export interface ListSessionFilesInput {
@@ -82,6 +89,50 @@ export async function resolveSessionArtifacts(
     variables: { input: { sessionId, logicalPaths } },
   });
   return data.resolveSessionArtifacts;
+}
+
+export async function resolveSessionWorkspaceFile(
+  sessionId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<SessionFile> {
+  const query = new URLSearchParams({ path });
+  const previewUrl = `/api/sessions/${encodeURIComponent(sessionId)}/workspace-file?${query}`;
+  const response = await fetch(previewUrl, {
+    method: 'HEAD',
+    headers: sessionFileHeaders(),
+    signal: signal ?? null,
+  });
+  if (!response.ok) throw new Error(`读取工作区文件失败：HTTP ${response.status}`);
+  const previewKind = response.headers.get(
+    'x-anycode-preview-kind',
+  ) as SessionFilePreviewKind | null;
+  if (
+    !previewKind ||
+    !['image', 'pdf', 'video', 'audio', 'model', 'text', 'none'].includes(previewKind)
+  ) {
+    throw new Error('工作区文件预览响应无效');
+  }
+  const filename = path.replaceAll('\\', '/').split('/').pop() || 'workspace-file';
+  const size = Number(response.headers.get('content-length') || 0);
+  const downloadQuery = new URLSearchParams({ path, download: '1' });
+  // GLUE: Workspace files use the existing session-file preview contract; remove when the viewer accepts workspace sources directly.
+  return {
+    id: `workspace:${sessionId}:${path}`,
+    sessionId,
+    role: 'workspace',
+    sourceType: 'workspace',
+    artifactKind: previewKind === 'none' ? 'file' : previewKind,
+    logicalPath: path,
+    filename,
+    mimeType: response.headers.get('content-type') || 'application/octet-stream',
+    size: Number.isFinite(size) ? size : 0,
+    previewKind,
+    previewUrl,
+    downloadUrl: `/api/sessions/${encodeURIComponent(sessionId)}/workspace-file?${downloadQuery}`,
+    createdAt: '',
+    previewRequiresBearer: true,
+  };
 }
 
 export async function deleteSessionFile(id: string): Promise<boolean> {

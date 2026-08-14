@@ -595,6 +595,7 @@
             v-else
             :file="eventResourceFile"
             :zoomable="isMobileLayout"
+            :annotatable="eventResourceFile?.sourceType !== 'workspace'"
             :annotation-session-id="sessionId"
             :annotation-source="`临时文件 ${eventResourceTitle}`"
           />
@@ -645,6 +646,7 @@ import {
   downloadSessionFile,
   listSessionFiles,
   resolveSessionArtifacts,
+  resolveSessionWorkspaceFile,
   type SessionFile,
 } from '@/services/sessionFiles';
 import type {
@@ -846,11 +848,12 @@ async function resolveSessionEventResource(
       throw new Error('临时文件已不存在');
     }
 
-    const [diffResult, artifactResult] = await Promise.allSettled([
+    const [diffResult, artifactResult, workspaceResult] = await Promise.allSettled([
       getSessionDiffFiles({ sessionId }),
       reference.path.startsWith('/')
         ? Promise.resolve([])
         : resolveSessionArtifacts(sessionId, [reference.path]),
+      resolveSessionWorkspaceFile(sessionId, reference.path),
     ]);
     if (request !== eventResourceRequest) return;
     if (diffResult.status === 'fulfilled') {
@@ -863,6 +866,9 @@ async function resolveSessionEventResource(
     }
     if (artifactResult.status === 'fulfilled' && artifactResult.value[0]?.file) {
       return focusEventArtifact(artifactResult.value[0].file);
+    }
+    if (workspaceResult.status === 'fulfilled') {
+      return focusEventArtifact(workspaceResult.value);
     }
     throw new Error(label ? `无法查看“${label}”` : '无法查看此文件');
   } catch (err) {

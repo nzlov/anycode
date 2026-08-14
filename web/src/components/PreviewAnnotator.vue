@@ -1,6 +1,11 @@
 <template>
   <div class="preview-annotator" :class="`preview-annotator--${mode}`">
-    <div class="preview-annotator__toolbar" role="toolbar" aria-label="预览标注工具栏">
+    <div
+      v-if="enabled"
+      class="preview-annotator__toolbar"
+      role="toolbar"
+      aria-label="预览标注工具栏"
+    >
       <q-btn-dropdown
         v-if="mode === 'image'"
         split
@@ -198,8 +203,9 @@ const props = withDefaults(
     sessionId?: string;
     contentKey?: unknown;
     fileReferences?: PreviewFileReference[];
+    enabled?: boolean;
   }>(),
-  { sessionId: '', fileReferences: () => [] },
+  { sessionId: '', fileReferences: () => [], enabled: true },
 );
 
 const injector = useAnnotationDraftInjector();

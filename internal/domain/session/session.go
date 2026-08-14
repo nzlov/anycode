@@ -16,6 +16,7 @@ var (
 	ErrInvalidQueueIntent      = errors.New("invalid session queue intent")
 	ErrInvalidWorktreeCleanup  = errors.New("invalid worktree cleanup transition")
 	ErrWorktreeUnavailable     = errors.New("session worktree is unavailable")
+	ErrWorkspaceFileNotFound   = errors.New("session workspace file not found")
 	ErrSessionFileNotFound     = errors.New("session file not found")
 	ErrPromptFileUnavailable   = errors.New("prompt file unavailable")
 )
@@ -594,6 +595,20 @@ type AttachmentStream struct {
 	MimeType string
 	Reader   io.ReadCloser
 	Seeker   io.ReadSeeker
+}
+
+type WorkspaceFileStream struct {
+	Filename    string
+	MimeType    string
+	Size        int64
+	ModifiedAt  time.Time
+	PreviewKind PreviewKind
+	Reader      io.ReadCloser
+	Seeker      io.ReadSeeker
+}
+
+type WorkspaceFileReader interface {
+	OpenWorkspaceFile(ctx context.Context, root string, relativePath string) (WorkspaceFileStream, error)
 }
 
 type PromptAppendStatus string

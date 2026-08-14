@@ -29,6 +29,7 @@ import (
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
+	workspacefileapp "github.com/nzlov/anycode/internal/application/workspacefile"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
@@ -44,6 +45,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/ptyruntime"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
 	webpushinfra "github.com/nzlov/anycode/internal/infra/webpush"
+	workspacefileinfra "github.com/nzlov/anycode/internal/infra/workspacefile"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 	httpinterface "github.com/nzlov/anycode/internal/interfaces/http"
 )
@@ -102,7 +104,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithBuildVersion(version), httpinterface.WithPlayground()),
+		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithWorkspaceFileUseCase(application.workspaceFiles), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithBuildVersion(version), httpinterface.WithPlayground()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -156,10 +158,11 @@ func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUs
 }
 
 type wiredApplication struct {
-	useCases graph.UseCases
-	codex    *codexcli.Client
-	terminal terminaldomain.Runtime
-	mindMaps *mindmapapp.Queue
+	useCases       graph.UseCases
+	codex          *codexcli.Client
+	terminal       terminaldomain.Runtime
+	mindMaps       *mindmapapp.Queue
+	workspaceFiles workspacefileapp.UseCase
 }
 
 func (a *wiredApplication) Close() {
@@ -211,6 +214,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
+	workspaceFileService := workspacefileapp.New(store.Sessions(), workspacefileinfra.New())
 	tunnelRuntime, err := cloudflared.New(cfg.CloudflaredBin)
 	if err != nil {
 		_ = codex.Close()
@@ -252,7 +256,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,
 	}
-	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue}, nil
+	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
 }
 
 func httpPort(addr string) int {
