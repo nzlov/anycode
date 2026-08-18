@@ -26,3 +26,25 @@ test('session history filters by age and confirms filtered cleanup', () => {
   assert.match(schema, /cleanupSessions\(input: CleanupSessionsInput!\): Int!/);
   assert.match(schema, /olderThanDays: Int/);
 });
+
+test('mobile session history uses a dialog that restores the current filters', () => {
+  const page = readSource('../src/pages/SessionsPage.vue');
+  const styles = readSource('../src/css/app.scss');
+
+  assert.match(page, /v-if="!\$q\.screen\.lt\.sm" class="sessions-toolbar"/);
+  assert.match(
+    page,
+    /v-else class="sessions-toolbar sessions-toolbar--mobile"[\s\S]*aria-label="设置会话搜索条件"[\s\S]*@click="openMobileFilters"/,
+  );
+  assert.match(page, /<q-dialog v-model="mobileFilterDialogOpen">/);
+  assert.match(
+    page,
+    /function openMobileFilters\(\) \{[\s\S]*mobileFilterDraft\.value = filter\.value;[\s\S]*mobileStatusDraft\.value = status\.value;[\s\S]*mobileAgeDraft\.value = olderThanDays\.value;/,
+  );
+  assert.match(
+    page,
+    /function applyMobileFilters\(\) \{[\s\S]*filter\.value = mobileFilterDraft\.value;[\s\S]*status\.value = mobileStatusDraft\.value;[\s\S]*olderThanDays\.value = mobileAgeDraft\.value;/,
+  );
+  assert.match(styles, /\.sessions-toolbar--mobile\s*{[^}]*overflow:\s*visible/s);
+  assert.match(styles, /\.sessions-filter-dialog\s*{[^}]*max-width:\s*calc\(100vw - 24px\)/s);
+});

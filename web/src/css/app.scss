@@ -192,6 +192,15 @@ a {
   flex: 0 0 auto;
 }
 
+.sessions-toolbar--mobile {
+  overflow: visible;
+}
+
+.sessions-filter-dialog {
+  width: min(360px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+}
+
 .workflow-toolbar-actions {
   display: flex;
   min-width: 0;

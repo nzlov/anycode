@@ -1,7 +1,7 @@
 <template>
   <q-page class="page-shell">
     <PageToolbar title="会话表格" compact-title-on-mobile>
-      <div class="sessions-toolbar">
+      <div v-if="!$q.screen.lt.sm" class="sessions-toolbar">
         <q-input
           v-model="filter"
           dense
@@ -49,7 +49,90 @@
           <q-tooltip>{{ cleanupTooltip }}</q-tooltip>
         </q-btn>
       </div>
+      <div v-else class="sessions-toolbar sessions-toolbar--mobile">
+        <q-btn
+          outline
+          no-caps
+          icon="search"
+          label="搜索"
+          aria-label="设置会话搜索条件"
+          @click="openMobileFilters"
+        >
+          <q-badge
+            v-if="activeFilterCount"
+            floating
+            rounded
+            color="primary"
+            :label="activeFilterCount"
+          />
+        </q-btn>
+        <q-btn
+          flat
+          round
+          dense
+          icon="delete_sweep"
+          color="negative"
+          aria-label="清理筛选出的会话"
+          :disable="!canCleanup"
+          :loading="cleaning"
+          @click="confirmCleanup"
+        >
+          <q-tooltip>{{ cleanupTooltip }}</q-tooltip>
+        </q-btn>
+      </div>
     </PageToolbar>
+
+    <q-dialog v-model="mobileFilterDialogOpen">
+      <q-card class="sessions-filter-dialog">
+        <q-form @submit.prevent="applyMobileFilters">
+          <q-card-section>
+            <div class="text-subtitle1 text-weight-bold">搜索会话</div>
+          </q-card-section>
+          <q-card-section class="q-gutter-md">
+            <q-input
+              v-model="mobileFilterDraft"
+              dense
+              outlined
+              clearable
+              autofocus
+              label="关键词"
+              placeholder="搜索需求、项目或分支"
+              aria-label="搜索会话"
+            >
+              <template #prepend>
+                <q-icon name="search" />
+              </template>
+            </q-input>
+            <q-select
+              v-model="mobileStatusDraft"
+              dense
+              outlined
+              emit-value
+              map-options
+              label="状态"
+              :options="statusOptions"
+              aria-label="按状态筛选会话"
+            />
+            <q-select
+              v-model="mobileAgeDraft"
+              dense
+              outlined
+              emit-value
+              map-options
+              label="更新时间"
+              :options="ageOptions"
+              aria-label="按更新时间筛选会话"
+            />
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn flat no-caps label="重置" @click="resetMobileFilterDraft" />
+            <q-space />
+            <q-btn v-close-popup flat no-caps label="取消" />
+            <q-btn unelevated no-caps color="primary" type="submit" label="搜索" />
+          </q-card-actions>
+        </q-form>
+      </q-card>
+    </q-dialog>
 
     <q-card flat bordered class="table-card">
       <q-table
@@ -221,9 +304,19 @@ const routeStatus = computed<SessionStatus | 'all'>(() => {
     : 'all';
 });
 const status = ref<SessionStatus | 'all'>(routeStatus.value);
+const mobileFilterDialogOpen = ref(false);
+const mobileFilterDraft = ref('');
+const mobileStatusDraft = ref<SessionStatus | 'all'>('all');
+const mobileAgeDraft = ref(0);
 const cancellingSessionId = ref('');
 const cleaning = ref(false);
 scope.value = status.value === 'all' ? '' : status.value;
+const activeFilterCount = computed(
+  () =>
+    Number(Boolean(filter.value.trim())) +
+    Number(status.value !== 'all') +
+    Number(olderThanDays.value > 0),
+);
 const canCleanup = computed(
   () =>
     status.value === 'closed' &&
@@ -341,6 +434,26 @@ function onTableRequest(props: {
 
 function openSession(_event: Event, session: SessionCard) {
   void router.push(`/sessions/${session.id}`);
+}
+
+function openMobileFilters() {
+  mobileFilterDraft.value = filter.value;
+  mobileStatusDraft.value = status.value;
+  mobileAgeDraft.value = olderThanDays.value;
+  mobileFilterDialogOpen.value = true;
+}
+
+function resetMobileFilterDraft() {
+  mobileFilterDraft.value = '';
+  mobileStatusDraft.value = 'all';
+  mobileAgeDraft.value = 0;
+}
+
+function applyMobileFilters() {
+  filter.value = mobileFilterDraft.value;
+  status.value = mobileStatusDraft.value;
+  olderThanDays.value = mobileAgeDraft.value;
+  mobileFilterDialogOpen.value = false;
 }
 
 async function cancelQueuedSession(session: SessionCard) {
