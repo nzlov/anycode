@@ -25,13 +25,13 @@
     </q-banner>
 
     <q-slide-transition>
-      <div v-if="adding || editingCommandId" class="quick-command-editor">
+      <div v-if="adding" class="quick-command-editor">
         <q-input
-          ref="commandInputRef"
           v-model="draftCommand"
           outlined
           autogrow
-          :label="editingCommandId ? '修改快捷指令' : '快捷指令'"
+          autofocus
+          label="快捷指令"
           :disable="saving"
           @keyup.ctrl.enter="saveCommand"
         />
@@ -41,7 +41,7 @@
             round
             class="app-icon-btn"
             icon="close"
-            :aria-label="editingCommandId ? '取消修改' : '取消新增'"
+            aria-label="取消新增"
             :disable="saving"
             @click="cancelEditor"
           >
@@ -53,7 +53,7 @@
             color="primary"
             class="app-icon-btn app-on-primary"
             icon="check"
-            :aria-label="editingCommandId ? '保存快捷指令修改' : '保存快捷指令'"
+            aria-label="保存快捷指令"
             :loading="saving"
             :disable="saving || !draftCommand.trim()"
             @click="saveCommand"
@@ -71,10 +71,49 @@
     />
     <q-list v-if="quickCommands.length" separator class="quick-command-list">
       <q-item v-for="command in quickCommands" :key="command.id" :disable="quickCommandsLoading">
-        <q-item-section>
+        <q-item-section v-if="editingCommandId === command.id">
+          <div class="quick-command-editor quick-command-editor--inline">
+            <q-input
+              v-model="draftCommand"
+              outlined
+              autogrow
+              autofocus
+              label="修改快捷指令"
+              :disable="saving"
+              @keyup.ctrl.enter="saveCommand"
+            />
+            <div class="quick-command-editor__actions">
+              <q-btn
+                flat
+                round
+                class="app-icon-btn"
+                icon="close"
+                aria-label="取消修改"
+                :disable="saving"
+                @click="cancelEditor"
+              >
+                <q-tooltip>取消</q-tooltip>
+              </q-btn>
+              <q-btn
+                unelevated
+                round
+                color="primary"
+                class="app-icon-btn app-on-primary"
+                icon="check"
+                aria-label="保存快捷指令修改"
+                :loading="saving"
+                :disable="saving || !draftCommand.trim()"
+                @click="saveCommand"
+              >
+                <q-tooltip>保存</q-tooltip>
+              </q-btn>
+            </div>
+          </div>
+        </q-item-section>
+        <q-item-section v-else>
           <q-item-label class="quick-command-text">{{ command.content }}</q-item-label>
         </q-item-section>
-        <q-item-section side>
+        <q-item-section v-if="editingCommandId !== command.id" side>
           <div class="quick-command-item__actions">
             <q-btn
               flat
@@ -136,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import AppPagination from '@/components/AppPagination.vue';
 import { useQuickCommands } from '@/composables/useQuickCommands';
@@ -162,7 +201,6 @@ const editingCommandId = ref('');
 const draftCommand = ref('');
 const saving = ref(false);
 const deletingCommandIds = ref<string[]>([]);
-const commandInputRef = ref<{ focus: () => void } | null>(null);
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
 );
@@ -170,14 +208,12 @@ const quickCommandPageMax = computed(() =>
 function startAdd() {
   editingCommandId.value = '';
   adding.value = true;
-  void nextTick(() => commandInputRef.value?.focus());
 }
 
 function startEdit(command: { id: string; content: string }) {
   adding.value = false;
   editingCommandId.value = command.id;
   draftCommand.value = command.content;
-  void nextTick(() => commandInputRef.value?.focus());
 }
 
 function cancelEditor() {

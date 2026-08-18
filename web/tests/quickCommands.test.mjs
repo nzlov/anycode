@@ -90,6 +90,20 @@ test('quick command editor removes the inactive add hit target on mobile', () =>
   );
 });
 
+test('quick command additions use the top editor while modifications edit the selected item', () => {
+  const managerSource = readSource('../src/components/QuickCommandManager.vue');
+
+  assert.match(
+    managerSource,
+    /<q-slide-transition>\s*<div v-if="adding" class="quick-command-editor">/,
+  );
+  assert.match(
+    managerSource,
+    /<q-item-section v-if="editingCommandId === command\.id">[\s\S]*?label="修改快捷指令"/,
+  );
+  assert.doesNotMatch(managerSource, /v-if="adding \|\| editingCommandId"/);
+});
+
 test('project settings manage project-only commands while prompt menus include global commands', () => {
   const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
   const composerSource = readSource('../src/components/CodexPromptComposer.vue');
