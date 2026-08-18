@@ -7,7 +7,7 @@
       'workbench-page--horizontal': isHorizontalView,
     }"
   >
-    <PageToolbar title="AnyCode" title-icon="img:/icons/anycode.svg">
+    <PageToolbar title="AnyCode" title-icon="img:/icons/anycode.svg" compact-title-on-mobile>
       <div v-if="projectChips.length && !$q.screen.lt.sm" class="overview-filter-toolbar">
         <ProjectVisibilityFilters
           :projects="projectChips"

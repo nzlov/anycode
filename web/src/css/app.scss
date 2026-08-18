@@ -2473,6 +2473,19 @@ body.desktop
     display: none;
   }
 
+  .page-toolbar--compact-title.page-toolbar--icon-title .page-toolbar__title {
+    display: block;
+    flex: 0 0 auto;
+  }
+
+  .page-toolbar--icon-title .page-toolbar__title-icon {
+    margin-right: 0;
+  }
+
+  .page-toolbar--icon-title .page-toolbar__title-text {
+    display: none;
+  }
+
   .page-toolbar__actions {
     justify-content: flex-start;
     gap: 4px;

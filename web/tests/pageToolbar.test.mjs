@@ -45,11 +45,19 @@ test('route pages render their titles and actions into the application toolbar',
 test('overview navigation and title use the AnyCode project icon', () => {
   assert.match(layoutSource, /icon="img:\/icons\/anycode\.svg"/);
   assert.match(layoutSource, /aria-label="返回总览"/);
-  assert.match(indexSource, /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg"/);
+  assert.match(
+    indexSource,
+    /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg" compact-title-on-mobile/,
+  );
   assert.match(toolbarSource, /<q-icon v-if="titleIcon" :name="titleIcon"/);
+  assert.match(toolbarSource, /class="page-toolbar__title-text"/);
   const titleIconStyles = stylesSource.match(/\.page-toolbar__title-icon\s*{([^}]*)}/)?.[1] ?? '';
   assert.match(titleIconStyles, /font-size:\s*28px/);
   assert.match(titleIconStyles, /margin-right:\s*8px/);
+  assert.match(
+    stylesSource,
+    /@media \(max-width:\s*599\.98px\)[\s\S]*?\.page-toolbar--icon-title \.page-toolbar__title-text\s*{[^}]*display:\s*none/s,
+  );
 });
 
 test('standalone diff keeps its state owner while moving controls into the header', () => {
