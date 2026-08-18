@@ -8841,8 +8841,10 @@ func availableActions(session domain.Session) []string {
 		return []string{"execute", "close"}
 	case domain.StatusQueued:
 		return []string{"execute", "stop", "close"}
-	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
 		return []string{"stop"}
+	case domain.StatusWaitingUser:
+		return []string{"stop", "close"}
 	case domain.StatusWaitingApproval:
 		return []string{"close"}
 	case domain.StatusBlocked:

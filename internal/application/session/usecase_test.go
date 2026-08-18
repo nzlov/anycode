@@ -11365,6 +11365,11 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"stop"},
 		},
 		{
+			name:    "waiting for user answer",
+			session: domain.Session{Status: domain.StatusWaitingUser},
+			want:    []string{"stop", "close"},
+		},
+		{
 			name:    "waiting approval",
 			session: domain.Session{Status: domain.StatusWaitingApproval},
 			want:    []string{"close"},
