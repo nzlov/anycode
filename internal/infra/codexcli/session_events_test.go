@@ -185,6 +185,10 @@ func TestProjectorMergesQuestionsDynamicToolCompletion(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("projected events = %#v, want questions start, transport output, and completion", got)
 	}
+	yielded, ok := got[1].Content.(process.CodexToolContent)
+	if !ok || got[1].Phase != process.CodexPhaseProgress || yielded.QualifiedName != "tools.questions" {
+		t.Fatalf("questions yielded event = %#v", got[1])
+	}
 	completed := got[2]
 	if completed.CorrelationID != "outer-call" || completed.Phase != process.CodexPhaseCompleted {
 		t.Fatalf("questions completion = %#v", completed)

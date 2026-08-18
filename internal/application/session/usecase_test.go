@@ -2184,7 +2184,7 @@ func TestAgentQuestionProcessExitKeepsWaitingAndQueuesAnsweredResume(t *testing.
 	)
 }
 
-func TestAnsweredAgentQuestionEmptyContinuationExitQueuesResume(t *testing.T) {
+func TestAnsweredAgentQuestionYieldedContinuationExitQueuesResume(t *testing.T) {
 	ctx := context.Background()
 	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
 	if err != nil {
@@ -2224,7 +2224,14 @@ func TestAnsweredAgentQuestionEmptyContinuationExitQueuesResume(t *testing.T) {
 	if err := store.Questions().CreateRequest(ctx, request); err != nil {
 		t.Fatalf("create answered question request: %v", err)
 	}
-	eventStream := make(chan processdomain.CodexEvent, 3)
+	eventStream := make(chan processdomain.CodexEvent, 4)
+	eventStream <- processdomain.CodexEvent{
+		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseProgress,
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "tools.questions",
+			Output:        processdomain.CodexStructuredText{Text: "Script running with cell ID 20"},
+		},
+	}
 	eventStream <- processdomain.CodexEvent{
 		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseCompleted,
 		Content: processdomain.CodexToolContent{
@@ -2232,7 +2239,7 @@ func TestAnsweredAgentQuestionEmptyContinuationExitQueuesResume(t *testing.T) {
 			Output:        processdomain.CodexStructuredText{Text: `{"answers":[{"selectedOptionId":"continue"}]}`},
 		},
 	}
-	eventStream <- completedAssistantEvent("  \n")
+	eventStream <- completedAssistantEvent("主人")
 	eventStream <- processdomain.CodexEvent{
 		Type: processdomain.CodexEventProcessExit,
 		Content: processdomain.ExitResult{
@@ -2298,24 +2305,43 @@ func TestAnsweredAgentQuestionEmptyContinuationExitQueuesResume(t *testing.T) {
 	}
 }
 
-func TestQuestionAnswerResumeRequiredAfterEvent(t *testing.T) {
-	required := questionAnswerResumeRequiredAfterEvent(false, processdomain.CodexEvent{
+func TestQuestionAnswerContinuationAfterEvent(t *testing.T) {
+	state := questionAnswerContinuationAfterEvent(questionAnswerContinuationState{}, processdomain.CodexEvent{
 		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseCompleted,
 		Content: processdomain.CodexToolContent{
 			QualifiedName: "questions",
 			Output:        processdomain.CodexStructuredText{Text: `{"answers":[{"selectedOptionId":"continue"}]}`},
 		},
 	})
-	if !required {
+	if !state.resumeRequired {
 		t.Fatal("completed questions output should require a continuation response")
 	}
-	required = questionAnswerResumeRequiredAfterEvent(required, completedAssistantEvent("  \n"))
-	if !required {
+	state = questionAnswerContinuationAfterEvent(state, completedAssistantEvent("  \n"))
+	if !state.resumeRequired {
 		t.Fatal("blank assistant output should preserve the resume requirement")
 	}
-	required = questionAnswerResumeRequiredAfterEvent(required, completedAssistantEvent("continued and completed"))
-	if required {
+	state = questionAnswerContinuationAfterEvent(state, completedAssistantEvent("continued and completed"))
+	if state.resumeRequired {
 		t.Fatal("non-empty assistant output should satisfy the resume requirement")
+	}
+
+	state = questionAnswerContinuationAfterEvent(questionAnswerContinuationState{}, processdomain.CodexEvent{
+		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseProgress,
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "tools.questions",
+			Output:        processdomain.CodexStructuredText{Text: "Script running with cell ID 20"},
+		},
+	})
+	state = questionAnswerContinuationAfterEvent(state, processdomain.CodexEvent{
+		Type: processdomain.CodexEventTool, Phase: processdomain.CodexPhaseCompleted,
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "questions",
+			Output:        processdomain.CodexStructuredText{Text: `{"answers":[{"customAnswer":"answer"}]}`},
+		},
+	})
+	state = questionAnswerContinuationAfterEvent(state, completedAssistantEvent("主人"))
+	if !state.execYielded || !state.resumeRequired {
+		t.Fatalf("yielded questions answer must remain resumable after unrelated assistant output: %#v", state)
 	}
 }
 

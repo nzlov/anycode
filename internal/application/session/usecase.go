@@ -3269,21 +3269,21 @@ func questionAnswerResumePrompt(request questiondomain.Request) string {
 }
 
 type codexStartOptions struct {
-	resumeCodexSessionID         string
-	resumeOfProcessRunID         processdomain.RunID
-	sessionID                    domain.ID
-	nodeRunID                    *processdomain.NodeRunID
-	prompt                       string
-	fallbackPrompt               string
-	promptAppendIDs              []string
-	promptFiles                  []domain.SessionFile
-	promptMentions               []domain.PromptMention
-	queueKind                    domain.QueueKind
-	workflowResultRetry          bool
-	resumeAcknowledged           bool
-	questionAnswerResumeRequired bool
-	reviewAfterReuseFailure      bool
-	initialStart                 bool
+	resumeCodexSessionID       string
+	resumeOfProcessRunID       processdomain.RunID
+	sessionID                  domain.ID
+	nodeRunID                  *processdomain.NodeRunID
+	prompt                     string
+	fallbackPrompt             string
+	promptAppendIDs            []string
+	promptFiles                []domain.SessionFile
+	promptMentions             []domain.PromptMention
+	queueKind                  domain.QueueKind
+	workflowResultRetry        bool
+	resumeAcknowledged         bool
+	questionAnswerContinuation questionAnswerContinuationState
+	reviewAfterReuseFailure    bool
+	initialStart               bool
 }
 
 type executionClaimNotAcquiredError struct {
@@ -4424,7 +4424,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				exitResult = result
 			}
 			workflowResults = workflowResultsAfterEvent(workflowResults, event)
-			options.questionAnswerResumeRequired = questionAnswerResumeRequiredAfterEvent(options.questionAnswerResumeRequired, event)
+			options.questionAnswerContinuation = questionAnswerContinuationAfterEvent(options.questionAnswerContinuation, event)
 			if codexEventAcknowledgesPrompt(event) {
 				options.resumeAcknowledged = true
 			}
@@ -5086,7 +5086,7 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	if ok && active.ID != handle.ProcessRunID {
 		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
 	}
-	if current.Status == domain.StatusRunning && ok && options.questionAnswerResumeRequired {
+	if current.Status == domain.StatusRunning && ok && options.questionAnswerContinuation.resumeRequired {
 		queued, err := s.persistQuestionAnswerResumeAfterProcessExit(ctx, current, active, exitResult, processEvent)
 		if err != nil {
 			return domain.Session{}, false, err
@@ -5256,17 +5256,33 @@ func completedAssistantOutput(event processdomain.CodexEvent) (string, bool) {
 	return output, true
 }
 
-func questionAnswerResumeRequiredAfterEvent(required bool, event processdomain.CodexEvent) bool {
-	if event.Type == processdomain.CodexEventTool && (event.Phase == processdomain.CodexPhaseCompleted || event.Phase == processdomain.CodexPhaseStandalone) {
-		if tool, ok := event.Content.(processdomain.CodexToolContent); ok && strings.EqualFold(strings.TrimSpace(tool.QualifiedName), "questions") && strings.TrimSpace(tool.Output.Text) != "" {
-			return true
+type questionAnswerContinuationState struct {
+	execYielded    bool
+	resumeRequired bool
+}
+
+func questionAnswerContinuationAfterEvent(state questionAnswerContinuationState, event processdomain.CodexEvent) questionAnswerContinuationState {
+	if event.Type == processdomain.CodexEventTool && event.Phase == processdomain.CodexPhaseProgress {
+		// GLUE: projected exec progress is the only signal that the wrapper yielded before nested questions completed; remove when Codex exposes explicit answer-consumption state.
+		if tool, ok := event.Content.(processdomain.CodexToolContent); ok && strings.EqualFold(strings.TrimSpace(tool.QualifiedName), "tools.questions") {
+			state.execYielded = true
+			return state
 		}
 	}
-	if !required {
-		return false
+	if event.Type == processdomain.CodexEventTool && (event.Phase == processdomain.CodexPhaseCompleted || event.Phase == processdomain.CodexPhaseStandalone) {
+		if tool, ok := event.Content.(processdomain.CodexToolContent); ok && strings.EqualFold(strings.TrimSpace(tool.QualifiedName), "questions") && strings.TrimSpace(tool.Output.Text) != "" {
+			state.resumeRequired = true
+			return state
+		}
+	}
+	if !state.resumeRequired || state.execYielded {
+		return state
 	}
 	output, ok := completedAssistantOutput(event)
-	return !ok || strings.TrimSpace(output) == ""
+	if ok && strings.TrimSpace(output) != "" {
+		state.resumeRequired = false
+	}
+	return state
 }
 
 func (s *Service) persistQuestionAnswerResumeAfterProcessExit(ctx context.Context, session domain.Session, origin processdomain.Run, result processdomain.ExitResult, processEvent sessionEventInput) (bool, error) {
