@@ -58,6 +58,10 @@ test('new session mobile entry uses a page and keeps one scrolling body', () => 
     smallStyles,
     /\.app-content-dialog\s*{[^}]*width:\s*calc\(100vw - 24px\)\s*!important[^}]*height:\s*auto/s,
   );
+  assert.match(
+    mobileStyles,
+    /\.new-session-dialog:not\(\.new-session-dialog--panel\) \.prompt-input textarea\s*{[^}]*max-height:\s*max\(188px,\s*min\(36dvh,\s*320px\)\)[^}]*overflow-y:\s*auto\s*!important/s,
+  );
 });
 
 test('questions mobile entry opens the questions dialog in place', () => {

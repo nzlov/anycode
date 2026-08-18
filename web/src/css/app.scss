@@ -2246,6 +2246,11 @@ body.desktop
     padding: 16px 0;
   }
 
+  .new-session-dialog:not(.new-session-dialog--panel) .prompt-input textarea {
+    max-height: max(188px, min(36dvh, 320px));
+    overflow-y: auto !important;
+  }
+
   .new-session-grid,
   .canvas-grid {
     grid-template-columns: 1fr;
