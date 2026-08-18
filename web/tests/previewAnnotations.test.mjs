@@ -94,6 +94,18 @@ test('text files and code diffs use selected-text highlights and comments', () =
   assert.match(annotator, /sourceTextRange\(range\)/);
 });
 
+test('touch text selections survive tapping the mobile annotation toolbar', () => {
+  assert.match(
+    annotator,
+    /document\.addEventListener\('selectionchange', captureTextSelection\)/,
+  );
+  assert.match(
+    annotator,
+    /document\.removeEventListener\('selectionchange', captureTextSelection\)/,
+  );
+  assert.match(annotator, /if \(selection\.isCollapsed\) return;/);
+});
+
 test('multi-line comments include only annotation text and exclude diff line numbers', () => {
   assert.match(annotator, /editorQuote\.value = selectedAnnotationText\(range\)/);
   assert.match(

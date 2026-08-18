@@ -430,10 +430,11 @@ function captureTextSelection() {
   if (props.mode !== 'text') return;
   const surface = surfaceElement.value;
   const selection = window.getSelection();
-  if (!surface || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+  if (!surface || !selection || selection.rangeCount === 0) {
     pendingTextRange.value = null;
     return;
   }
+  if (selection.isCollapsed) return;
   const range = selection.getRangeAt(0);
   const container =
     range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
@@ -682,12 +683,14 @@ onMounted(() => {
     mutationObserver.observe(image, { attributes: true, attributeFilter: ['style'] });
   }
   surface.addEventListener('scroll', syncOverlay, true);
+  document.addEventListener('selectionchange', captureTextSelection);
   window.addEventListener('resize', syncOverlay);
 });
 
 onBeforeUnmount(() => {
   const surface = surfaceElement.value;
   surface?.removeEventListener('scroll', syncOverlay, true);
+  document.removeEventListener('selectionchange', captureTextSelection);
   window.removeEventListener('resize', syncOverlay);
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
