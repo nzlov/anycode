@@ -112,7 +112,18 @@ test('mobile artifact previews are titleless full-screen dialogs with draggable 
     panel,
     /<SessionFilePreview[\s\S]*?:file="selected"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
   );
-  assert.match(panel, /artifact-preview-dialog__close/);
+  assert.match(
+    panel,
+    /class="artifact-preview-dialog__mobile-actions"[\s\S]*?artifact-preview-dialog__close[\s\S]*?<q-separator v-if="\$q\.screen\.lt\.md" \/>[\s\S]*?<SessionFilePreview/,
+  );
+  assert.match(
+    panel,
+    /\.artifact-preview-dialog__mobile-actions\s*\{[^}]*flex:\s*0 0 auto[^}]*safe-area-inset-top/s,
+  );
+  assert.doesNotMatch(
+    panel,
+    /\.artifact-preview-dialog__close\s*\{[^}]*position:\s*absolute/s,
+  );
   assert.match(
     panel,
     /\.artifact-preview-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
