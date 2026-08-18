@@ -935,7 +935,10 @@ async function createTerminalCard() {
 
 function handleSessionUpdate(update: SessionUpdateEvent) {
   const index = latestRows.value.findIndex((card) => card.id === update.sessionId);
-  if (index < 0) return;
+  if (index < 0) {
+    void refreshOverviewCard(update.sessionId);
+    return;
+  }
 
   cardRefreshRequests.invalidate(update.sessionId);
   const status = update.status?.status;

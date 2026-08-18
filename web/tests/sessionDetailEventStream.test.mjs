@@ -714,7 +714,7 @@ test('overview invalidates late card requests and waiting dialogs across its sub
   assert.match(overviewSource, /card\?\.status !== 'waiting_user' \|\| requests\.length === 0/);
 });
 
-test('overview ignores unknown session updates and patches known cards without queries', () => {
+test('overview refreshes unknown session updates and patches known cards without queries', () => {
   const overviewSource = readFileSync(
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
@@ -739,9 +739,9 @@ test('overview ignores unknown session updates and patches known cards without q
 
   assert.match(
     overviewHandler,
-    /const index = latestRows\.value\.findIndex[\s\S]*?if \(index < 0\) return;\s*cardRefreshRequests\.invalidate\(update\.sessionId\);/,
+    /const index = latestRows\.value\.findIndex[\s\S]*?if \(index < 0\) \{\s*void refreshOverviewCard\(update\.sessionId\);\s*return;\s*\}\s*cardRefreshRequests\.invalidate\(update\.sessionId\);/,
   );
-  assert.doesNotMatch(overviewHandler, /refreshOverviewCard\(update\.sessionId\)/);
+  assert.match(overviewHandler, /refreshOverviewCard\(update\.sessionId\)/);
   assert.doesNotMatch(
     knownOverviewUpdate,
     /refreshOverviewCard|getSessionCard|loadOverviewSessions/,
