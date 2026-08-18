@@ -83,6 +83,7 @@ export function useSessionDetail(sessionId: string) {
 
   const { start: startSessionUpdates, stop: stopSessionUpdates } = useSessionUpdates({
     onData: handleSessionUpdate,
+    onReconnect: reconcileLiveState,
     onError: (updateError) => {
       error.value = updateError.message;
     },
@@ -379,14 +380,14 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  function openSessionEvents(refreshOnStart = false) {
+  function openSessionEvents() {
     if (liveStopped) return;
     const generation = ++subscriptionGeneration;
     sessionEventSubscription?.unsubscribe();
     sessionEventSubscription = subscribeSessionEvents(sessionId, {
       onStart: () => {
-        if (!refreshOnStart || generation !== subscriptionGeneration || liveStopped) return;
-        void loadSessionDetail({ mergeEvents: true, background: true });
+        if (generation !== subscriptionGeneration || liveStopped) return;
+        reconcileLiveState();
       },
       onData: (event) => {
         if (generation === subscriptionGeneration) {
@@ -410,8 +411,16 @@ export function useSessionDetail(sessionId: string) {
     if (liveStopped || reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      openSessionEvents(true);
+      openSessionEvents();
     }, 1500);
+  }
+
+  function reconcileLiveState() {
+    if (liveStopped) return;
+    void Promise.all([
+      loadSessionDetail({ mergeEvents: true, background: true }),
+      loadPendingQuestions(),
+    ]);
   }
 
   async function handleSubscriptionClose(close: GraphQLSubscriptionClose, generation: number) {

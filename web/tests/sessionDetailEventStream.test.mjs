@@ -121,7 +121,7 @@ test('markdown messages expose a hover action that toggles their raw source', ()
   assert.match(componentSource, /@media \(hover: none\), \(pointer: coarse\)/);
 });
 
-test('session detail loads the first transcript page before starting subscriptions', () => {
+test('session detail reconciles current state after starting subscriptions', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
@@ -161,6 +161,15 @@ test('session detail loads the first transcript page before starting subscriptio
     pageSource,
     /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*startLiveUpdates\(\)/s,
   );
+  assert.match(
+    composableSource,
+    /function reconcileLiveState\(\)[\s\S]*loadSessionDetail\(\{ mergeEvents: true, background: true \}\)[\s\S]*loadPendingQuestions\(\)/,
+  );
+  assert.match(
+    composableSource,
+    /subscribeSessionEvents\(sessionId,[\s\S]*onStart: \(\) => \{[\s\S]*reconcileLiveState\(\)/,
+  );
+  assert.match(composableSource, /onReconnect: reconcileLiveState/);
 });
 
 test('session detail applies todo updates to the existing session state', () => {
@@ -274,12 +283,16 @@ test('session subscriptions refresh current state and merge the latest transcrip
   );
   assert.match(
     composableSource,
-    /function openSessionEvents\(refreshOnStart = false\)[\s\S]*onStart: \(\) => \{[\s\S]*loadSessionDetail\(\{ mergeEvents: true, background: true \}\)/,
+    /function openSessionEvents\(\)[\s\S]*onStart: \(\) => \{[\s\S]*reconcileLiveState\(\)/,
   );
-  assert.match(composableSource, /reconnectTimer = setTimeout\([\s\S]*openSessionEvents\(true\)/);
+  assert.match(composableSource, /reconnectTimer = setTimeout\([\s\S]*openSessionEvents\(\)/);
   assert.match(
     composableSource,
     /events\.value = mergeRefreshedEvents\(events\.value, eventResult\.value\.items\)/,
+  );
+  assert.match(
+    composableSource,
+    /function reconcileLiveState\(\) \{\s*if \(liveStopped\) return;\s*void Promise\.all/,
   );
 });
 
