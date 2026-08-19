@@ -7,7 +7,9 @@
   >
     <q-card class="directory-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
-        <div class="text-subtitle1 text-weight-bold">选择项目目录</div>
+        <div class="text-subtitle1 text-weight-bold">
+          {{ selectOnly ? '选择目录' : '选择项目目录' }}
+        </div>
         <q-space />
         <q-btn v-if="!persistent" flat round dense icon="close" aria-label="关闭" @click="emitModel(false)">
           <q-tooltip>关闭</q-tooltip>
@@ -114,11 +116,11 @@
           color="primary"
           class="app-on-primary"
           icon="folder_open"
-          label="打开该项目"
+          :label="selectOnly ? '选择该目录' : '打开该项目'"
           no-caps
           :loading="creating"
           :disable="!selected"
-          @click="useSelectedDirectory"
+          @click="confirmSelectedDirectory"
         />
       </q-card-actions>
     </q-card>
@@ -137,10 +139,13 @@ const props = defineProps<{
   modelValue: boolean;
   persistent?: boolean;
   page?: boolean;
+  selectOnly?: boolean;
+  initialPath?: string;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
+  select: [path: string];
 }>();
 
 const filter = ref('');
@@ -161,7 +166,8 @@ watch(
   (open) => {
     if (open) {
       selected.value = '';
-      void goToPath(pathInput.value || '/');
+      pathInput.value = props.initialPath || pathInput.value || '/';
+      void openInitialPath();
     }
   },
   { immediate: true },
@@ -175,8 +181,13 @@ function emitModel(value: boolean) {
   emit('update:modelValue', value);
 }
 
-async function useSelectedDirectory() {
+async function confirmSelectedDirectory() {
   if (!selected.value) return;
+  if (props.selectOnly) {
+    emit('select', selected.value);
+    emit('update:modelValue', false);
+    return;
+  }
   creating.value = true;
   try {
     await createProjectFromPath(selected.value);
@@ -188,6 +199,16 @@ async function useSelectedDirectory() {
 
 async function goToInputPath() {
   await goToPath(pathInput.value || '/');
+  if (props.selectOnly) selected.value = currentPath.value;
+}
+
+async function openInitialPath() {
+  try {
+    await goToPath(pathInput.value);
+    if (props.selectOnly) selected.value = currentPath.value;
+  } catch {
+    return;
+  }
 }
 
 async function goToPath(path: string) {

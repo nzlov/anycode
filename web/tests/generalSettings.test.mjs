@@ -17,9 +17,9 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /Agent 并发数量/);
   assert.match(settingsSource, /general\.agentMaxConcurrent/);
   assert.match(serviceSource, /agentWritableRoots/);
-  assert.match(settingsSource, /Agent 目录白名单/);
-  assert.match(settingsSource, /agentWritableRootsText/);
-  assert.match(settingsSource, /每行必须是绝对路径/);
+  assert.match(settingsSource, /白名单目录/);
+  assert.match(settingsSource, /agentWritableRoots/);
+  assert.match(settingsSource, /请输入根目录以外的绝对路径/);
   assert.match(serviceSource, /sendShortcut: SendShortcut/);
   assert.match(settingsSource, /发送快捷键/);
   assert.match(settingsSource, /v-model="general\.sendShortcut"/);
@@ -35,6 +35,48 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /v-model="thinkingPhraseStyle"/);
   assert.match(settingsSource, /:options="sessionThinkingPhraseStyleOptions"/);
   assert.doesNotMatch(configSource, /ANYCODE_AGENT_MAX_CONCURRENT/);
+});
+
+test('agent writable roots use a dedicated editable list with direct input and directory selection', () => {
+  const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+  const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
+  const stylesSource = readSource('../src/css/app.scss');
+
+  assert.match(settingsSource, /name="writable_roots"[^>]*label="白名单目录"/);
+  assert.match(settingsSource, /activeSection === 'writable_roots'/);
+  assert.match(settingsSource, /v-for="\(root, index\) in agentWritableRoots"/);
+  assert.match(settingsSource, /aria-label="新增白名单目录"/);
+  assert.match(settingsSource, /icon="edit"[\s\S]*startEditWritableRoot\(index\)/);
+  assert.match(settingsSource, /icon="delete_outline"[\s\S]*removeWritableRoot\(index\)/);
+  assert.match(settingsSource, /<WritableRootEditor\s+v-if="addingWritableRoot"/);
+  assert.match(
+    settingsSource,
+    /v-if="editingWritableRootIndex === index"[\s\S]*<WritableRootEditor[\s\S]*inline/,
+  );
+  assert.doesNotMatch(
+    settingsSource,
+    /v-if="addingWritableRoot \|\| editingWritableRootIndex !== null"/,
+  );
+  assert.match(readSource('../src/components/WritableRootEditor.vue'), /icon="folder_open"/);
+  assert.match(
+    settingsSource,
+    /<ProjectDirectoryDialog[\s\S]*select-only[\s\S]*@select="selectWritableRoot"/,
+  );
+  assert.doesNotMatch(settingsSource, /v-model="agentWritableRootsText"/);
+  assert.match(directorySource, /selectOnly \? '选择目录' : '选择项目目录'/);
+  assert.match(directorySource, /emit\('select', selected\.value\)/);
+  assert.match(
+    stylesSource,
+    /\.global-settings-add-fab\s*\{[^}]*position:\s*relative;/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.writable-root-editor\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;[^}]*align-items:\s*flex-start;/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.writable-root-editor\s*>\s*\.q-field\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 auto;/s,
+  );
 });
 
 test('global setting panels rely on navigation labels instead of repeated headings', () => {
@@ -53,7 +95,7 @@ test('general settings save valid changes after a debounce without a separating 
   assert.match(settingsSource, /const generalSaveDebounceMs = 500/);
   assert.match(
     settingsSource,
-    /watch\(\s*\[[\s\S]*?general\.value\.agentMaxConcurrent[\s\S]*?general\.value\.sendShortcut[\s\S]*?agentWritableRootsText[\s\S]*?scheduleGeneralSettingsSave/,
+    /watch\(\s*\[[\s\S]*?general\.value\.agentMaxConcurrent[\s\S]*?general\.value\.sendShortcut[\s\S]*?agentWritableRoots[\s\S]*?scheduleGeneralSettingsSave/,
   );
   assert.match(
     settingsSource,

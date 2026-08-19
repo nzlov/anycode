@@ -1256,6 +1256,30 @@ body.desktop
   white-space: pre-wrap;
 }
 
+.writable-root-path {
+  overflow-wrap: anywhere;
+}
+
+.writable-root-editor {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.writable-root-editor > .q-field {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.writable-root-editor .quick-command-editor__actions {
+  flex: 0 0 auto;
+}
+
+.writable-root-editor--inline {
+  width: 100%;
+  padding: 8px 0;
+}
+
 .global-settings-empty {
   display: grid;
   min-height: 0;
@@ -1401,7 +1425,7 @@ body.desktop
 }
 
 .global-settings-add-fab {
-  position: static;
+  position: relative;
   flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 12px;
@@ -2433,6 +2457,10 @@ body.desktop
 }
 
 .global-settings-panel--quick-commands .global-settings-add-fab {
+  align-self: flex-end;
+}
+
+.global-settings-panel--writable-roots .global-settings-add-fab {
   align-self: flex-end;
 }
 

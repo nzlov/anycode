@@ -17,6 +17,7 @@
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
         <q-tab name="general" icon="tune" label="常规" />
+        <q-tab name="writable_roots" icon="folder_open" label="白名单目录" />
         <q-tab name="appearance" icon="palette" label="外观" />
         <q-tab name="notifications" icon="notifications" label="通知" />
         <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
@@ -35,6 +36,17 @@
                 <q-icon name="tune" />
               </q-item-section>
               <q-item-section>常规</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'writable_roots'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'writable_roots'"
+            >
+              <q-item-section avatar>
+                <q-icon name="folder_open" />
+              </q-item-section>
+              <q-item-section>白名单目录</q-item-section>
             </q-item>
             <q-item
               clickable
@@ -138,26 +150,6 @@
                     :options="sendShortcutOptions"
                     aria-label="发送快捷键"
                     :disable="generalLoading || generalSaving"
-                  />
-                </q-item-section>
-              </q-item>
-              <q-item class="column items-stretch">
-                <q-item-section>
-                  <q-item-label>Agent 目录白名单</q-item-label>
-                  <q-item-label caption>每行一个绝对路径，仅对“工作区写入”模式生效</q-item-label>
-                </q-item-section>
-                <q-item-section class="q-mt-sm">
-                  <q-input
-                    v-model="agentWritableRootsText"
-                    outlined
-                    dense
-                    type="textarea"
-                    autogrow
-                    aria-label="Agent 目录白名单"
-                    placeholder="/home/anycode/.cache/go-build"
-                    :disable="generalLoading || generalSaving"
-                    :error="!agentWritableRootsValid"
-                    error-message="每行必须是绝对路径"
                   />
                 </q-item-section>
               </q-item>
@@ -298,6 +290,123 @@
               </q-slide-transition>
             </q-card>
           </div>
+        </section>
+
+        <section
+          v-else-if="activeSection === 'writable_roots'"
+          class="global-settings-panel global-settings-panel--writable-roots"
+        >
+          <q-banner v-if="generalError" dense class="quick-command-error">
+            <template #avatar>
+              <q-icon name="error_outline" color="negative" />
+            </template>
+            {{ generalError }}
+            <template #action>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="重试加载白名单目录"
+                @click="refreshGeneralSettings"
+              >
+                <q-tooltip>重试</q-tooltip>
+              </q-btn>
+            </template>
+          </q-banner>
+
+          <q-linear-progress v-if="generalLoading || generalSaving" indeterminate color="primary" />
+
+          <q-slide-transition>
+            <WritableRootEditor
+              v-if="addingWritableRoot"
+              :ref="setWritableRootEditorRef"
+              v-model="draftWritableRoot"
+              :disabled="generalLoading || generalSaving"
+              :error="draftWritableRootError"
+              :valid="draftWritableRootValid"
+              @choose-directory="openWritableRootPicker"
+              @save="saveWritableRoot"
+              @cancel="cancelWritableRootEditor"
+            />
+          </q-slide-transition>
+
+          <q-list
+            v-if="agentWritableRoots.length"
+            separator
+            class="quick-command-list writable-root-list"
+          >
+            <q-item v-for="(root, index) in agentWritableRoots" :key="root">
+              <q-item-section v-if="editingWritableRootIndex === index">
+                <WritableRootEditor
+                  :ref="setWritableRootEditorRef"
+                  v-model="draftWritableRoot"
+                  inline
+                  :disabled="generalLoading || generalSaving"
+                  :error="draftWritableRootError"
+                  :valid="draftWritableRootValid"
+                  @choose-directory="openWritableRootPicker"
+                  @save="saveWritableRoot"
+                  @cancel="cancelWritableRootEditor"
+                />
+              </q-item-section>
+              <template v-else>
+                <q-item-section avatar>
+                  <q-icon name="folder" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="mono writable-root-path">{{ root }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <div class="quick-command-item__actions">
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      class="app-icon-btn"
+                      icon="edit"
+                      :aria-label="`修改白名单目录：${root}`"
+                      :disable="generalLoading || generalSaving"
+                      @click="startEditWritableRoot(index)"
+                    >
+                      <q-tooltip>修改</q-tooltip>
+                    </q-btn>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      class="app-icon-btn"
+                      color="negative"
+                      icon="delete_outline"
+                      :aria-label="`删除白名单目录：${root}`"
+                      :disable="generalLoading || generalSaving"
+                      @click="removeWritableRoot(index)"
+                    >
+                      <q-tooltip>删除</q-tooltip>
+                    </q-btn>
+                  </div>
+                </q-item-section>
+              </template>
+            </q-item>
+          </q-list>
+          <div v-else class="global-settings-empty">
+            <q-spinner v-if="generalLoading" color="primary" size="24px" />
+            <template v-else>暂无白名单目录</template>
+          </div>
+
+          <q-btn
+            v-if="!addingWritableRoot && editingWritableRootIndex === null"
+            fab
+            color="primary"
+            class="global-settings-add-fab app-on-primary"
+            icon="add"
+            aria-label="新增白名单目录"
+            :disable="generalLoading || generalSaving"
+            @click="startAddWritableRoot"
+          >
+            <q-tooltip>新增白名单目录</q-tooltip>
+          </q-btn>
         </section>
 
         <section v-else-if="activeSection === 'appearance'" class="global-settings-panel">
@@ -550,14 +659,24 @@
       </div>
     </q-card>
   </component>
+
+  <ProjectDirectoryDialog
+    v-model="directoryPickerOpen"
+    select-only
+    :initial-path="directoryPickerInitialPath"
+    @select="selectWritableRoot"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { VNodeRef } from 'vue';
 import { QDialog } from 'quasar';
 
 import CodexModelSelector from '@/components/CodexModelSelector.vue';
+import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import QuickCommandManager from '@/components/QuickCommandManager.vue';
+import WritableRootEditor from '@/components/WritableRootEditor.vue';
 import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import {
   sessionThinkingPhraseStyleOptions,
@@ -601,7 +720,9 @@ const emit = defineEmits<{
 
 const { thinkingPhrasesEnabled, thinkingPhraseStyle } = useSessionThinkingPhrases();
 const generalSettingsInvalidation = useGeneralSettingsInvalidation();
-const activeSection = ref<'general' | 'appearance' | 'notifications' | 'quick_commands'>('general');
+const activeSection = ref<
+  'general' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
+>('general');
 const defaultGeneral: GeneralSettings = {
   agentMaxConcurrent: 2,
   agentWritableRoots: [],
@@ -623,22 +744,36 @@ const sendShortcutOptions = [
 ];
 const general = ref<GeneralSettings>({ ...defaultGeneral });
 const persistedGeneral = ref<GeneralSettings>({ ...defaultGeneral });
-const agentWritableRootsText = ref('');
+const agentWritableRoots = ref<string[]>([]);
+const addingWritableRoot = ref(false);
+const editingWritableRootIndex = ref<number | null>(null);
+const draftWritableRoot = ref('');
+const writableRootEditorRef = ref<{ focus: () => void } | null>(null);
+const directoryPickerOpen = ref(false);
 const generalLoading = ref(false);
 const generalSaving = ref(false);
 const generalError = ref('');
 const generalSaveDebounceMs = 500;
 let generalSaveTimer: ReturnType<typeof setTimeout> | null = null;
-const parsedAgentWritableRoots = computed(() => [
-  ...new Set(
-    agentWritableRootsText.value
-      .split('\n')
-      .map((root) => root.trim())
-      .filter(Boolean),
-  ),
-]);
 const agentWritableRootsValid = computed(() =>
-  parsedAgentWritableRoots.value.every((root) => root.startsWith('/') && root !== '/'),
+  agentWritableRoots.value.every((root) => root.startsWith('/') && root !== '/'),
+);
+const normalizedDraftWritableRoot = computed(() => draftWritableRoot.value.trim());
+const draftWritableRootError = computed(() => {
+  const root = normalizedDraftWritableRoot.value;
+  if (!root) return '';
+  if (!root.startsWith('/') || root === '/') return '请输入根目录以外的绝对路径';
+  const duplicateIndex = agentWritableRoots.value.indexOf(root);
+  if (duplicateIndex !== -1 && duplicateIndex !== editingWritableRootIndex.value) {
+    return '该目录已在白名单中';
+  }
+  return '';
+});
+const draftWritableRootValid = computed(
+  () => !!normalizedDraftWritableRoot.value && !draftWritableRootError.value,
+);
+const directoryPickerInitialPath = computed(() =>
+  normalizedDraftWritableRoot.value.startsWith('/') ? normalizedDraftWritableRoot.value : '/',
 );
 const agentMaxConcurrentValid = computed(
   () => Number.isInteger(general.value.agentMaxConcurrent) && general.value.agentMaxConcurrent > 0,
@@ -670,7 +805,7 @@ const generalSettingsChanged = computed(
     general.value.mindMapModel !== persistedGeneral.value.mindMapModel ||
     general.value.mindMapReasoningEffort !== persistedGeneral.value.mindMapReasoningEffort ||
     general.value.mindMapMaxConcurrent !== persistedGeneral.value.mindMapMaxConcurrent ||
-    JSON.stringify(parsedAgentWritableRoots.value) !==
+    JSON.stringify(agentWritableRoots.value) !==
       JSON.stringify(persistedGeneral.value.agentWritableRoots),
 );
 const appearanceLoading = ref(false);
@@ -727,7 +862,7 @@ async function refreshGeneralSettings() {
   try {
     general.value = await getGeneralSettings();
     persistedGeneral.value = { ...general.value };
-    agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
+    agentWritableRoots.value = [...general.value.agentWritableRoots];
   } catch {
     generalError.value = '无法加载常规设置';
   } finally {
@@ -742,7 +877,7 @@ async function saveGeneralSettings() {
   try {
     general.value = await updateGeneralSettings({
       agentMaxConcurrent: general.value.agentMaxConcurrent,
-      agentWritableRoots: parsedAgentWritableRoots.value,
+      agentWritableRoots: agentWritableRoots.value,
       sendShortcut: general.value.sendShortcut,
       mindMapEnabled: general.value.mindMapEnabled,
       mindMapMode: general.value.mindMapMode,
@@ -752,16 +887,67 @@ async function saveGeneralSettings() {
       mindMapMaxConcurrent: general.value.mindMapMaxConcurrent,
     });
     persistedGeneral.value = { ...general.value };
-    agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
+    agentWritableRoots.value = [...general.value.agentWritableRoots];
     generalSettingsInvalidation?.setSendShortcut(general.value.sendShortcut);
     generalSettingsInvalidation?.invalidate();
   } catch {
     general.value = { ...persistedGeneral.value };
-    agentWritableRootsText.value = persistedGeneral.value.agentWritableRoots.join('\n');
+    agentWritableRoots.value = [...persistedGeneral.value.agentWritableRoots];
     generalError.value = '无法保存常规设置';
   } finally {
     generalSaving.value = false;
   }
+}
+
+function startAddWritableRoot() {
+  editingWritableRootIndex.value = null;
+  draftWritableRoot.value = '';
+  addingWritableRoot.value = true;
+  void nextTick(() => writableRootEditorRef.value?.focus());
+}
+
+function startEditWritableRoot(index: number) {
+  addingWritableRoot.value = false;
+  editingWritableRootIndex.value = index;
+  draftWritableRoot.value = agentWritableRoots.value[index] ?? '';
+  void nextTick(() => writableRootEditorRef.value?.focus());
+}
+
+const setWritableRootEditorRef: VNodeRef = (editor) => {
+  writableRootEditorRef.value = editor as { focus: () => void } | null;
+};
+
+function cancelWritableRootEditor() {
+  addingWritableRoot.value = false;
+  editingWritableRootIndex.value = null;
+  draftWritableRoot.value = '';
+}
+
+function saveWritableRoot() {
+  if (!draftWritableRootValid.value) return;
+  const roots = [...agentWritableRoots.value];
+  if (editingWritableRootIndex.value === null) {
+    roots.push(normalizedDraftWritableRoot.value);
+  } else {
+    roots[editingWritableRootIndex.value] = normalizedDraftWritableRoot.value;
+  }
+  agentWritableRoots.value = roots;
+  cancelWritableRootEditor();
+}
+
+function removeWritableRoot(index: number) {
+  agentWritableRoots.value = agentWritableRoots.value.filter((_, rootIndex) => rootIndex !== index);
+  if (editingWritableRootIndex.value === index) cancelWritableRootEditor();
+}
+
+function openWritableRootPicker() {
+  directoryPickerOpen.value = true;
+}
+
+function selectWritableRoot(path: string) {
+  draftWritableRoot.value = path;
+  directoryPickerOpen.value = false;
+  void nextTick(() => writableRootEditorRef.value?.focus());
 }
 
 async function refreshNotifications() {
@@ -895,17 +1081,12 @@ onMounted(() => {
 });
 
 watch(activeSection, (section) => {
-  if (section === 'general' && props.modelValue) void refreshGeneralSettings();
   if (section === 'appearance' && props.modelValue) void refreshAppearance();
   if (section === 'notifications' && props.modelValue) void refreshNotifications();
 });
 
 watch(
-  [
-    () => general.value.agentMaxConcurrent,
-    () => general.value.sendShortcut,
-    agentWritableRootsText,
-  ],
+  [() => general.value.agentMaxConcurrent, () => general.value.sendShortcut, agentWritableRoots],
   scheduleGeneralSettingsSave,
 );
 
@@ -935,6 +1116,7 @@ watch(
   (open) => {
     if (!open) return;
     if (activeSection.value === 'general') void refreshGeneralSettings();
+    if (activeSection.value === 'writable_roots') void refreshGeneralSettings();
     if (activeSection.value === 'appearance') void refreshAppearance();
     if (activeSection.value === 'notifications') void refreshNotifications();
   },

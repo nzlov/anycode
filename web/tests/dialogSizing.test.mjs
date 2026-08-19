@@ -125,7 +125,7 @@ test('long content dialogs keep one explicit scrolling content area', () => {
 test('quick command actions stay outside the scrolling list', () => {
   assert.match(
     stylesSource,
-    /\.global-settings-add-fab\s*{[^}]*position:\s*static[^}]*align-self:\s*flex-start/s,
+    /\.global-settings-add-fab\s*{[^}]*position:\s*relative[^}]*align-self:\s*flex-start/s,
   );
   assert.match(
     stylesSource,
