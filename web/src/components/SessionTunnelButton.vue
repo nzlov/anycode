@@ -50,8 +50,9 @@ const props = withDefaults(
   { showCount: false },
 );
 const buttonLabel = computed(() => {
+  if (props.showCount) return String(props.tunnels.length);
   if (props.tunnels.length === 1) return props.tunnels[0]?.name;
-  return props.showCount ? String(props.tunnels.length) : undefined;
+  return undefined;
 });
 
 function openSingleTunnel() {

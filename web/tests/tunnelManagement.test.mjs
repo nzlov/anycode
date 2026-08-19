@@ -52,8 +52,11 @@ test('tunnel manager only lists and closes active tunnels', () => {
   assert.match(service, /mutation CloseTunnel/);
 });
 
-test('session tunnel entry opens one tunnel directly and offers named choices for multiple', () => {
+test('card tunnel entry shows its count, opens one directly, and offers choices for multiple', () => {
   assert.match(button, /v-if="tunnels\.length"/);
+  assert.match(button, /class="session-tunnel-btn app-command-btn"[\s\S]*icon="lan"/);
+  assert.match(button, /:label="buttonLabel"/);
+  assert.match(button, /if \(props\.showCount\) return String\(props\.tunnels\.length\)/);
   assert.match(button, /if \(props\.tunnels\.length !== 1\) return/);
   assert.match(button, /window\.open\(tunnel\.accessUrl, '_blank', 'noopener,noreferrer'\)/);
   assert.match(button, /<q-menu v-else/);
