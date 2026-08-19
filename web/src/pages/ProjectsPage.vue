@@ -1,5 +1,5 @@
 <template>
-  <q-page class="surface-page project-list-page">
+  <q-page class="surface-page surface-page--expanded project-list-page">
     <PageToolbar title="项目" />
 
     <q-card flat bordered class="surface-page__card project-list-card">

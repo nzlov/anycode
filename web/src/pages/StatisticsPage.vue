@@ -1,5 +1,5 @@
 <template>
-  <q-page class="surface-page surface-page--wide statistics-page">
+  <q-page class="surface-page surface-page--expanded statistics-page">
     <PageToolbar title="统计" />
 
     <section class="statistics-summary" aria-label="今日与总计">

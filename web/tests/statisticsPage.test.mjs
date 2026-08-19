@@ -11,6 +11,14 @@ const chartSource = readSource('../src/components/StatisticsChart.vue');
 const serviceSource = readSource('../src/services/statistics.ts');
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const routesSource = readSource('../src/router/routes.ts');
+const projectsPageSource = readSource('../src/pages/ProjectsPage.vue');
+const appStylesSource = readSource('../src/css/app.scss');
+
+test('project list and statistics share the expanded desktop page width', () => {
+  assert.match(projectsPageSource, /surface-page surface-page--expanded project-list-page/);
+  assert.match(pageSource, /surface-page surface-page--expanded statistics-page/);
+  assert.match(appStylesSource, /\.surface-page--expanded\s*{[^}]*max-width:\s*1920px/s);
+});
 
 test('statistics page exposes today totals and project series over time', () => {
   assert.match(pageSource, /title="统计"/);

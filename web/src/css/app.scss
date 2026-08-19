@@ -253,6 +253,10 @@ a {
   max-width: 1280px;
 }
 
+.surface-page--expanded {
+  max-width: 1920px;
+}
+
 .surface-page__card {
   min-height: calc(100dvh - 74px);
 }
