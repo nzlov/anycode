@@ -699,6 +699,36 @@ type StageAnnotationInput struct {
 	Content  string `json:"content"`
 }
 
+type StatisticsDashboard struct {
+	Today *StatisticsMetrics          `json:"today"`
+	Total *StatisticsMetrics          `json:"total"`
+	ByDay []*StatisticsTimelineBucket `json:"byDay"`
+}
+
+type StatisticsMetrics struct {
+	CreatedCards int   `json:"createdCards"`
+	ClosedCards  int   `json:"closedCards"`
+	FilesChanged int   `json:"filesChanged"`
+	TotalTokens  int64 `json:"totalTokens"`
+}
+
+type StatisticsProjectMetrics struct {
+	Key     string             `json:"key"`
+	Label   string             `json:"label"`
+	Metrics *StatisticsMetrics `json:"metrics"`
+}
+
+type StatisticsQueryInput struct {
+	StartDate string `json:"startDate"`
+	EndDate   string `json:"endDate"`
+}
+
+type StatisticsTimelineBucket struct {
+	Key      string                      `json:"key"`
+	Label    string                      `json:"label"`
+	Projects []*StatisticsProjectMetrics `json:"projects"`
+}
+
 type SubmitQuestionRequestInput struct {
 	RequestID string                 `json:"requestId"`
 	Answers   []*QuestionAnswerInput `json:"answers"`

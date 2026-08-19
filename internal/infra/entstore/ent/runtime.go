@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
@@ -33,6 +34,54 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	dailystatisticFields := schema.DailyStatistic{}.Fields()
+	_ = dailystatisticFields
+	// dailystatisticDescSessionID is the schema descriptor for session_id field.
+	dailystatisticDescSessionID := dailystatisticFields[1].Descriptor()
+	// dailystatistic.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	dailystatistic.SessionIDValidator = dailystatisticDescSessionID.Validators[0].(func(string) error)
+	// dailystatisticDescProjectID is the schema descriptor for project_id field.
+	dailystatisticDescProjectID := dailystatisticFields[2].Descriptor()
+	// dailystatistic.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	dailystatistic.ProjectIDValidator = dailystatisticDescProjectID.Validators[0].(func(string) error)
+	// dailystatisticDescProjectName is the schema descriptor for project_name field.
+	dailystatisticDescProjectName := dailystatisticFields[3].Descriptor()
+	// dailystatistic.ProjectNameValidator is a validator for the "project_name" field. It is called by the builders before save.
+	dailystatistic.ProjectNameValidator = dailystatisticDescProjectName.Validators[0].(func(string) error)
+	// dailystatisticDescDay is the schema descriptor for day field.
+	dailystatisticDescDay := dailystatisticFields[4].Descriptor()
+	// dailystatistic.DayValidator is a validator for the "day" field. It is called by the builders before save.
+	dailystatistic.DayValidator = dailystatisticDescDay.Validators[0].(func(string) error)
+	// dailystatisticDescMonth is the schema descriptor for month field.
+	dailystatisticDescMonth := dailystatisticFields[5].Descriptor()
+	// dailystatistic.MonthValidator is a validator for the "month" field. It is called by the builders before save.
+	dailystatistic.MonthValidator = dailystatisticDescMonth.Validators[0].(func(string) error)
+	// dailystatisticDescCreatedCards is the schema descriptor for created_cards field.
+	dailystatisticDescCreatedCards := dailystatisticFields[6].Descriptor()
+	// dailystatistic.DefaultCreatedCards holds the default value on creation for the created_cards field.
+	dailystatistic.DefaultCreatedCards = dailystatisticDescCreatedCards.Default.(int)
+	// dailystatisticDescClosedCards is the schema descriptor for closed_cards field.
+	dailystatisticDescClosedCards := dailystatisticFields[7].Descriptor()
+	// dailystatistic.DefaultClosedCards holds the default value on creation for the closed_cards field.
+	dailystatistic.DefaultClosedCards = dailystatisticDescClosedCards.Default.(int)
+	// dailystatisticDescFilesChanged is the schema descriptor for files_changed field.
+	dailystatisticDescFilesChanged := dailystatisticFields[8].Descriptor()
+	// dailystatistic.DefaultFilesChanged holds the default value on creation for the files_changed field.
+	dailystatistic.DefaultFilesChanged = dailystatisticDescFilesChanged.Default.(int)
+	// dailystatisticDescTotalTokens is the schema descriptor for total_tokens field.
+	dailystatisticDescTotalTokens := dailystatisticFields[9].Descriptor()
+	// dailystatistic.DefaultTotalTokens holds the default value on creation for the total_tokens field.
+	dailystatistic.DefaultTotalTokens = dailystatisticDescTotalTokens.Default.(int64)
+	// dailystatisticDescCreatedAt is the schema descriptor for created_at field.
+	dailystatisticDescCreatedAt := dailystatisticFields[10].Descriptor()
+	// dailystatistic.DefaultCreatedAt holds the default value on creation for the created_at field.
+	dailystatistic.DefaultCreatedAt = dailystatisticDescCreatedAt.Default.(func() time.Time)
+	// dailystatisticDescUpdatedAt is the schema descriptor for updated_at field.
+	dailystatisticDescUpdatedAt := dailystatisticFields[11].Descriptor()
+	// dailystatistic.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	dailystatistic.DefaultUpdatedAt = dailystatisticDescUpdatedAt.Default.(func() time.Time)
+	// dailystatistic.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	dailystatistic.UpdateDefaultUpdatedAt = dailystatisticDescUpdatedAt.UpdateDefault.(func() time.Time)
 	eventrecordFields := schema.EventRecord{}.Fields()
 	_ = eventrecordFields
 	// eventrecordDescProjectID is the schema descriptor for project_id field.

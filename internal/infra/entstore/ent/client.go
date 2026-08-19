@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
@@ -42,6 +43,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// DailyStatistic is the client for interacting with the DailyStatistic builders.
+	DailyStatistic *DailyStatisticClient
 	// EventRecord is the client for interacting with the EventRecord builders.
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
@@ -95,6 +98,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.DailyStatistic = NewDailyStatisticClient(c.config)
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.MindMapEdge = NewMindMapEdgeClient(c.config)
@@ -208,6 +212,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                       ctx,
 		config:                    cfg,
+		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
 		MindMapEdge:               NewMindMapEdgeClient(cfg),
@@ -248,6 +253,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                       ctx,
 		config:                    cfg,
+		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
 		MindMapEdge:               NewMindMapEdgeClient(cfg),
@@ -275,7 +281,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		EventRecord.
+//		DailyStatistic.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -298,11 +304,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph, c.MindMapNode,
-		c.MindMapOverlay, c.MindMapTask, c.NodeRun, c.NotificationCheckpoint,
-		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
-		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
-		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.DailyStatistic, c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph,
+		c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
+		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
+		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
+		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
+		c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -312,11 +319,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph, c.MindMapNode,
-		c.MindMapOverlay, c.MindMapTask, c.NodeRun, c.NotificationCheckpoint,
-		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
-		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
-		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.DailyStatistic, c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph,
+		c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
+		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
+		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
+		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
+		c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -325,6 +333,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *DailyStatisticMutation:
+		return c.DailyStatistic.mutate(ctx, m)
 	case *EventRecordMutation:
 		return c.EventRecord.mutate(ctx, m)
 	case *MergeRecordMutation:
@@ -369,6 +379,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// DailyStatisticClient is a client for the DailyStatistic schema.
+type DailyStatisticClient struct {
+	config
+}
+
+// NewDailyStatisticClient returns a client for the DailyStatistic from the given config.
+func NewDailyStatisticClient(c config) *DailyStatisticClient {
+	return &DailyStatisticClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `dailystatistic.Hooks(f(g(h())))`.
+func (c *DailyStatisticClient) Use(hooks ...Hook) {
+	c.hooks.DailyStatistic = append(c.hooks.DailyStatistic, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `dailystatistic.Intercept(f(g(h())))`.
+func (c *DailyStatisticClient) Intercept(interceptors ...Interceptor) {
+	c.inters.DailyStatistic = append(c.inters.DailyStatistic, interceptors...)
+}
+
+// Create returns a builder for creating a DailyStatistic entity.
+func (c *DailyStatisticClient) Create() *DailyStatisticCreate {
+	mutation := newDailyStatisticMutation(c.config, OpCreate)
+	return &DailyStatisticCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of DailyStatistic entities.
+func (c *DailyStatisticClient) CreateBulk(builders ...*DailyStatisticCreate) *DailyStatisticCreateBulk {
+	return &DailyStatisticCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *DailyStatisticClient) MapCreateBulk(slice any, setFunc func(*DailyStatisticCreate, int)) *DailyStatisticCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &DailyStatisticCreateBulk{err: fmt.Errorf("calling to DailyStatisticClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*DailyStatisticCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &DailyStatisticCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for DailyStatistic.
+func (c *DailyStatisticClient) Update() *DailyStatisticUpdate {
+	mutation := newDailyStatisticMutation(c.config, OpUpdate)
+	return &DailyStatisticUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *DailyStatisticClient) UpdateOne(_m *DailyStatistic) *DailyStatisticUpdateOne {
+	mutation := newDailyStatisticMutation(c.config, OpUpdateOne, withDailyStatistic(_m))
+	return &DailyStatisticUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *DailyStatisticClient) UpdateOneID(id string) *DailyStatisticUpdateOne {
+	mutation := newDailyStatisticMutation(c.config, OpUpdateOne, withDailyStatisticID(id))
+	return &DailyStatisticUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for DailyStatistic.
+func (c *DailyStatisticClient) Delete() *DailyStatisticDelete {
+	mutation := newDailyStatisticMutation(c.config, OpDelete)
+	return &DailyStatisticDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *DailyStatisticClient) DeleteOne(_m *DailyStatistic) *DailyStatisticDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *DailyStatisticClient) DeleteOneID(id string) *DailyStatisticDeleteOne {
+	builder := c.Delete().Where(dailystatistic.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &DailyStatisticDeleteOne{builder}
+}
+
+// Query returns a query builder for DailyStatistic.
+func (c *DailyStatisticClient) Query() *DailyStatisticQuery {
+	return &DailyStatisticQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeDailyStatistic},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a DailyStatistic entity by its id.
+func (c *DailyStatisticClient) Get(ctx context.Context, id string) (*DailyStatistic, error) {
+	return c.Query().Where(dailystatistic.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *DailyStatisticClient) GetX(ctx context.Context, id string) *DailyStatistic {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *DailyStatisticClient) Hooks() []Hook {
+	return c.hooks.DailyStatistic
+}
+
+// Interceptors returns the client interceptors.
+func (c *DailyStatisticClient) Interceptors() []Interceptor {
+	return c.inters.DailyStatistic
+}
+
+func (c *DailyStatisticClient) mutate(ctx context.Context, m *DailyStatisticMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&DailyStatisticCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&DailyStatisticUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&DailyStatisticUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&DailyStatisticDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown DailyStatistic mutation op: %q", m.Op())
 	}
 }
 
@@ -3168,15 +3311,15 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, MindMapEdge, MindMapGraph, MindMapNode,
-		MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
+		DailyStatistic, EventRecord, MergeRecord, MindMapEdge, MindMapGraph,
+		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
 		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, MindMapEdge, MindMapGraph, MindMapNode,
-		MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
+		DailyStatistic, EventRecord, MergeRecord, MindMapEdge, MindMapGraph,
+		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
 		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Interceptor

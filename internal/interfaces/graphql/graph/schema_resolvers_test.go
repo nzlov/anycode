@@ -20,6 +20,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
@@ -34,6 +35,39 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func TestQueryStatisticsMapsMaterializedDashboard(t *testing.T) {
+	statistics := &fakeStatisticsUseCase{dashboard: statisticsapp.DashboardDTO{
+		Today: statisticsapp.MetricsDTO{CreatedCards: 2, TotalTokens: 12},
+		Total: statisticsapp.MetricsDTO{CreatedCards: 5, TotalTokens: 42},
+		ByDay: []statisticsapp.TimelineBucketDTO{{
+			Key: "2026-08-19", Label: "08-19",
+			Projects: []statisticsapp.ProjectMetricsDTO{{Key: "project-1", Label: "AnyCode", Metrics: statisticsapp.MetricsDTO{CreatedCards: 2}}},
+		}},
+	}}
+	got, err := NewResolver(UseCases{Statistics: statistics}).Query().Statistics(context.Background(), model.StatisticsQueryInput{
+		StartDate: "2026-08-13", EndDate: "2026-08-19",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Today.CreatedCards != 2 || got.Total.TotalTokens != 42 || len(got.ByDay) != 1 || got.ByDay[0].Key != "2026-08-19" || len(got.ByDay[0].Projects) != 1 || got.ByDay[0].Projects[0].Label != "AnyCode" {
+		t.Fatalf("statistics = %#v", got)
+	}
+	if statistics.query != (statisticsapp.QueryDTO{StartDate: "2026-08-13", EndDate: "2026-08-19"}) {
+		t.Fatalf("query = %#v", statistics.query)
+	}
+}
+
+type fakeStatisticsUseCase struct {
+	dashboard statisticsapp.DashboardDTO
+	query     statisticsapp.QueryDTO
+}
+
+func (f *fakeStatisticsUseCase) Dashboard(_ context.Context, query statisticsapp.QueryDTO) (statisticsapp.DashboardDTO, error) {
+	f.query = query
+	return f.dashboard, nil
+}
 
 func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
 	artifacts := &fakeArtifactUseCase{files: []sessiondomain.SessionFile{{ID: "artifact-1", SessionID: "session-1"}}}

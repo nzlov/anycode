@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
@@ -46,6 +47,7 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeDailyStatistic            = "DailyStatistic"
 	TypeEventRecord               = "EventRecord"
 	TypeMergeRecord               = "MergeRecord"
 	TypeMindMapEdge               = "MindMapEdge"
@@ -68,6 +70,1013 @@ const (
 	TypeSystemConfiguration       = "SystemConfiguration"
 	TypeWorkflowDefinition        = "WorkflowDefinition"
 )
+
+// DailyStatisticMutation represents an operation that mutates the DailyStatistic nodes in the graph.
+type DailyStatisticMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *string
+	session_id       *string
+	project_id       *string
+	project_name     *string
+	day              *string
+	month            *string
+	created_cards    *int
+	addcreated_cards *int
+	closed_cards     *int
+	addclosed_cards  *int
+	files_changed    *int
+	addfiles_changed *int
+	total_tokens     *int64
+	addtotal_tokens  *int64
+	created_at       *time.Time
+	updated_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*DailyStatistic, error)
+	predicates       []predicate.DailyStatistic
+}
+
+var _ ent.Mutation = (*DailyStatisticMutation)(nil)
+
+// dailystatisticOption allows management of the mutation configuration using functional options.
+type dailystatisticOption func(*DailyStatisticMutation)
+
+// newDailyStatisticMutation creates new mutation for the DailyStatistic entity.
+func newDailyStatisticMutation(c config, op Op, opts ...dailystatisticOption) *DailyStatisticMutation {
+	m := &DailyStatisticMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeDailyStatistic,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withDailyStatisticID sets the ID field of the mutation.
+func withDailyStatisticID(id string) dailystatisticOption {
+	return func(m *DailyStatisticMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *DailyStatistic
+		)
+		m.oldValue = func(ctx context.Context) (*DailyStatistic, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().DailyStatistic.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withDailyStatistic sets the old DailyStatistic of the mutation.
+func withDailyStatistic(node *DailyStatistic) dailystatisticOption {
+	return func(m *DailyStatisticMutation) {
+		m.oldValue = func(context.Context) (*DailyStatistic, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m DailyStatisticMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m DailyStatisticMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of DailyStatistic entities.
+func (m *DailyStatisticMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *DailyStatisticMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *DailyStatisticMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().DailyStatistic.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *DailyStatisticMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *DailyStatisticMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *DailyStatisticMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetProjectID sets the "project_id" field.
+func (m *DailyStatisticMutation) SetProjectID(s string) {
+	m.project_id = &s
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *DailyStatisticMutation) ProjectID() (r string, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldProjectID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *DailyStatisticMutation) ResetProjectID() {
+	m.project_id = nil
+}
+
+// SetProjectName sets the "project_name" field.
+func (m *DailyStatisticMutation) SetProjectName(s string) {
+	m.project_name = &s
+}
+
+// ProjectName returns the value of the "project_name" field in the mutation.
+func (m *DailyStatisticMutation) ProjectName() (r string, exists bool) {
+	v := m.project_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectName returns the old "project_name" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldProjectName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectName: %w", err)
+	}
+	return oldValue.ProjectName, nil
+}
+
+// ResetProjectName resets all changes to the "project_name" field.
+func (m *DailyStatisticMutation) ResetProjectName() {
+	m.project_name = nil
+}
+
+// SetDay sets the "day" field.
+func (m *DailyStatisticMutation) SetDay(s string) {
+	m.day = &s
+}
+
+// Day returns the value of the "day" field in the mutation.
+func (m *DailyStatisticMutation) Day() (r string, exists bool) {
+	v := m.day
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDay returns the old "day" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldDay(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDay is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDay requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDay: %w", err)
+	}
+	return oldValue.Day, nil
+}
+
+// ResetDay resets all changes to the "day" field.
+func (m *DailyStatisticMutation) ResetDay() {
+	m.day = nil
+}
+
+// SetMonth sets the "month" field.
+func (m *DailyStatisticMutation) SetMonth(s string) {
+	m.month = &s
+}
+
+// Month returns the value of the "month" field in the mutation.
+func (m *DailyStatisticMutation) Month() (r string, exists bool) {
+	v := m.month
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMonth returns the old "month" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldMonth(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMonth is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMonth requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMonth: %w", err)
+	}
+	return oldValue.Month, nil
+}
+
+// ResetMonth resets all changes to the "month" field.
+func (m *DailyStatisticMutation) ResetMonth() {
+	m.month = nil
+}
+
+// SetCreatedCards sets the "created_cards" field.
+func (m *DailyStatisticMutation) SetCreatedCards(i int) {
+	m.created_cards = &i
+	m.addcreated_cards = nil
+}
+
+// CreatedCards returns the value of the "created_cards" field in the mutation.
+func (m *DailyStatisticMutation) CreatedCards() (r int, exists bool) {
+	v := m.created_cards
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedCards returns the old "created_cards" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldCreatedCards(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedCards is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedCards requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedCards: %w", err)
+	}
+	return oldValue.CreatedCards, nil
+}
+
+// AddCreatedCards adds i to the "created_cards" field.
+func (m *DailyStatisticMutation) AddCreatedCards(i int) {
+	if m.addcreated_cards != nil {
+		*m.addcreated_cards += i
+	} else {
+		m.addcreated_cards = &i
+	}
+}
+
+// AddedCreatedCards returns the value that was added to the "created_cards" field in this mutation.
+func (m *DailyStatisticMutation) AddedCreatedCards() (r int, exists bool) {
+	v := m.addcreated_cards
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreatedCards resets all changes to the "created_cards" field.
+func (m *DailyStatisticMutation) ResetCreatedCards() {
+	m.created_cards = nil
+	m.addcreated_cards = nil
+}
+
+// SetClosedCards sets the "closed_cards" field.
+func (m *DailyStatisticMutation) SetClosedCards(i int) {
+	m.closed_cards = &i
+	m.addclosed_cards = nil
+}
+
+// ClosedCards returns the value of the "closed_cards" field in the mutation.
+func (m *DailyStatisticMutation) ClosedCards() (r int, exists bool) {
+	v := m.closed_cards
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClosedCards returns the old "closed_cards" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldClosedCards(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClosedCards is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClosedCards requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClosedCards: %w", err)
+	}
+	return oldValue.ClosedCards, nil
+}
+
+// AddClosedCards adds i to the "closed_cards" field.
+func (m *DailyStatisticMutation) AddClosedCards(i int) {
+	if m.addclosed_cards != nil {
+		*m.addclosed_cards += i
+	} else {
+		m.addclosed_cards = &i
+	}
+}
+
+// AddedClosedCards returns the value that was added to the "closed_cards" field in this mutation.
+func (m *DailyStatisticMutation) AddedClosedCards() (r int, exists bool) {
+	v := m.addclosed_cards
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetClosedCards resets all changes to the "closed_cards" field.
+func (m *DailyStatisticMutation) ResetClosedCards() {
+	m.closed_cards = nil
+	m.addclosed_cards = nil
+}
+
+// SetFilesChanged sets the "files_changed" field.
+func (m *DailyStatisticMutation) SetFilesChanged(i int) {
+	m.files_changed = &i
+	m.addfiles_changed = nil
+}
+
+// FilesChanged returns the value of the "files_changed" field in the mutation.
+func (m *DailyStatisticMutation) FilesChanged() (r int, exists bool) {
+	v := m.files_changed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilesChanged returns the old "files_changed" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldFilesChanged(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilesChanged is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilesChanged requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilesChanged: %w", err)
+	}
+	return oldValue.FilesChanged, nil
+}
+
+// AddFilesChanged adds i to the "files_changed" field.
+func (m *DailyStatisticMutation) AddFilesChanged(i int) {
+	if m.addfiles_changed != nil {
+		*m.addfiles_changed += i
+	} else {
+		m.addfiles_changed = &i
+	}
+}
+
+// AddedFilesChanged returns the value that was added to the "files_changed" field in this mutation.
+func (m *DailyStatisticMutation) AddedFilesChanged() (r int, exists bool) {
+	v := m.addfiles_changed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFilesChanged resets all changes to the "files_changed" field.
+func (m *DailyStatisticMutation) ResetFilesChanged() {
+	m.files_changed = nil
+	m.addfiles_changed = nil
+}
+
+// SetTotalTokens sets the "total_tokens" field.
+func (m *DailyStatisticMutation) SetTotalTokens(i int64) {
+	m.total_tokens = &i
+	m.addtotal_tokens = nil
+}
+
+// TotalTokens returns the value of the "total_tokens" field in the mutation.
+func (m *DailyStatisticMutation) TotalTokens() (r int64, exists bool) {
+	v := m.total_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalTokens returns the old "total_tokens" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldTotalTokens(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalTokens: %w", err)
+	}
+	return oldValue.TotalTokens, nil
+}
+
+// AddTotalTokens adds i to the "total_tokens" field.
+func (m *DailyStatisticMutation) AddTotalTokens(i int64) {
+	if m.addtotal_tokens != nil {
+		*m.addtotal_tokens += i
+	} else {
+		m.addtotal_tokens = &i
+	}
+}
+
+// AddedTotalTokens returns the value that was added to the "total_tokens" field in this mutation.
+func (m *DailyStatisticMutation) AddedTotalTokens() (r int64, exists bool) {
+	v := m.addtotal_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalTokens resets all changes to the "total_tokens" field.
+func (m *DailyStatisticMutation) ResetTotalTokens() {
+	m.total_tokens = nil
+	m.addtotal_tokens = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *DailyStatisticMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *DailyStatisticMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *DailyStatisticMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *DailyStatisticMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *DailyStatisticMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the DailyStatistic entity.
+// If the DailyStatistic object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DailyStatisticMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *DailyStatisticMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the DailyStatisticMutation builder.
+func (m *DailyStatisticMutation) Where(ps ...predicate.DailyStatistic) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the DailyStatisticMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *DailyStatisticMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.DailyStatistic, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *DailyStatisticMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *DailyStatisticMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (DailyStatistic).
+func (m *DailyStatisticMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *DailyStatisticMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.session_id != nil {
+		fields = append(fields, dailystatistic.FieldSessionID)
+	}
+	if m.project_id != nil {
+		fields = append(fields, dailystatistic.FieldProjectID)
+	}
+	if m.project_name != nil {
+		fields = append(fields, dailystatistic.FieldProjectName)
+	}
+	if m.day != nil {
+		fields = append(fields, dailystatistic.FieldDay)
+	}
+	if m.month != nil {
+		fields = append(fields, dailystatistic.FieldMonth)
+	}
+	if m.created_cards != nil {
+		fields = append(fields, dailystatistic.FieldCreatedCards)
+	}
+	if m.closed_cards != nil {
+		fields = append(fields, dailystatistic.FieldClosedCards)
+	}
+	if m.files_changed != nil {
+		fields = append(fields, dailystatistic.FieldFilesChanged)
+	}
+	if m.total_tokens != nil {
+		fields = append(fields, dailystatistic.FieldTotalTokens)
+	}
+	if m.created_at != nil {
+		fields = append(fields, dailystatistic.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, dailystatistic.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *DailyStatisticMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case dailystatistic.FieldSessionID:
+		return m.SessionID()
+	case dailystatistic.FieldProjectID:
+		return m.ProjectID()
+	case dailystatistic.FieldProjectName:
+		return m.ProjectName()
+	case dailystatistic.FieldDay:
+		return m.Day()
+	case dailystatistic.FieldMonth:
+		return m.Month()
+	case dailystatistic.FieldCreatedCards:
+		return m.CreatedCards()
+	case dailystatistic.FieldClosedCards:
+		return m.ClosedCards()
+	case dailystatistic.FieldFilesChanged:
+		return m.FilesChanged()
+	case dailystatistic.FieldTotalTokens:
+		return m.TotalTokens()
+	case dailystatistic.FieldCreatedAt:
+		return m.CreatedAt()
+	case dailystatistic.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *DailyStatisticMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case dailystatistic.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case dailystatistic.FieldProjectID:
+		return m.OldProjectID(ctx)
+	case dailystatistic.FieldProjectName:
+		return m.OldProjectName(ctx)
+	case dailystatistic.FieldDay:
+		return m.OldDay(ctx)
+	case dailystatistic.FieldMonth:
+		return m.OldMonth(ctx)
+	case dailystatistic.FieldCreatedCards:
+		return m.OldCreatedCards(ctx)
+	case dailystatistic.FieldClosedCards:
+		return m.OldClosedCards(ctx)
+	case dailystatistic.FieldFilesChanged:
+		return m.OldFilesChanged(ctx)
+	case dailystatistic.FieldTotalTokens:
+		return m.OldTotalTokens(ctx)
+	case dailystatistic.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case dailystatistic.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown DailyStatistic field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DailyStatisticMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case dailystatistic.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case dailystatistic.FieldProjectID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
+	case dailystatistic.FieldProjectName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectName(v)
+		return nil
+	case dailystatistic.FieldDay:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDay(v)
+		return nil
+	case dailystatistic.FieldMonth:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMonth(v)
+		return nil
+	case dailystatistic.FieldCreatedCards:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedCards(v)
+		return nil
+	case dailystatistic.FieldClosedCards:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClosedCards(v)
+		return nil
+	case dailystatistic.FieldFilesChanged:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilesChanged(v)
+		return nil
+	case dailystatistic.FieldTotalTokens:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalTokens(v)
+		return nil
+	case dailystatistic.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case dailystatistic.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown DailyStatistic field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *DailyStatisticMutation) AddedFields() []string {
+	var fields []string
+	if m.addcreated_cards != nil {
+		fields = append(fields, dailystatistic.FieldCreatedCards)
+	}
+	if m.addclosed_cards != nil {
+		fields = append(fields, dailystatistic.FieldClosedCards)
+	}
+	if m.addfiles_changed != nil {
+		fields = append(fields, dailystatistic.FieldFilesChanged)
+	}
+	if m.addtotal_tokens != nil {
+		fields = append(fields, dailystatistic.FieldTotalTokens)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *DailyStatisticMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case dailystatistic.FieldCreatedCards:
+		return m.AddedCreatedCards()
+	case dailystatistic.FieldClosedCards:
+		return m.AddedClosedCards()
+	case dailystatistic.FieldFilesChanged:
+		return m.AddedFilesChanged()
+	case dailystatistic.FieldTotalTokens:
+		return m.AddedTotalTokens()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DailyStatisticMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case dailystatistic.FieldCreatedCards:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedCards(v)
+		return nil
+	case dailystatistic.FieldClosedCards:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddClosedCards(v)
+		return nil
+	case dailystatistic.FieldFilesChanged:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFilesChanged(v)
+		return nil
+	case dailystatistic.FieldTotalTokens:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalTokens(v)
+		return nil
+	}
+	return fmt.Errorf("unknown DailyStatistic numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *DailyStatisticMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *DailyStatisticMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *DailyStatisticMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown DailyStatistic nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *DailyStatisticMutation) ResetField(name string) error {
+	switch name {
+	case dailystatistic.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case dailystatistic.FieldProjectID:
+		m.ResetProjectID()
+		return nil
+	case dailystatistic.FieldProjectName:
+		m.ResetProjectName()
+		return nil
+	case dailystatistic.FieldDay:
+		m.ResetDay()
+		return nil
+	case dailystatistic.FieldMonth:
+		m.ResetMonth()
+		return nil
+	case dailystatistic.FieldCreatedCards:
+		m.ResetCreatedCards()
+		return nil
+	case dailystatistic.FieldClosedCards:
+		m.ResetClosedCards()
+		return nil
+	case dailystatistic.FieldFilesChanged:
+		m.ResetFilesChanged()
+		return nil
+	case dailystatistic.FieldTotalTokens:
+		m.ResetTotalTokens()
+		return nil
+	case dailystatistic.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case dailystatistic.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown DailyStatistic field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *DailyStatisticMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *DailyStatisticMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *DailyStatisticMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *DailyStatisticMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *DailyStatisticMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *DailyStatisticMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *DailyStatisticMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown DailyStatistic unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *DailyStatisticMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown DailyStatistic edge %s", name)
+}
 
 // EventRecordMutation represents an operation that mutates the EventRecord nodes in the graph.
 type EventRecordMutation struct {

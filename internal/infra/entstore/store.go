@@ -22,6 +22,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
 	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/domain/statistics"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	"github.com/tursodatabase/libsql-client-go/libsql"
@@ -507,6 +508,10 @@ func (s *Store) Sessions() *SessionRepository {
 	return NewSessionRepository(s.client)
 }
 
+func (s *Store) Statistics() *StatisticsRepository {
+	return NewStatisticsRepository(s.client)
+}
+
 func (s *Store) Attachments() *AttachmentRepository {
 	return NewAttachmentRepository(s.client)
 }
@@ -569,6 +574,10 @@ func (t transaction) MindMaps() mindmap.Repository {
 
 func (t transaction) Sessions() session.Repository {
 	return NewSessionRepository(t.client)
+}
+
+func (t transaction) Statistics() statistics.Recorder {
+	return NewStatisticsRepository(t.client)
 }
 
 func (t transaction) Workflows() workflow.Repository {

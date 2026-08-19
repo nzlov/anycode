@@ -16,6 +16,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
@@ -43,6 +44,7 @@ type UseCases struct {
 	Notifications    notificationapp.UseCase
 	PromptCompletion promptcompletionapp.UseCase
 	Settings         settingapp.UseCase
+	Statistics       statisticsapp.UseCase
 	Tunnels          tunnelapp.UseCase
 	TunnelEvents     tunneleventapp.UseCase
 	CodexModels      []processdomain.CodexModel

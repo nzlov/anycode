@@ -25,6 +25,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
@@ -225,7 +226,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	mindMapQueue := mindmapapp.NewQueue(store.MindMaps(), store, store.Sessions(), store.Projects(), settings, processes, codex)
 	mindMapService := mindmapapp.New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
 	mindMapService.SetQueueScheduler(mindMapQueue.Schedule)
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithPromptFileReader(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithPromptFileReader(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithStatistics(store.Statistics()), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
 	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService), codextoolapp.WithMindMaps(mindMapService)))
 	mindMapQueue.Start()
 	pushClient := webpushinfra.New()
@@ -250,6 +251,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Questions:        questionService,
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
+		Statistics:       statisticsapp.New(store.Statistics()),
 		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
 		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule)),
 		Tunnels:      tunnelService,

@@ -44,6 +44,18 @@
           round
           dense
           class="app-icon-btn"
+          icon="analytics"
+          aria-label="统计"
+          :to="{ name: 'statistics' }"
+        >
+          <q-tooltip>统计</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="$route.name === 'overview'"
+          flat
+          round
+          dense
+          class="app-icon-btn"
           icon="history"
           aria-label="历史卡片"
           :to="sessionsRoute"

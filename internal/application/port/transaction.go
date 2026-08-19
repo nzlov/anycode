@@ -9,6 +9,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
 	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/domain/statistics"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 )
 
@@ -68,6 +69,7 @@ type Tx interface {
 	Projects() project.Repository
 	MindMaps() mindmap.Repository
 	Sessions() session.Repository
+	Statistics() statistics.Recorder
 	Workflows() workflow.Repository
 	Questions() question.Repository
 	Processes() process.Repository

@@ -354,6 +354,7 @@ type ComplexityRoot struct {
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
 		SessionTranscriptEvent  func(childComplexity int, input model.SessionTranscriptEventInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
+		Statistics              func(childComplexity int, input model.StatisticsQueryInput) int
 		Tunnels                 func(childComplexity int) int
 		WebPushConfig           func(childComplexity int) int
 		WorkflowDefinition      func(childComplexity int, id string) int
@@ -564,6 +565,31 @@ type ComplexityRoot struct {
 		UpdatedAt        func(childComplexity int) int
 		Usage            func(childComplexity int) int
 		WorktreeCleanup  func(childComplexity int) int
+	}
+
+	StatisticsDashboard struct {
+		ByDay func(childComplexity int) int
+		Today func(childComplexity int) int
+		Total func(childComplexity int) int
+	}
+
+	StatisticsMetrics struct {
+		ClosedCards  func(childComplexity int) int
+		CreatedCards func(childComplexity int) int
+		FilesChanged func(childComplexity int) int
+		TotalTokens  func(childComplexity int) int
+	}
+
+	StatisticsProjectMetrics struct {
+		Key     func(childComplexity int) int
+		Label   func(childComplexity int) int
+		Metrics func(childComplexity int) int
+	}
+
+	StatisticsTimelineBucket struct {
+		Key      func(childComplexity int) int
+		Label    func(childComplexity int) int
+		Projects func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -865,6 +891,7 @@ type QueryResolver interface {
 	ProjectMindMapCards(ctx context.Context, projectID string) ([]*model.MindMapCard, error)
 	SearchProjectMindMap(ctx context.Context, input model.SearchMindMapInput) (*model.MindMapSearchResult, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
+	Statistics(ctx context.Context, input model.StatisticsQueryInput) (*model.StatisticsDashboard, error)
 	SessionCard(ctx context.Context, id string) (*model.SessionCard, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
@@ -2497,6 +2524,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["input"].(*model.ListSessionsInput)), true
+	case "Query.statistics":
+		if e.ComplexityRoot.Query.Statistics == nil {
+			break
+		}
+
+		args, err := ec.field_Query_statistics_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Statistics(childComplexity, args["input"].(model.StatisticsQueryInput)), true
 	case "Query.tunnels":
 		if e.ComplexityRoot.Query.Tunnels == nil {
 			break
@@ -3440,6 +3478,88 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionUpdateEvent.WorktreeCleanup(childComplexity), true
 
+	case "StatisticsDashboard.byDay":
+		if e.ComplexityRoot.StatisticsDashboard.ByDay == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsDashboard.ByDay(childComplexity), true
+	case "StatisticsDashboard.today":
+		if e.ComplexityRoot.StatisticsDashboard.Today == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsDashboard.Today(childComplexity), true
+	case "StatisticsDashboard.total":
+		if e.ComplexityRoot.StatisticsDashboard.Total == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsDashboard.Total(childComplexity), true
+
+	case "StatisticsMetrics.closedCards":
+		if e.ComplexityRoot.StatisticsMetrics.ClosedCards == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsMetrics.ClosedCards(childComplexity), true
+	case "StatisticsMetrics.createdCards":
+		if e.ComplexityRoot.StatisticsMetrics.CreatedCards == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsMetrics.CreatedCards(childComplexity), true
+	case "StatisticsMetrics.filesChanged":
+		if e.ComplexityRoot.StatisticsMetrics.FilesChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsMetrics.FilesChanged(childComplexity), true
+	case "StatisticsMetrics.totalTokens":
+		if e.ComplexityRoot.StatisticsMetrics.TotalTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsMetrics.TotalTokens(childComplexity), true
+
+	case "StatisticsProjectMetrics.key":
+		if e.ComplexityRoot.StatisticsProjectMetrics.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsProjectMetrics.Key(childComplexity), true
+	case "StatisticsProjectMetrics.label":
+		if e.ComplexityRoot.StatisticsProjectMetrics.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsProjectMetrics.Label(childComplexity), true
+	case "StatisticsProjectMetrics.metrics":
+		if e.ComplexityRoot.StatisticsProjectMetrics.Metrics == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsProjectMetrics.Metrics(childComplexity), true
+
+	case "StatisticsTimelineBucket.key":
+		if e.ComplexityRoot.StatisticsTimelineBucket.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsTimelineBucket.Key(childComplexity), true
+	case "StatisticsTimelineBucket.label":
+		if e.ComplexityRoot.StatisticsTimelineBucket.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsTimelineBucket.Label(childComplexity), true
+	case "StatisticsTimelineBucket.projects":
+		if e.ComplexityRoot.StatisticsTimelineBucket.Projects == nil {
+			break
+		}
+
+		return e.ComplexityRoot.StatisticsTimelineBucket.Projects(childComplexity), true
+
 	case "Subscription.mindMapUpdates":
 		if e.ComplexityRoot.Subscription.MindMapUpdates == nil {
 			break
@@ -4360,6 +4480,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputStageAnnotationInput,
+		ec.unmarshalInputStatisticsQueryInput,
 		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
@@ -4489,6 +4610,7 @@ type Query {
   projectMindMapCards(projectId: ID!): [MindMapCard!]!
   searchProjectMindMap(input: SearchMindMapInput!): MindMapSearchResult!
   sessions(input: ListSessionsInput): SessionCardPage!
+  statistics(input: StatisticsQueryInput!): StatisticsDashboard!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
@@ -4502,6 +4624,36 @@ type Query {
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
   tunnels: [Tunnel!]!
+}
+
+type StatisticsDashboard {
+  today: StatisticsMetrics!
+  total: StatisticsMetrics!
+  byDay: [StatisticsTimelineBucket!]!
+}
+
+input StatisticsQueryInput {
+  startDate: String!
+  endDate: String!
+}
+
+type StatisticsMetrics {
+  createdCards: Int!
+  closedCards: Int!
+  filesChanged: Int!
+  totalTokens: Int64!
+}
+
+type StatisticsTimelineBucket {
+  key: String!
+  label: String!
+  projects: [StatisticsProjectMetrics!]!
+}
+
+type StatisticsProjectMetrics {
+  key: ID!
+  label: String!
+  metrics: StatisticsMetrics!
 }
 
 type CodexSlashCommand {
@@ -6306,6 +6458,17 @@ func (ec *executionContext) field_Query_sessions_args(ctx context.Context, rawAr
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalOListSessionsInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListSessionsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_statistics_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNStatisticsQueryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsQueryInput)
 	if err != nil {
 		return nil, err
 	}
@@ -13828,6 +13991,55 @@ func (ec *executionContext) fieldContext_Query_sessions(ctx context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_statistics(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_statistics,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Statistics(ctx, fc.Args["input"].(model.StatisticsQueryInput))
+		},
+		nil,
+		ec.marshalNStatisticsDashboard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsDashboard,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_statistics(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "today":
+				return ec.fieldContext_StatisticsDashboard_today(ctx, field)
+			case "total":
+				return ec.fieldContext_StatisticsDashboard_total(ctx, field)
+			case "byDay":
+				return ec.fieldContext_StatisticsDashboard_byDay(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsDashboard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_statistics_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_sessionCard(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19480,6 +19692,429 @@ func (ec *executionContext) fieldContext_SessionUpdateEvent_updatedAt(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsDashboard_today(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsDashboard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsDashboard_today,
+		func(ctx context.Context) (any, error) {
+			return obj.Today, nil
+		},
+		nil,
+		ec.marshalNStatisticsMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsMetrics,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsDashboard_today(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsDashboard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "createdCards":
+				return ec.fieldContext_StatisticsMetrics_createdCards(ctx, field)
+			case "closedCards":
+				return ec.fieldContext_StatisticsMetrics_closedCards(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_StatisticsMetrics_filesChanged(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_StatisticsMetrics_totalTokens(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsMetrics", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsDashboard_total(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsDashboard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsDashboard_total,
+		func(ctx context.Context) (any, error) {
+			return obj.Total, nil
+		},
+		nil,
+		ec.marshalNStatisticsMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsMetrics,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsDashboard_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsDashboard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "createdCards":
+				return ec.fieldContext_StatisticsMetrics_createdCards(ctx, field)
+			case "closedCards":
+				return ec.fieldContext_StatisticsMetrics_closedCards(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_StatisticsMetrics_filesChanged(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_StatisticsMetrics_totalTokens(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsMetrics", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsDashboard_byDay(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsDashboard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsDashboard_byDay,
+		func(ctx context.Context) (any, error) {
+			return obj.ByDay, nil
+		},
+		nil,
+		ec.marshalNStatisticsTimelineBucket2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsTimelineBucketᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsDashboard_byDay(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsDashboard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_StatisticsTimelineBucket_key(ctx, field)
+			case "label":
+				return ec.fieldContext_StatisticsTimelineBucket_label(ctx, field)
+			case "projects":
+				return ec.fieldContext_StatisticsTimelineBucket_projects(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsTimelineBucket", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsMetrics_createdCards(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsMetrics_createdCards,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedCards, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsMetrics_createdCards(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsMetrics_closedCards(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsMetrics_closedCards,
+		func(ctx context.Context) (any, error) {
+			return obj.ClosedCards, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsMetrics_closedCards(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsMetrics_filesChanged(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsMetrics_filesChanged,
+		func(ctx context.Context) (any, error) {
+			return obj.FilesChanged, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsMetrics_filesChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsMetrics_totalTokens(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsMetrics_totalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt642int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsMetrics_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int64 does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsProjectMetrics_key(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsProjectMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsProjectMetrics_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsProjectMetrics_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsProjectMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsProjectMetrics_label(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsProjectMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsProjectMetrics_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsProjectMetrics_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsProjectMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsProjectMetrics_metrics(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsProjectMetrics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsProjectMetrics_metrics,
+		func(ctx context.Context) (any, error) {
+			return obj.Metrics, nil
+		},
+		nil,
+		ec.marshalNStatisticsMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsMetrics,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsProjectMetrics_metrics(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsProjectMetrics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "createdCards":
+				return ec.fieldContext_StatisticsMetrics_createdCards(ctx, field)
+			case "closedCards":
+				return ec.fieldContext_StatisticsMetrics_closedCards(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_StatisticsMetrics_filesChanged(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_StatisticsMetrics_totalTokens(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsMetrics", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsTimelineBucket_key(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsTimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsTimelineBucket_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsTimelineBucket_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsTimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsTimelineBucket_label(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsTimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsTimelineBucket_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsTimelineBucket_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsTimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _StatisticsTimelineBucket_projects(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsTimelineBucket) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_StatisticsTimelineBucket_projects,
+		func(ctx context.Context) (any, error) {
+			return obj.Projects, nil
+		},
+		nil,
+		ec.marshalNStatisticsProjectMetrics2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsProjectMetricsᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_StatisticsTimelineBucket_projects(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "StatisticsTimelineBucket",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_StatisticsProjectMetrics_key(ctx, field)
+			case "label":
+				return ec.fieldContext_StatisticsProjectMetrics_label(ctx, field)
+			case "metrics":
+				return ec.fieldContext_StatisticsProjectMetrics_metrics(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type StatisticsProjectMetrics", field.Name)
 		},
 	}
 	return fc, nil
@@ -27011,6 +27646,43 @@ func (ec *executionContext) unmarshalInputStageAnnotationInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputStatisticsQueryInput(ctx context.Context, obj any) (model.StatisticsQueryInput, error) {
+	var it model.StatisticsQueryInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"startDate", "endDate"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "startDate":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startDate"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartDate = data
+		case "endDate":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("endDate"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EndDate = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSubmitQuestionRequestInput(ctx context.Context, obj any) (model.SubmitQuestionRequestInput, error) {
 	var it model.SubmitQuestionRequestInput
 	if obj == nil {
@@ -30371,6 +31043,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "statistics":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_statistics(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "sessionCard":
 			field := field
 
@@ -31980,6 +32674,207 @@ func (ec *executionContext) _SessionUpdateEvent(ctx context.Context, sel ast.Sel
 			out.Values[i] = ec._SessionUpdateEvent_availableActions(ctx, field, obj)
 		case "updatedAt":
 			out.Values[i] = ec._SessionUpdateEvent_updatedAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var statisticsDashboardImplementors = []string{"StatisticsDashboard"}
+
+func (ec *executionContext) _StatisticsDashboard(ctx context.Context, sel ast.SelectionSet, obj *model.StatisticsDashboard) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, statisticsDashboardImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("StatisticsDashboard")
+		case "today":
+			out.Values[i] = ec._StatisticsDashboard_today(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "total":
+			out.Values[i] = ec._StatisticsDashboard_total(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "byDay":
+			out.Values[i] = ec._StatisticsDashboard_byDay(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var statisticsMetricsImplementors = []string{"StatisticsMetrics"}
+
+func (ec *executionContext) _StatisticsMetrics(ctx context.Context, sel ast.SelectionSet, obj *model.StatisticsMetrics) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, statisticsMetricsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("StatisticsMetrics")
+		case "createdCards":
+			out.Values[i] = ec._StatisticsMetrics_createdCards(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "closedCards":
+			out.Values[i] = ec._StatisticsMetrics_closedCards(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filesChanged":
+			out.Values[i] = ec._StatisticsMetrics_filesChanged(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalTokens":
+			out.Values[i] = ec._StatisticsMetrics_totalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var statisticsProjectMetricsImplementors = []string{"StatisticsProjectMetrics"}
+
+func (ec *executionContext) _StatisticsProjectMetrics(ctx context.Context, sel ast.SelectionSet, obj *model.StatisticsProjectMetrics) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, statisticsProjectMetricsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("StatisticsProjectMetrics")
+		case "key":
+			out.Values[i] = ec._StatisticsProjectMetrics_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._StatisticsProjectMetrics_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "metrics":
+			out.Values[i] = ec._StatisticsProjectMetrics_metrics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var statisticsTimelineBucketImplementors = []string{"StatisticsTimelineBucket"}
+
+func (ec *executionContext) _StatisticsTimelineBucket(ctx context.Context, sel ast.SelectionSet, obj *model.StatisticsTimelineBucket) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, statisticsTimelineBucketImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("StatisticsTimelineBucket")
+		case "key":
+			out.Values[i] = ec._StatisticsTimelineBucket_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._StatisticsTimelineBucket_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projects":
+			out.Values[i] = ec._StatisticsTimelineBucket_projects(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -35485,6 +36380,87 @@ func (ec *executionContext) unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzl
 func (ec *executionContext) unmarshalNStageAnnotationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStageAnnotationInput(ctx context.Context, v any) (model.StageAnnotationInput, error) {
 	res, err := ec.unmarshalInputStageAnnotationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNStatisticsDashboard2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsDashboard(ctx context.Context, sel ast.SelectionSet, v model.StatisticsDashboard) graphql.Marshaler {
+	return ec._StatisticsDashboard(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNStatisticsDashboard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsDashboard(ctx context.Context, sel ast.SelectionSet, v *model.StatisticsDashboard) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._StatisticsDashboard(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNStatisticsMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsMetrics(ctx context.Context, sel ast.SelectionSet, v *model.StatisticsMetrics) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._StatisticsMetrics(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNStatisticsProjectMetrics2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsProjectMetricsᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.StatisticsProjectMetrics) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNStatisticsProjectMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsProjectMetrics(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNStatisticsProjectMetrics2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsProjectMetrics(ctx context.Context, sel ast.SelectionSet, v *model.StatisticsProjectMetrics) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._StatisticsProjectMetrics(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNStatisticsQueryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsQueryInput(ctx context.Context, v any) (model.StatisticsQueryInput, error) {
+	res, err := ec.unmarshalInputStatisticsQueryInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNStatisticsTimelineBucket2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsTimelineBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.StatisticsTimelineBucket) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNStatisticsTimelineBucket2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsTimelineBucket(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNStatisticsTimelineBucket2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStatisticsTimelineBucket(ctx context.Context, sel ast.SelectionSet, v *model.StatisticsTimelineBucket) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._StatisticsTimelineBucket(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {

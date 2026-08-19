@@ -30,6 +30,7 @@ import (
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
+	statisticsdomain "github.com/nzlov/anycode/internal/domain/statistics"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 )
@@ -327,6 +328,7 @@ type Service struct {
 	workdirMu               sync.Mutex
 	activeWorkdirs          map[string]domain.ID
 	events                  eventdomain.Store
+	statistics              statisticsdomain.Recorder
 	publisher               eventdomain.Publisher
 	codexPublisher          codexEventPublisher
 	questions               questionCoordinator
@@ -471,6 +473,12 @@ func WithSessionHistoryPurger(purger port.SessionHistoryPurger) Option {
 func WithEvents(store eventdomain.Store) Option {
 	return func(s *Service) {
 		s.events = store
+	}
+}
+
+func WithStatistics(recorder statisticsdomain.Recorder) Option {
+	return func(s *Service) {
+		s.statistics = recorder
 	}
 }
 
@@ -1752,7 +1760,21 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 				return DTO{}, err
 			}
 		}
-		if err := s.repo.Create(ctx, session); err != nil {
+		if s.statistics != nil {
+			if s.uow == nil {
+				return DTO{}, errors.New("create session statistics: unit of work is required")
+			}
+			if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+				if err := tx.Sessions().Create(ctx, session); err != nil {
+					return fmt.Errorf("create session: %w", err)
+				}
+				return tx.Statistics().RecordDaily(ctx, statisticsdomain.DailyUpdate{
+					SessionID: string(session.ID), ProjectID: string(session.ProjectID), OccurredAt: now, Created: true,
+				})
+			}); err != nil {
+				return DTO{}, err
+			}
+		} else if err := s.repo.Create(ctx, session); err != nil {
 			return DTO{}, fmt.Errorf("create session: %w", err)
 		}
 		if s.artifacts != nil {
@@ -4614,9 +4636,20 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 	saveSession := false
 	saveUsage := false
 	saveFilesChanged := false
+	var statisticsUpdate *statisticsdomain.DailyUpdate
 	extraEvents := append([]sessionEventInput(nil), archivedEvents...)
+	previousTotalTokens := current.Usage.TotalTokens
 	if activeRun && updateSessionUsageFromCodexEvent(&current, event) {
 		saveUsage = true
+		tokenDelta := current.Usage.TotalTokens - previousTotalTokens
+		if tokenDelta < 0 {
+			tokenDelta = current.Usage.TotalTokens
+		}
+		if tokenDelta > 0 {
+			statisticsUpdate = &statisticsdomain.DailyUpdate{
+				SessionID: string(current.ID), ProjectID: string(current.ProjectID), OccurredAt: statisticsEventTime(event, s.now()), TokenDelta: int64(tokenDelta),
+			}
+		}
 		extraEvents = append(extraEvents, sessionEventInput{
 			eventType: "session.usage_updated",
 			payload: map[string]any{
@@ -4655,10 +4688,23 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 				eventType: "session.diff_changed",
 				payload:   map[string]any{"filesChanged": filesChanged},
 			})
+			if statisticsUpdate == nil {
+				statisticsUpdate = &statisticsdomain.DailyUpdate{
+					SessionID: string(current.ID), ProjectID: string(current.ProjectID), OccurredAt: statisticsEventTime(event, s.now()),
+				}
+			}
+			statisticsUpdate.FilesChanged = &filesChanged
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
-	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveUsage, saveFilesChanged, promptDelivered, extraEvents...)
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveUsage, saveFilesChanged, promptDelivered, statisticsUpdate, extraEvents...)
+}
+
+func statisticsEventTime(event processdomain.CodexEvent, fallback time.Time) time.Time {
+	if event.CreatedAt.IsZero() {
+		return fallback
+	}
+	return event.CreatedAt
 }
 
 func updateSessionUsageFromCodexEvent(current *domain.Session, event processdomain.CodexEvent) bool {
@@ -6137,7 +6183,7 @@ func (s *Service) addStatusUpdateEvent(session domain.Session, events []eventdom
 	return events, nil
 }
 
-func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveUsage bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveUsage bool, saveFilesChanged bool, promptDelivered bool, statisticsUpdate *statisticsdomain.DailyUpdate, extraInputs ...sessionEventInput) error {
 	extraEvents, err := s.newSessionEvents(session, extraInputs)
 	if err != nil {
 		return err
@@ -6164,6 +6210,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 					return err
 				}
 			}
+			if s.statistics != nil && statisticsUpdate != nil {
+				if err := tx.Statistics().RecordDaily(ctx, *statisticsUpdate); err != nil {
+					return fmt.Errorf("record session statistics: %w", err)
+				}
+			}
 			for _, event := range extraEvents {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
@@ -6177,6 +6228,9 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
+	}
+	if s.statistics != nil && statisticsUpdate != nil {
+		return errors.New("record session statistics: unit of work is required")
 	}
 	if promptDelivered {
 		if err := s.repo.CompletePromptAppends(ctx, string(processRunID), promptDeliveryTime(event, s.now())); err != nil {
@@ -6642,10 +6696,10 @@ func (s *Service) updateArtifactCountWithEvent(ctx context.Context, session doma
 }
 
 func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) (bool, error) {
-	return s.persistSessionWithEvents(ctx, session, inputs, nil)
+	return s.persistSessionWithEvents(ctx, session, inputs, nil, nil)
 }
 
-func (s *Service) persistSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput, mindMapClose *mindMapCloseAction) (bool, error) {
+func (s *Service) persistSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput, mindMapClose *mindMapCloseAction, statisticsUpdate *statisticsdomain.DailyUpdate) (bool, error) {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return false, err
@@ -6663,6 +6717,11 @@ func (s *Service) persistSessionWithEvents(ctx context.Context, session domain.S
 					return err
 				}
 			}
+			if s.statistics != nil && statisticsUpdate != nil {
+				if err := tx.Statistics().RecordDaily(ctx, *statisticsUpdate); err != nil {
+					return fmt.Errorf("record session statistics: %w", err)
+				}
+			}
 			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
@@ -6676,6 +6735,9 @@ func (s *Service) persistSessionWithEvents(ctx context.Context, session domain.S
 			s.publishSessionEvent(ctx, event)
 		}
 		return true, nil
+	}
+	if s.statistics != nil && statisticsUpdate != nil {
+		return false, errors.New("record session statistics: unit of work is required")
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
 		return false, fmt.Errorf("save session: %w", err)
@@ -7212,7 +7274,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			"worktreeBranch": session.WorktreeBranch,
 		})})
 	}
-	committed, err := s.persistSessionWithEvents(ctx, session, events, mindMapClose)
+	committed, err := s.persistSessionWithEvents(ctx, session, events, mindMapClose, &statisticsdomain.DailyUpdate{
+		SessionID: string(session.ID), ProjectID: string(session.ProjectID), OccurredAt: now, Closed: true,
+	})
 	if err != nil {
 		if committed {
 			if quarantinePath != "" && s.artifacts != nil {

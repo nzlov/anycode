@@ -14,6 +14,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
@@ -26,6 +27,40 @@ import (
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
+
+// GLUE: GraphQL transport models map the statistics read DTO at the interface boundary.
+func mapStatisticsDashboard(value statisticsapp.DashboardDTO) *model.StatisticsDashboard {
+	return &model.StatisticsDashboard{
+		Today: mapStatisticsMetrics(value.Today),
+		Total: mapStatisticsMetrics(value.Total),
+		ByDay: mapStatisticsTimeline(value.ByDay),
+	}
+}
+
+func mapStatisticsTimeline(values []statisticsapp.TimelineBucketDTO) []*model.StatisticsTimelineBucket {
+	result := make([]*model.StatisticsTimelineBucket, 0, len(values))
+	for _, value := range values {
+		projects := make([]*model.StatisticsProjectMetrics, 0, len(value.Projects))
+		for _, project := range value.Projects {
+			projects = append(projects, &model.StatisticsProjectMetrics{
+				Key: project.Key, Label: project.Label, Metrics: mapStatisticsMetrics(project.Metrics),
+			})
+		}
+		result = append(result, &model.StatisticsTimelineBucket{
+			Key: value.Key, Label: value.Label, Projects: projects,
+		})
+	}
+	return result
+}
+
+func mapStatisticsMetrics(value statisticsapp.MetricsDTO) *model.StatisticsMetrics {
+	return &model.StatisticsMetrics{
+		CreatedCards: value.CreatedCards,
+		ClosedCards:  value.ClosedCards,
+		FilesChanged: value.FilesChanged,
+		TotalTokens:  value.TotalTokens,
+	}
+}
 
 func mapCodexModelOptions(items []processdomain.CodexModel) []*model.CodexModelOption {
 	options := make([]*model.CodexModelOption, 0, len(items))

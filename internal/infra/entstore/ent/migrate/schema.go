@@ -8,6 +8,44 @@ import (
 )
 
 var (
+	// DailyStatisticsColumns holds the columns for the "daily_statistics" table.
+	DailyStatisticsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "project_name", Type: field.TypeString},
+		{Name: "day", Type: field.TypeString},
+		{Name: "month", Type: field.TypeString},
+		{Name: "created_cards", Type: field.TypeInt, Default: 0},
+		{Name: "closed_cards", Type: field.TypeInt, Default: 0},
+		{Name: "files_changed", Type: field.TypeInt, Default: 0},
+		{Name: "total_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// DailyStatisticsTable holds the schema information for the "daily_statistics" table.
+	DailyStatisticsTable = &schema.Table{
+		Name:       "daily_statistics",
+		Columns:    DailyStatisticsColumns,
+		PrimaryKey: []*schema.Column{DailyStatisticsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "dailystatistic_day",
+				Unique:  false,
+				Columns: []*schema.Column{DailyStatisticsColumns[4]},
+			},
+			{
+				Name:    "dailystatistic_month",
+				Unique:  false,
+				Columns: []*schema.Column{DailyStatisticsColumns[5]},
+			},
+			{
+				Name:    "dailystatistic_project_id",
+				Unique:  false,
+				Columns: []*schema.Column{DailyStatisticsColumns[2]},
+			},
+		},
+	}
 	// EventRecordsColumns holds the columns for the "event_records" table.
 	EventRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -654,6 +692,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		DailyStatisticsTable,
 		EventRecordsTable,
 		MergeRecordsTable,
 		MindMapEdgesTable,

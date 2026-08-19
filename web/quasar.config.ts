@@ -84,6 +84,7 @@ export default defineConfig((/* ctx */) => {
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true,
+      allowedHosts: ['.trycloudflare.com'],
       open: false,
     },
 

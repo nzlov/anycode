@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// DailyStatistic is the predicate function for dailystatistic builders.
+type DailyStatistic func(*sql.Selector)
+
 // EventRecord is the predicate function for eventrecord builders.
 type EventRecord func(*sql.Selector)
 

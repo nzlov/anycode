@@ -19,6 +19,7 @@ import (
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
@@ -851,6 +852,21 @@ func (r *queryResolver) Sessions(ctx context.Context, input *model.ListSessionsI
 		return nil, err
 	}
 	return mapSessionCardPage(dto), nil
+}
+
+// Statistics is the resolver for the statistics field.
+func (r *queryResolver) Statistics(ctx context.Context, input model.StatisticsQueryInput) (*model.StatisticsDashboard, error) {
+	if r.UseCases.Statistics == nil {
+		return nil, missingUseCase("statistics")
+	}
+	dashboard, err := r.UseCases.Statistics.Dashboard(ctx, statisticsapp.QueryDTO{
+		StartDate: input.StartDate,
+		EndDate:   input.EndDate,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapStatisticsDashboard(dashboard), nil
 }
 
 // SessionCard is the resolver for the sessionCard field.

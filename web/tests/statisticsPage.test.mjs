@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+function readSource(relativePath) {
+  return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+}
+
+const pageSource = readSource('../src/pages/StatisticsPage.vue');
+const chartSource = readSource('../src/components/StatisticsChart.vue');
+const serviceSource = readSource('../src/services/statistics.ts');
+const layoutSource = readSource('../src/layouts/MainLayout.vue');
+const routesSource = readSource('../src/router/routes.ts');
+
+test('statistics page exposes today totals and project series over time', () => {
+  assert.match(pageSource, /title="统计"/);
+  assert.match(pageSource, /v-for="item in summaryItems"/);
+  assert.match(pageSource, /today: dashboard\.value\.today\.createdCards/);
+  assert.match(pageSource, /total: dashboard\.value\.total\.totalTokens/);
+  assert.match(pageSource, /label: '近 7 天'/);
+  assert.match(pageSource, /label: '近 15 天'/);
+  assert.match(pageSource, /label: '本月'/);
+  assert.match(pageSource, /label: '上月'/);
+  assert.match(pageSource, /label="开始日期"/);
+  assert.match(pageSource, /label="结束日期"/);
+  assert.doesNotMatch(pageSource, /label: '按月'/);
+  assert.doesNotMatch(pageSource, /label: '按项目'/);
+  assert.match(pageSource, /title="创建卡片"/);
+  assert.match(pageSource, /title="关闭卡片"/);
+  assert.match(pageSource, /title="修改文件"/);
+  assert.match(pageSource, /title="Token 用量"/);
+  assert.match(pageSource, /buildProjectSeries\('createdCards'\)/);
+  assert.match(pageSource, /buildProjectSeries\('closedCards'\)/);
+  assert.match(pageSource, /bucket\.projects\.find/);
+});
+
+test('statistics query reads the requested daily range from the server-side archive', () => {
+  assert.match(serviceSource, /query Statistics\(\$input: StatisticsQueryInput!\)/);
+  assert.match(serviceSource, /statistics\(input: \$input\)/);
+  assert.match(serviceSource, /variables: \{ input: range \}/);
+  assert.doesNotMatch(serviceSource, /utcOffsetMinutes/);
+  assert.match(serviceSource, /byDay/);
+  assert.doesNotMatch(serviceSource, /byMonth/);
+  assert.doesNotMatch(serviceSource, /byProject/);
+  assert.match(serviceSource, /projects \{/);
+  assert.match(serviceSource, /interface StatisticsProjectMetrics/);
+});
+
+test('statistics charts remain inspectable with long timelines and project names', () => {
+  assert.match(chartSource, /overflow-x: auto/);
+  assert.match(chartSource, /Math\.max\(620, props\.labels\.length \* 72/);
+  assert.match(chartSource, /<title>\{\{ labels\[index\] \}\}/);
+  assert.match(chartSource, /shortLabel\(label\)/);
+  assert.match(chartSource, /v-if="series\.length"/);
+  assert.match(chartSource, /@scroll\.passive="handleViewportScroll"/);
+  assert.match(chartSource, /emit\('viewportScroll', viewport\.value\.scrollLeft\)/);
+  assert.match(pageSource, /:scroll-left="chartScrollLeft"/);
+  assert.match(pageSource, /@viewport-scroll="syncChartScroll"/);
+});
+
+test('overview toolbar and router expose statistics navigation', () => {
+  assert.match(layoutSource, /icon="analytics"/);
+  assert.match(layoutSource, /aria-label="统计"/);
+  assert.match(layoutSource, /:to="\{ name: 'statistics' \}"/);
+  assert.match(routesSource, /path: 'statistics',[\s\S]*?name: 'statistics'/);
+});

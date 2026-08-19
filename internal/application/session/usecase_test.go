@@ -26,6 +26,7 @@ import (
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
+	statisticsdomain "github.com/nzlov/anycode/internal/domain/statistics"
 	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore"
@@ -155,6 +156,23 @@ func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 	}
 	if saved.LastRunAt == nil || saved.CodexSessionID != "" || saved.WorktreePath != "" {
 		t.Fatalf("CreateSession() should queue without starting codex: %#v", saved)
+	}
+}
+
+func TestCreateSessionRecordsStatisticsInUnitOfWork(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	statistics := &fakeStatisticsRecorder{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, statistics: statistics}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithStatistics(statistics), WithUnitOfWork(uow))
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	service.now = func() time.Time { return time.Date(2026, 8, 19, 10, 0, 0, 0, time.Local) }
+
+	if _, err := service.CreateSession(ctx, CreateSessionInput{ProjectID: "project-1", Requirement: "record statistics"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(statistics.updates) != 1 || !statistics.updates[0].Created || statistics.updates[0].SessionID != "session-1" {
+		t.Fatalf("statistics updates = %#v", statistics.updates)
 	}
 }
 
@@ -5900,7 +5918,14 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 		ProjectID: "project-1",
 		Status:    domain.StatusCreated,
 	}
-	service := New(repo, newFakeProjectRepository("project-1"))
+	statistics := &fakeStatisticsRecorder{}
+	processes := newFakeProcessRepository()
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithStatistics(statistics),
+		WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, statistics: statistics}}),
+	)
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
 	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
@@ -5916,6 +5941,9 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 	if saved.ClosedAt == nil || !saved.ClosedAt.Equal(time.Unix(30, 0).UTC()) {
 		t.Fatalf("CloseSession() ClosedAt = %#v", saved.ClosedAt)
+	}
+	if len(statistics.updates) != 1 || !statistics.updates[0].Closed {
+		t.Fatalf("statistics updates = %#v", statistics.updates)
 	}
 }
 
@@ -8139,6 +8167,16 @@ type fakeSessionDiffCounter struct {
 	calls int
 }
 
+type fakeStatisticsRecorder struct {
+	updates []statisticsdomain.DailyUpdate
+	err     error
+}
+
+func (f *fakeStatisticsRecorder) RecordDaily(_ context.Context, update statisticsdomain.DailyUpdate) error {
+	f.updates = append(f.updates, update)
+	return f.err
+}
+
 func (f *fakeSessionDiffCounter) CountSessionChangedFiles(context.Context, domain.ID) (int, error) {
 	f.calls++
 	return f.count, f.err
@@ -8214,7 +8252,8 @@ func TestCodexUsagePersistsBeforePublishingSessionUpdate(t *testing.T) {
 	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
 	processes.hasActive = true
 	events := &fakeEventStore{}
-	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
+	statistics := &fakeStatisticsRecorder{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events, statistics: statistics}}
 	publishedAfterPersist := make(chan bool, 2)
 	publisher := &fakeEventPublisher{onPublish: func(event eventdomain.DomainEvent) {
 		if event.Type == "session.usage_updated" {
@@ -8226,6 +8265,7 @@ func TestCodexUsagePersistsBeforePublishingSessionUpdate(t *testing.T) {
 		newFakeProjectRepository("project-1"),
 		WithProcesses(processes, &fakeCodexProcess{}),
 		WithEvents(events),
+		WithStatistics(statistics),
 		WithUnitOfWork(uow),
 		WithEventPublisher(publisher),
 	)
@@ -8241,6 +8281,19 @@ func TestCodexUsagePersistsBeforePublishingSessionUpdate(t *testing.T) {
 	}
 	if got := repo.sessions["session-1"].Usage; got.TotalTokens != 14 || got.CurrentInputTokens != 6 || got.ContextWindow != 200 {
 		t.Fatalf("persisted usage = %#v", got)
+	}
+	if len(statistics.updates) != 1 || statistics.updates[0].TokenDelta != 14 {
+		t.Fatalf("statistics updates = %#v", statistics.updates)
+	}
+	for _, eventID := range []string{"usage-2", "usage-2-duplicate"} {
+		if err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+			EventID: eventID, Type: processdomain.CodexEventUsage, Content: processdomain.CodexUsageContent{TotalTokens: 20},
+		}); err != nil {
+			t.Fatalf("handle incremental usage: %v", err)
+		}
+	}
+	if len(statistics.updates) != 2 || statistics.updates[1].TokenDelta != 6 {
+		t.Fatalf("incremental statistics updates = %#v", statistics.updates)
 	}
 	select {
 	case ok := <-publishedAfterPersist:
@@ -8492,14 +8545,16 @@ func TestPersistCodexFileChangeUpdatesDiffCount(t *testing.T) {
 	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
 	processes.hasActive = true
 	events := &fakeEventStore{}
+	statistics := &fakeStatisticsRecorder{}
 	counter := &fakeSessionDiffCounter{count: 3}
 	service := New(
 		repo,
 		newFakeProjectRepository("project-1"),
 		WithProcesses(processes, &fakeCodexProcess{}),
 		WithEvents(events),
+		WithStatistics(statistics),
 		WithDiffCounter(counter),
-		WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}),
+		WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events, statistics: statistics}}),
 	)
 
 	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
@@ -8515,6 +8570,9 @@ func TestPersistCodexFileChangeUpdatesDiffCount(t *testing.T) {
 	}
 	if event := waitForEventType(t, events, "session.diff_changed"); event.Payload["filesChanged"] != 3 {
 		t.Fatalf("session.diff_changed = %#v", event)
+	}
+	if len(statistics.updates) != 1 || statistics.updates[0].FilesChanged == nil || *statistics.updates[0].FilesChanged != 3 {
+		t.Fatalf("statistics updates = %#v", statistics.updates)
 	}
 }
 
@@ -13788,13 +13846,14 @@ func (l *fakeSessionLocker) WithSessionLock(ctx context.Context, id domain.ID, f
 }
 
 type fakeTx struct {
-	projects  projectdomain.Repository
-	mindmaps  mindmapdomain.Repository
-	sessions  domain.Repository
-	workflows workflowdomain.Repository
-	questions questiondomain.Repository
-	processes processdomain.Repository
-	events    eventdomain.Store
+	projects   projectdomain.Repository
+	mindmaps   mindmapdomain.Repository
+	sessions   domain.Repository
+	workflows  workflowdomain.Repository
+	questions  questiondomain.Repository
+	processes  processdomain.Repository
+	events     eventdomain.Store
+	statistics statisticsdomain.Recorder
 }
 
 func (tx fakeTx) ClaimExecution(ctx context.Context, input port.ExecutionClaimInput) (port.ExecutionClaimResult, error) {
@@ -13870,6 +13929,10 @@ func (tx fakeTx) MindMaps() mindmapdomain.Repository {
 
 func (tx fakeTx) Sessions() domain.Repository {
 	return tx.sessions
+}
+
+func (tx fakeTx) Statistics() statisticsdomain.Recorder {
+	return tx.statistics
 }
 
 func (tx fakeTx) Workflows() workflowdomain.Repository {

@@ -9,6 +9,18 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
+// The DailyStatisticFunc type is an adapter to allow the use of ordinary
+// function as DailyStatistic mutator.
+type DailyStatisticFunc func(context.Context, *ent.DailyStatisticMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DailyStatisticFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DailyStatisticMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DailyStatisticMutation", m)
+}
+
 // The EventRecordFunc type is an adapter to allow the use of ordinary
 // function as EventRecord mutator.
 type EventRecordFunc func(context.Context, *ent.EventRecordMutation) (ent.Value, error)

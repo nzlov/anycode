@@ -20,6 +20,7 @@ type Query {
   projectMindMapCards(projectId: ID!): [MindMapCard!]!
   searchProjectMindMap(input: SearchMindMapInput!): MindMapSearchResult!
   sessions(input: ListSessionsInput): SessionCardPage!
+  statistics(input: StatisticsQueryInput!): StatisticsDashboard!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
@@ -33,6 +34,36 @@ type Query {
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
   tunnels: [Tunnel!]!
+}
+
+type StatisticsDashboard {
+  today: StatisticsMetrics!
+  total: StatisticsMetrics!
+  byDay: [StatisticsTimelineBucket!]!
+}
+
+input StatisticsQueryInput {
+  startDate: String!
+  endDate: String!
+}
+
+type StatisticsMetrics {
+  createdCards: Int!
+  closedCards: Int!
+  filesChanged: Int!
+  totalTokens: Int64!
+}
+
+type StatisticsTimelineBucket {
+  key: String!
+  label: String!
+  projects: [StatisticsProjectMetrics!]!
+}
+
+type StatisticsProjectMetrics {
+  key: ID!
+  label: String!
+  metrics: StatisticsMetrics!
 }
 
 type CodexSlashCommand {
