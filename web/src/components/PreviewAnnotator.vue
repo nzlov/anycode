@@ -6,64 +6,68 @@
       role="toolbar"
       aria-label="预览标注工具栏"
     >
-      <q-btn-dropdown
-        v-if="mode === 'image'"
-        split
-        no-caps
-        dense
-        unelevated
-        color="primary"
-        icon="crop_free"
-        label="框选"
-        :aria-label="`框选（${shapeLabel}）`"
-        @click="armShape(shape)"
-      >
-        <q-list dense>
-          <q-item v-close-popup clickable @click="armShape('rectangle')">
-            <q-item-section avatar><q-icon name="crop_square" /></q-item-section>
-            <q-item-section>矩形</q-item-section>
-          </q-item>
-          <q-item v-close-popup clickable @click="armShape('ellipse')">
-            <q-item-section avatar><q-icon name="circle" /></q-item-section>
-            <q-item-section>圆形</q-item-section>
-          </q-item>
-        </q-list>
-      </q-btn-dropdown>
-      <q-btn
-        v-else
-        no-caps
-        dense
-        unelevated
-        color="primary"
-        icon="rate_review"
-        label="批注选中内容"
-        :disable="!pendingTextRange"
-        @click="openTextEditor"
-      />
-      <q-badge v-if="annotations.length" outline color="primary" :label="annotations.length" />
-      <q-space />
-      <q-btn
-        flat
-        dense
-        no-caps
-        icon="add_comment"
-        label="注入"
-        :disable="annotations.length === 0 || !canInject"
-        @click="injectAnnotations"
-      >
-        <q-tooltip>将当前预览中新建的全部标注添加为批注附件</q-tooltip>
-      </q-btn>
-      <q-btn
-        v-if="annotations.length"
-        flat
-        round
-        dense
-        icon="delete_sweep"
-        aria-label="清空标注"
-        @click="clearAnnotations"
-      >
-        <q-tooltip>清空一次性标注</q-tooltip>
-      </q-btn>
+      <div class="preview-annotator__toolbar-leading"><slot name="toolbar-leading" /></div>
+      <div class="preview-annotator__toolbar-controls">
+        <q-btn-dropdown
+          v-if="mode === 'image'"
+          split
+          no-caps
+          dense
+          unelevated
+          color="primary"
+          icon="crop_free"
+          label="框选"
+          :aria-label="`框选（${shapeLabel}）`"
+          @click="armShape(shape)"
+        >
+          <q-list dense>
+            <q-item v-close-popup clickable @click="armShape('rectangle')">
+              <q-item-section avatar><q-icon name="crop_square" /></q-item-section>
+              <q-item-section>矩形</q-item-section>
+            </q-item>
+            <q-item v-close-popup clickable @click="armShape('ellipse')">
+              <q-item-section avatar><q-icon name="circle" /></q-item-section>
+              <q-item-section>圆形</q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
+        <q-btn
+          v-else
+          no-caps
+          dense
+          unelevated
+          color="primary"
+          icon="rate_review"
+          label="批注选中内容"
+          :disable="!pendingTextRange"
+          @click="openTextEditor"
+        />
+        <q-badge v-if="annotations.length" outline color="primary" :label="annotations.length" />
+        <q-space />
+        <q-btn
+          flat
+          dense
+          no-caps
+          icon="add_comment"
+          label="注入"
+          :disable="annotations.length === 0 || !canInject"
+          @click="injectAnnotations"
+        >
+          <q-tooltip>将当前预览中新建的全部标注添加为批注附件</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="annotations.length"
+          flat
+          round
+          dense
+          icon="delete_sweep"
+          aria-label="清空标注"
+          @click="clearAnnotations"
+        >
+          <q-tooltip>清空一次性标注</q-tooltip>
+        </q-btn>
+      </div>
+      <div class="preview-annotator__toolbar-actions"><slot name="toolbar-actions" /></div>
     </div>
 
     <div
@@ -722,6 +726,33 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(8px);
 }
 
+.preview-annotator__toolbar-leading,
+.preview-annotator__toolbar-controls,
+.preview-annotator__toolbar-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-annotator__toolbar-leading {
+  max-width: min(32%, 320px);
+  flex: 0 1 auto;
+}
+
+.preview-annotator__toolbar-leading:empty,
+.preview-annotator__toolbar-actions:empty {
+  display: none;
+}
+
+.preview-annotator__toolbar-controls {
+  flex: 1 1 auto;
+}
+
+.preview-annotator__toolbar-actions {
+  flex: 0 0 auto;
+}
+
 .preview-annotator__surface {
   position: relative;
   width: 100%;
@@ -833,7 +864,17 @@ onBeforeUnmount(() => {
 
 @media (max-width: 599.98px) {
   .preview-annotator__toolbar {
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 4px
+      max(8px, env(safe-area-inset-left));
+  }
+
+  .preview-annotator__toolbar-leading {
+    display: none;
+  }
+
+  .preview-annotator__toolbar-controls {
     overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
 
   .preview-annotator__toolbar :deep(.q-btn__content .block) {

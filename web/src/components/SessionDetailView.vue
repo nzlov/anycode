@@ -532,7 +532,10 @@
         }"
         aria-label="事件文件"
       >
-        <q-card-section v-if="!isMobileLayout" class="event-resource-dialog__header">
+        <q-card-section
+          v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible"
+          class="event-resource-dialog__header"
+        >
           <div class="event-resource-dialog__title">
             <q-icon
               :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)"
@@ -567,8 +570,11 @@
             </q-btn>
           </div>
         </q-card-section>
-        <q-separator v-if="!isMobileLayout" />
-        <div v-if="isMobileLayout" class="event-resource-dialog__mobile-actions">
+        <q-separator v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible" />
+        <div
+          v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible"
+          class="event-resource-dialog__mobile-actions"
+        >
           <q-btn
             v-close-popup
             round
@@ -578,7 +584,7 @@
             aria-label="关闭"
           />
         </div>
-        <q-separator v-if="isMobileLayout" />
+        <q-separator v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible" />
         <q-card-section
           class="event-resource-dialog__body"
           :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
@@ -598,7 +604,41 @@
             :annotatable="eventResourceFile?.sourceType !== 'workspace'"
             :annotation-session-id="sessionId"
             :annotation-source="`临时文件 ${eventResourceTitle}`"
-          />
+          >
+            <template v-if="eventResourceAnnotationToolbarVisible" #toolbar-leading>
+              <div class="event-resource-dialog__title">
+                <q-icon :name="fileIcon(eventResourceFile)" />
+                <div class="event-resource-dialog__title-content">
+                  <span>{{ eventResourceTitle }}</span>
+                </div>
+              </div>
+            </template>
+            <template v-if="eventResourceAnnotationToolbarVisible" #toolbar-actions>
+              <q-btn
+                v-if="!isMobileLayout"
+                flat
+                round
+                dense
+                icon="download"
+                aria-label="下载文件"
+                :loading="eventResourceDownloading"
+                @click="downloadEventResource"
+              >
+                <q-tooltip>下载</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-close-popup
+                :flat="!isMobileLayout"
+                round
+                dense
+                :class="{ 'event-resource-dialog__close': isMobileLayout }"
+                icon="close"
+                aria-label="关闭"
+              >
+                <q-tooltip v-if="!isMobileLayout">关闭</q-tooltip>
+              </q-btn>
+            </template>
+          </SessionFilePreview>
         </q-card-section>
       </q-card>
     </q-dialog>
@@ -626,7 +666,10 @@ import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAnnotation, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import { provideAnnotationDraftInjector } from '@/services/annotationDraftInjection';
-import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
+import {
+  supportsPreviewAnnotations,
+  type PreviewAnnotationAttachment,
+} from '@/services/previewAnnotations';
 import type { DiffFile, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import { getSessionDiffFiles } from '@/services/diff';
 import {
@@ -739,6 +782,12 @@ const eventDiffFile = ref<DiffFile | null>(null);
 const eventResourceDialogOpen = ref(false);
 const eventResourceKind = ref<'diff' | 'file'>('file');
 const eventResourceFile = ref<SessionFile | null>(null);
+const eventResourceAnnotationToolbarVisible = computed(
+  () =>
+    eventResourceKind.value === 'file' &&
+    eventResourceFile.value?.sourceType !== 'workspace' &&
+    supportsPreviewAnnotations(eventResourceFile.value?.previewKind),
+);
 const eventResourceDownloading = ref(false);
 let eventResourceRequest = 0;
 let mounted = false;

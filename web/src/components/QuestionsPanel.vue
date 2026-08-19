@@ -138,23 +138,37 @@
 
     <q-dialog v-model="filePreviewOpen" @hide="closeFilePreview">
       <q-card class="question-file-preview-dialog app-content-dialog">
-        <q-card-section class="question-file-preview-dialog__header">
+        <q-card-section
+          v-if="!annotationToolbarVisible"
+          class="question-file-preview-dialog__header"
+        >
           <div class="question-file-preview-dialog__title ellipsis">
             {{ selectedFile?.filename || '文件预览' }}
           </div>
-          <q-btn
-            flat
-            round
-            dense
-            icon="close"
-            aria-label="关闭文件预览"
-            @click="closeFilePreview"
-          >
+          <q-btn flat round dense icon="close" aria-label="关闭文件预览" @click="closeFilePreview">
             <q-tooltip v-if="!$q.platform.is.mobile">关闭</q-tooltip>
           </q-btn>
         </q-card-section>
-        <q-separator />
-        <SessionFilePreview :file="selectedFile" />
+        <q-separator v-if="!annotationToolbarVisible" />
+        <SessionFilePreview :file="selectedFile">
+          <template v-if="annotationToolbarVisible" #toolbar-leading>
+            <div class="question-file-preview-dialog__title ellipsis">
+              {{ selectedFile?.filename || '文件预览' }}
+            </div>
+          </template>
+          <template v-if="annotationToolbarVisible" #toolbar-actions>
+            <q-btn
+              flat
+              round
+              dense
+              icon="close"
+              aria-label="关闭文件预览"
+              @click="closeFilePreview"
+            >
+              <q-tooltip v-if="!$q.platform.is.mobile">关闭</q-tooltip>
+            </q-btn>
+          </template>
+        </SessionFilePreview>
       </q-card>
     </q-dialog>
   </div>
@@ -164,6 +178,7 @@
 import { computed, ref, watch } from 'vue';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import { supportsPreviewAnnotations } from '@/services/previewAnnotations';
 import type {
   AgentQuestion,
   QuestionAnswerInput,
@@ -190,6 +205,9 @@ const activeQuestionId = ref('');
 const drafts = ref<Record<string, DraftAnswer>>({});
 const filePreviewOpen = ref(false);
 const selectedFile = ref<QuestionFile | null>(null);
+const annotationToolbarVisible = computed(() =>
+  supportsPreviewAnnotations(selectedFile.value?.previewKind),
+);
 const hoveredFileId = ref('');
 const currentRequest = computed(
   () => props.requests.find((request) => request.status === 'pending') ?? null,

@@ -1,8 +1,7 @@
 <template>
   <div class="session-file-preview">
-    <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
     <div
-      v-else-if="file?.previewKind === 'image' && imageURL"
+      v-if="file?.previewKind === 'image'"
       ref="zoomSurface"
       class="session-file-preview__zoom-surface"
       :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
@@ -19,7 +18,11 @@
         :content-key="file.id"
         :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
       >
+        <template #toolbar-leading><slot name="toolbar-leading" /></template>
+        <template #toolbar-actions><slot name="toolbar-actions" /></template>
+        <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
         <img
+          v-else-if="imageURL"
           ref="mediaElement"
           :src="imageURL"
           :alt="file.filename"
@@ -36,6 +39,29 @@
         />
       </PreviewAnnotator>
     </div>
+    <PreviewAnnotator
+      v-else-if="file?.previewKind === 'text'"
+      mode="text"
+      :enabled="annotatable"
+      :source="annotationSource || `临时文件 ${file.filename}`"
+      :session-id="annotationSessionId"
+      :content-key="file.id"
+      :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+    >
+      <template #toolbar-leading><slot name="toolbar-leading" /></template>
+      <template #toolbar-actions><slot name="toolbar-actions" /></template>
+      <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
+      <div v-else-if="loading" class="session-file-preview__state">
+        <q-spinner color="primary" size="32px" />
+      </div>
+      <pre
+        v-else
+        class="session-file-preview__text"
+        data-annotation-text
+        data-annotation-line="1"
+        >{{ text }}</pre>
+    </PreviewAnnotator>
+    <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
     <q-spinner v-else-if="loading" color="primary" size="32px" />
     <iframe
       v-else-if="file?.previewKind === 'pdf' && objectURL"
@@ -73,19 +99,6 @@
       :filename="file.filename"
       class="session-file-preview__model"
     />
-    <PreviewAnnotator
-      v-else-if="file?.previewKind === 'text'"
-      mode="text"
-      :enabled="annotatable"
-      :source="annotationSource || `临时文件 ${file.filename}`"
-      :session-id="annotationSessionId"
-      :content-key="file.id"
-      :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
-    >
-      <pre class="session-file-preview__text" data-annotation-text data-annotation-line="1">{{
-        text
-      }}</pre>
-    </PreviewAnnotator>
     <div v-else class="session-file-preview__state text-muted">
       <q-icon :name="file ? 'draft' : 'inventory_2'" size="36px" />
       <span>{{ file ? '此文件仅支持下载' : '暂无临时文件' }}</span>

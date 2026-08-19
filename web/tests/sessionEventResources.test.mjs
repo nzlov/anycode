@@ -111,19 +111,25 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
     detail,
     /<q-dialog[\s\S]*?v-model="eventResourceDialogOpen"[\s\S]*?:maximized="isMobileLayout"/,
   );
-  assert.match(detail, /v-if="!isMobileLayout"[\s\S]*?class="event-resource-dialog__header"/);
+  assert.match(
+    detail,
+    /v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible"[\s\S]*?class="event-resource-dialog__header"/,
+  );
   assert.match(
     detail,
     /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,
   );
-  assert.match(detail, /event-resource-dialog__close/);
   assert.match(
     detail,
-    /class="event-resource-dialog__mobile-actions"[\s\S]*?event-resource-dialog__close[\s\S]*?<q-separator v-if="isMobileLayout" \/>[\s\S]*?class="event-resource-dialog__body"/,
+    /v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible"[\s\S]*?class="event-resource-dialog__mobile-actions"/,
+  );
+  assert.match(
+    detail,
+    /#toolbar-actions>[\s\S]*?:class="\{ 'event-resource-dialog__close': isMobileLayout \}"[\s\S]*?icon="close"/,
   );
   assert.match(
     artifactEvent,
-    /class="artifact-event-preview__mobile-actions"[\s\S]*?artifact-event-preview__close[\s\S]*?<q-separator v-if="\$q\.screen\.lt\.md" \/>[\s\S]*?<SessionFilePreview/,
+    /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-event-preview__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
   );
   assert.match(
     detail,

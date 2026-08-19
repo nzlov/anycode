@@ -41,6 +41,10 @@ export interface PreviewAnnotationAttachment {
   fileReferences?: PreviewFileReference[];
 }
 
+export function supportsPreviewAnnotations(previewKind: string | null | undefined) {
+  return previewKind === 'image' || previewKind === 'text';
+}
+
 export function formatPreviewAnnotationDraft(source: string, annotations: PreviewAnnotation[]) {
   const lines = [
     annotations.every((annotation) => annotation.kind === 'image') ? '图片标注' : '文件标注',

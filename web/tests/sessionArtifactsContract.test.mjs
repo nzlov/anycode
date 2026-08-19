@@ -107,34 +107,44 @@ test('images use short-lived direct preview URLs while other previews keep authe
 
 test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
   assert.match(panel, /:maximized="\$q\.screen\.lt\.md"/);
-  assert.match(panel, /v-if="!\$q\.screen\.lt\.md" class="artifact-preview-header"/);
+  assert.match(
+    panel,
+    /v-if="!\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-preview-header"/,
+  );
   assert.match(
     panel,
     /<SessionFilePreview[\s\S]*?:file="selected"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
   );
   assert.match(
     panel,
-    /class="artifact-preview-dialog__mobile-actions"[\s\S]*?artifact-preview-dialog__close[\s\S]*?<q-separator v-if="\$q\.screen\.lt\.md" \/>[\s\S]*?<SessionFilePreview/,
+    /v-if="\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-preview-dialog__mobile-actions"/,
+  );
+  assert.match(
+    panel,
+    /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-preview-dialog__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
   );
   assert.match(
     panel,
     /\.artifact-preview-dialog__mobile-actions\s*\{[^}]*flex:\s*0 0 auto[^}]*safe-area-inset-top/s,
   );
-  assert.doesNotMatch(
-    panel,
-    /\.artifact-preview-dialog__close\s*\{[^}]*position:\s*absolute/s,
-  );
+  assert.doesNotMatch(panel, /\.artifact-preview-dialog__close\s*\{[^}]*position:\s*absolute/s);
   assert.match(
     panel,
     /\.artifact-preview-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
   );
   assert.match(event, /:maximized="\$q\.screen\.lt\.md"/);
-  assert.match(event, /v-if="!\$q\.screen\.lt\.md" class="artifact-event-preview__header"/);
+  assert.match(
+    event,
+    /v-if="!\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-event-preview__header"/,
+  );
   assert.match(
     event,
     /<SessionFilePreview[\s\S]*?:file="selectedPreview"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
   );
-  assert.match(event, /artifact-event-preview__close/);
+  assert.match(
+    event,
+    /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-event-preview__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
+  );
   assert.doesNotMatch(event, /useRouter|name: 'session-artifact'/);
   assert.match(preview, /zoomable\?: boolean/);
   assert.match(preview, /@pointerdown="startGesture"/);

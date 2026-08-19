@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { formatPreviewAnnotationDraft } from '../src/services/previewAnnotations.ts';
+import {
+  formatPreviewAnnotationDraft,
+  supportsPreviewAnnotations,
+} from '../src/services/previewAnnotations.ts';
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -17,6 +20,9 @@ const layout = readSource('../src/layouts/MainLayout.vue');
 const composer = readSource('../src/components/PromptComposer.vue');
 const attachments = readSource('../src/services/attachments.ts');
 const sessions = readSource('../src/services/sessions.ts');
+const artifactsPanel = readSource('../src/components/SessionArtifactsPanel.vue');
+const artifactEvent = readSource('../src/components/SessionArtifactEvent.vue');
+const questionsPanel = readSource('../src/components/QuestionsPanel.vue');
 
 test('annotation draft contains marked file, source ranges, selected text, and notes', () => {
   const draft = formatPreviewAnnotationDraft('变更 web/src/App.vue', [
@@ -86,7 +92,7 @@ test('text files and code diffs use selected-text highlights and comments', () =
   assert.match(annotator, /label="批注选中内容"/);
   assert.match(diffViewer, /<PreviewAnnotator[\s\S]*mode="text"/);
   assert.match(filePreview, /<PreviewAnnotator[\s\S]*mode="text"/);
-  assert.match(filePreview, /data-annotation-text data-annotation-line="1"/);
+  assert.match(filePreview, /data-annotation-text[\s\S]*?data-annotation-line="1"/);
   assert.match(
     diffViewer,
     /:data-annotation-line="line\.newLine \?\? line\.oldLine \?\? undefined"/,
@@ -95,15 +101,35 @@ test('text files and code diffs use selected-text highlights and comments', () =
 });
 
 test('touch text selections survive tapping the mobile annotation toolbar', () => {
-  assert.match(
-    annotator,
-    /document\.addEventListener\('selectionchange', captureTextSelection\)/,
-  );
+  assert.match(annotator, /document\.addEventListener\('selectionchange', captureTextSelection\)/);
   assert.match(
     annotator,
     /document\.removeEventListener\('selectionchange', captureTextSelection\)/,
   );
   assert.match(annotator, /if \(selection\.isCollapsed\) return;/);
+});
+
+test('preview dialogs merge their close action into the annotation toolbar', () => {
+  assert.equal(supportsPreviewAnnotations('image'), true);
+  assert.equal(supportsPreviewAnnotations('text'), true);
+  assert.equal(supportsPreviewAnnotations('pdf'), false);
+  assert.match(
+    annotator,
+    /preview-annotator__toolbar[\s\S]*preview-annotator__toolbar-controls[\s\S]*slot name="toolbar-actions"/,
+  );
+  assert.match(annotator, /\.preview-annotator__toolbar-actions\s*{[^}]*flex:\s*0 0 auto/s);
+  assert.match(annotator, /\.preview-annotator__toolbar-controls\s*{[^}]*overflow-x:\s*auto/s);
+  assert.equal((filePreview.match(/<slot name="toolbar-actions"/g) ?? []).length, 2);
+  for (const source of [artifactsPanel, artifactEvent, questionsPanel, detail]) {
+    assert.match(source, /#toolbar-actions>[\s\S]*icon="close"/);
+    assert.match(source, /supportsPreviewAnnotations/);
+  }
+  assert.match(filePreview, /v-if="file\?\.previewKind === 'image'"/);
+  assert.doesNotMatch(filePreview, /previewKind === 'image' && imageURL/);
+  assert.match(
+    filePreview,
+    /v-else-if="file\?\.previewKind === 'text'"[\s\S]*?<q-banner v-if="error"[\s\S]*?v-else-if="loading"/,
+  );
 });
 
 test('multi-line comments include only annotation text and exclude diff line numbers', () => {
@@ -112,7 +138,10 @@ test('multi-line comments include only annotation text and exclude diff line num
     annotator,
     /querySelectorAll<HTMLElement>\('\[data-annotation-text\]'\)[\s\S]*range\.intersectsNode\(textRoot\)/,
   );
-  assert.match(annotator, /\.map\(\(textRoot\) => \{[\s\S]*selected\.selectNodeContents\(textRoot\)/);
+  assert.match(
+    annotator,
+    /\.map\(\(textRoot\) => \{[\s\S]*selected\.selectNodeContents\(textRoot\)/,
+  );
   assert.match(annotator, /\.join\('\\n'\)/);
   assert.doesNotMatch(annotator, /editorQuote\.value = range\.toString\(\)/);
 });

@@ -42,12 +42,18 @@
           'artifact-event-preview--mobile': $q.screen.lt.md,
         }"
       >
-        <q-card-section v-if="!$q.screen.lt.md" class="artifact-event-preview__header">
+        <q-card-section
+          v-if="!$q.screen.lt.md && !annotationToolbarVisible"
+          class="artifact-event-preview__header"
+        >
           <span>{{ filename }}</span>
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
         </q-card-section>
-        <q-separator v-if="!$q.screen.lt.md" />
-        <div v-if="$q.screen.lt.md" class="artifact-event-preview__mobile-actions">
+        <q-separator v-if="!$q.screen.lt.md && !annotationToolbarVisible" />
+        <div
+          v-if="$q.screen.lt.md && !annotationToolbarVisible"
+          class="artifact-event-preview__mobile-actions"
+        >
           <q-btn
             v-close-popup
             round
@@ -57,12 +63,27 @@
             aria-label="关闭"
           />
         </div>
-        <q-separator v-if="$q.screen.lt.md" />
+        <q-separator v-if="$q.screen.lt.md && !annotationToolbarVisible" />
         <SessionFilePreview
           :file="selectedPreview"
           :zoomable="$q.screen.lt.md"
           :annotation-source="`临时文件 ${filename}`"
-        />
+        >
+          <template v-if="annotationToolbarVisible" #toolbar-leading>
+            <span class="artifact-event-preview__title">{{ filename }}</span>
+          </template>
+          <template v-if="annotationToolbarVisible" #toolbar-actions>
+            <q-btn
+              v-close-popup
+              :flat="!$q.screen.lt.md"
+              round
+              dense
+              :class="{ 'artifact-event-preview__close': $q.screen.lt.md }"
+              icon="close"
+              aria-label="关闭"
+            />
+          </template>
+        </SessionFilePreview>
       </q-card>
     </q-dialog>
   </div>
@@ -73,6 +94,7 @@ import { computed, ref } from 'vue';
 import { Notify, useQuasar } from 'quasar';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import { supportsPreviewAnnotations } from '@/services/previewAnnotations';
 import {
   downloadSessionFile,
   type SessionFilePreviewData,
@@ -95,6 +117,7 @@ const previewKind = computed<SessionFilePreviewKind>(() => {
     ? (kind as SessionFilePreviewKind)
     : 'none';
 });
+const annotationToolbarVisible = computed(() => supportsPreviewAnnotations(previewKind.value));
 const previewUrl = computed(() => payloadString('previewUrl'));
 const downloadUrl = computed(() => payloadString('downloadUrl'));
 const size = computed(() => Number(payload.value.size || 0));

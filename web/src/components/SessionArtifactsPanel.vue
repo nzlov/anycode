@@ -168,11 +168,7 @@
       </q-card>
     </div>
 
-    <q-dialog
-      v-model="previewOpen"
-      :maximized="$q.screen.lt.md"
-      @hide="handlePreviewDialogHide"
-    >
+    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.md" @hide="handlePreviewDialogHide">
       <q-card
         class="artifact-preview-dialog"
         :class="{
@@ -180,7 +176,10 @@
           'artifact-preview-dialog--mobile': $q.screen.lt.md,
         }"
       >
-        <q-card-section v-if="!$q.screen.lt.md" class="artifact-preview-header">
+        <q-card-section
+          v-if="!$q.screen.lt.md && !annotationToolbarVisible"
+          class="artifact-preview-header"
+        >
           <div class="artifact-preview-title">
             <q-icon v-if="selected" :name="fileIcon(selected)" />
             <span>{{ selected?.logicalPath || selected?.filename || '文件预览' }}</span>
@@ -202,8 +201,11 @@
             </q-btn>
           </div>
         </q-card-section>
-        <q-separator v-if="!$q.screen.lt.md" />
-        <div v-if="$q.screen.lt.md" class="artifact-preview-dialog__mobile-actions">
+        <q-separator v-if="!$q.screen.lt.md && !annotationToolbarVisible" />
+        <div
+          v-if="$q.screen.lt.md && !annotationToolbarVisible"
+          class="artifact-preview-dialog__mobile-actions"
+        >
           <q-btn
             v-close-popup
             round
@@ -213,7 +215,7 @@
             aria-label="关闭"
           />
         </div>
-        <q-separator v-if="$q.screen.lt.md" />
+        <q-separator v-if="$q.screen.lt.md && !annotationToolbarVisible" />
         <SessionFilePreview
           :file="selected"
           :zoomable="$q.screen.lt.md"
@@ -221,17 +223,49 @@
           :annotation-source="
             selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
           "
-        />
+        >
+          <template v-if="annotationToolbarVisible" #toolbar-leading>
+            <div class="artifact-preview-title">
+              <q-icon v-if="selected" :name="fileIcon(selected)" />
+              <span>{{ selected?.logicalPath || selected?.filename || '文件预览' }}</span>
+            </div>
+          </template>
+          <template v-if="annotationToolbarVisible" #toolbar-actions>
+            <q-btn
+              v-if="!$q.screen.lt.md && selected"
+              flat
+              round
+              dense
+              icon="download"
+              aria-label="下载文件"
+              @click="download(selected)"
+            >
+              <q-tooltip>下载</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-close-popup
+              :flat="!$q.screen.lt.md"
+              round
+              dense
+              :class="{ 'artifact-preview-dialog__close': $q.screen.lt.md }"
+              icon="close"
+              aria-label="关闭"
+            >
+              <q-tooltip v-if="!$q.screen.lt.md">关闭</q-tooltip>
+            </q-btn>
+          </template>
+        </SessionFilePreview>
       </q-card>
     </q-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dialog, Notify, useQuasar } from 'quasar';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import { supportsPreviewAnnotations } from '@/services/previewAnnotations';
 import {
   deleteSessionFile,
   downloadSessionFile,
@@ -268,6 +302,9 @@ const deletingId = ref('');
 const downloadingId = ref('');
 const previewOpen = ref(false);
 const selected = ref<SessionFile | null>(null);
+const annotationToolbarVisible = computed(() =>
+  supportsPreviewAnnotations(selected.value?.previewKind),
+);
 const focusedId = ref('');
 const inlinePreviewActive = ref(false);
 let loadRequest = 0;
