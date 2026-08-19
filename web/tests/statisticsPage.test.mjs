@@ -14,7 +14,14 @@ const routesSource = readSource('../src/router/routes.ts');
 
 test('statistics page exposes today totals and project series over time', () => {
   assert.match(pageSource, /title="统计"/);
+  assert.doesNotMatch(pageSource, /<PageToolbar[^>]*title-icon=/);
   assert.match(pageSource, /v-for="item in summaryItems"/);
+  assert.match(pageSource, /formatSummaryValue\(item\.key, item\.today\)/);
+  assert.match(pageSource, /formatSummaryValue\(item\.key, item\.total\)/);
+  assert.match(
+    pageSource,
+    /key === 'tokens' \? formatTokenCount\(value\) : formatNumber\(value\)/,
+  );
   assert.match(pageSource, /today: dashboard\.value\.today\.createdCards/);
   assert.match(pageSource, /total: dashboard\.value\.total\.totalTokens/);
   assert.match(pageSource, /label: '近 7 天'/);

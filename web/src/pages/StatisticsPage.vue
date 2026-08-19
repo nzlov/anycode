@@ -1,6 +1,6 @@
 <template>
   <q-page class="surface-page surface-page--wide statistics-page">
-    <PageToolbar title="统计" title-icon="analytics" />
+    <PageToolbar title="统计" />
 
     <section class="statistics-summary" aria-label="今日与总计">
       <q-card
@@ -17,9 +17,11 @@
           </div>
           <div class="statistics-summary__today">
             <span>今日</span>
-            <strong>{{ formatNumber(item.today) }}</strong>
+            <strong>{{ formatSummaryValue(item.key, item.today) }}</strong>
           </div>
-          <div class="statistics-summary__total">总计 {{ formatNumber(item.total) }}</div>
+          <div class="statistics-summary__total">
+            总计 {{ formatSummaryValue(item.key, item.total) }}
+          </div>
         </q-card-section>
       </q-card>
     </section>
@@ -150,6 +152,7 @@ import {
   type StatisticsRange,
   type StatisticsTimelineBucket,
 } from '@/services/statistics';
+import { formatTokenCount } from '@/services/tokenUsagePresentation';
 
 type MetricKey = keyof StatisticsMetrics;
 type RangePreset = 'last7' | 'last15' | 'thisMonth' | 'lastMonth' | 'custom';
@@ -350,6 +353,10 @@ function formatLocalDate(value: Date) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('zh-CN').format(value);
+}
+
+function formatSummaryValue(key: string, value: number) {
+  return key === 'tokens' ? formatTokenCount(value) : formatNumber(value);
 }
 
 onMounted(load);

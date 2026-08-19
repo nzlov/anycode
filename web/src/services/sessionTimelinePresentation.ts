@@ -5,6 +5,8 @@ import type {
   TranscriptToolContent,
 } from '@/services/sessionTimeline';
 
+export { formatTokenCount } from './tokenUsagePresentation.js';
+
 const statusLabels: Record<string, string> = {
   'thread.started': '线程已创建',
   'task.started': '任务开始',
@@ -114,15 +116,6 @@ export function formatDuration(durationMs: number | null) {
   if (durationMs === null) return '';
   if (durationMs < 1000) return `${durationMs} ms`;
   return `${(durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0)} s`;
-}
-
-const compactTokenCountFormatter = new Intl.NumberFormat('en-US', {
-  notation: 'compact',
-  maximumFractionDigits: 1,
-});
-
-export function formatTokenCount(value: number) {
-  return compactTokenCountFormatter.format(value);
 }
 
 export interface SessionTextPresentation {
