@@ -2823,14 +2823,13 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 	if err := requireActiveWorktree(session); err != nil {
 		return DTO{}, err
 	}
-	switch session.Status {
-	case domain.StatusStopped, domain.StatusResumeFailed:
-	case domain.StatusQueued:
+	if session.Status == domain.StatusQueued {
 		if !startOptions.Force {
 			return toDTO(session), nil
 		}
 		return s.startQueuedSession(ctx, session, true)
-	default:
+	}
+	if !hasResumableCodexStatus(session) {
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot resume from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
 	if session.Status == domain.StatusResumeFailed {
@@ -7844,7 +7843,7 @@ func canSteerAfterAppend(session domain.Session) bool {
 }
 
 func canReuseCodexSessionAfterAppend(session domain.Session) bool {
-	return session.Status == domain.StatusStopped && strings.TrimSpace(session.CodexSessionID) != ""
+	return session.Status != domain.StatusResumeFailed && canResume(session)
 }
 
 func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error) {
@@ -8876,7 +8875,14 @@ func workflowNodeRunID(value *domain.NodeRunID) *processdomain.NodeRunID {
 func canResume(session domain.Session) bool {
 	return strings.TrimSpace(session.CodexSessionID) != "" &&
 		(strings.TrimSpace(session.BaseBranch) == "" || session.WorktreeCleanup.Status == domain.WorktreeCleanupActive) &&
-		(session.Status == domain.StatusStopped || session.Status == domain.StatusResumeFailed)
+		hasResumableCodexStatus(session)
+}
+
+func hasResumableCodexStatus(session domain.Session) bool {
+	if session.Status == domain.StatusStopped || session.Status == domain.StatusResumeFailed {
+		return true
+	}
+	return session.Mode == domain.ModeChat && session.Status == domain.StatusFailed && strings.TrimSpace(session.InitializationErrorCode) == ""
 }
 
 func requireActiveWorktree(session domain.Session) error {

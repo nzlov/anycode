@@ -5724,6 +5724,44 @@ func TestAppendPromptResumesStoredCodexSessionID(t *testing.T) {
 	}
 }
 
+func TestAppendPromptResumesFailedCodexSessionID(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "original requirement",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusFailed,
+		CodexSessionID: "codex-session-current",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-current"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	ids := []domain.ID{"append-1", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "continue after failure"}); err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.Queue.Kind != domain.QueueKindPromptAppend || saved.Queue.ResumeCodexSessionID != "codex-session-current" {
+		t.Fatalf("queued session = %#v", saved)
+	}
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil || started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
+	}
+	if !codex.resumeCalled || codex.startCalled || codex.resumeInput.CodexSessionID != "codex-session-current" {
+		t.Fatalf("Codex calls after failed turn: resume=%v start=%v input=%#v", codex.resumeCalled, codex.startCalled, codex.resumeInput)
+	}
+}
+
 func TestAppendPromptRebuildsPromptWithReviewNoticeWhenNotResuming(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -9087,6 +9125,35 @@ func TestExecuteSessionResumesWithoutPendingPrompt(t *testing.T) {
 	}
 }
 
+func TestExecuteSessionResumesFailedCodexSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "implement session",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusFailed,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-1"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	got, err := service.ExecuteSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("ExecuteSession() error = %v", err)
+	}
+	if got.Status != domain.StatusRunning || got.CodexSessionID != "codex-session-1" {
+		t.Fatalf("ExecuteSession() = %#v", got)
+	}
+	if !codex.resumeCalled || codex.startCalled || codexInputText(codex.resumeInput.Input) != "continue" {
+		t.Fatalf("Codex calls after failed turn: resume=%#v start=%#v", codex.resumeInput, codex.startInput)
+	}
+}
+
 func TestExecuteSessionRetriesCapacityFailureOnSameThreadWithContinuePrompt(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -11414,6 +11481,39 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			got := availableActions(tt.session)
 			if !slices.Equal(got, tt.want) {
 				t.Fatalf("availableActions() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFailedSessionResumeEligibilityIsLimitedToCodexChatTurns(t *testing.T) {
+	tests := []struct {
+		name    string
+		session domain.Session
+		want    bool
+	}{
+		{
+			name:    "failed chat turn",
+			session: domain.Session{Mode: domain.ModeChat, Status: domain.StatusFailed},
+			want:    true,
+		},
+		{
+			name:    "failed workflow",
+			session: domain.Session{Mode: domain.ModeWorkflow, Status: domain.StatusFailed},
+		},
+		{
+			name: "failed initialization",
+			session: domain.Session{
+				Mode:                    domain.ModeChat,
+				Status:                  domain.StatusFailed,
+				InitializationErrorCode: "worktree_init_command_failed",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasResumableCodexStatus(tt.session); got != tt.want {
+				t.Fatalf("hasResumableCodexStatus() = %v, want %v", got, tt.want)
 			}
 		})
 	}
