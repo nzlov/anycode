@@ -118,7 +118,7 @@ test('running overview cards show a rotating thought above actions instead of re
     source,
     /<SessionThinkingPhrase\s+v-if="card\.status === 'running'"[\s\S]*?:refresh-key="card\.updatedTime"[\s\S]*?<div class="overview-card-footer">/,
   );
-  assert.equal((thinkingPreferencesSource.match(/^\s{4}'[^']+',$/gm) ?? []).length, 120);
+  assert.equal((thinkingPreferencesSource.match(/^\s{4}'[^']+',$/gm) ?? []).length, 360);
   assert.match(thinkingSource, /v-if="thinkingPhrasesEnabled"/);
   assert.match(thinkingSource, /watch\(thinkingPhrasesEnabled/);
   assert.match(thinkingSource, /if \(!thinkingPhrasesEnabled\.value\) return/);

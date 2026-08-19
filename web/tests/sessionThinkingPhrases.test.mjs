@@ -13,11 +13,11 @@ test('thinking phrase preferences share and persist the enabled state and select
 
   assert.deepEqual(
     preferences.sessionThinkingPhraseStyleOptions.map((option) => option.label),
-    ['普通', '中二', '疯狂', '女仆', '颜文字', '滑稽 Emoji'],
+    ['普通', '中二', '疯狂', '女仆', '颜文字', '滑稽 Emoji', '小丑', '猫语', '死侍'],
   );
   assert.equal(firstConsumer.thinkingPhrasesEnabled.value, false);
   assert.equal(firstConsumer.thinkingPhraseStyle.value, 'normal');
-  assert.equal(firstConsumer.thinkingPhrases.value.length, 20);
+  assert.equal(firstConsumer.thinkingPhrases.value.length, 40);
 
   firstConsumer.thinkingPhrasesEnabled.value = true;
   firstConsumer.thinkingPhraseStyle.value = 'maid';
@@ -25,26 +25,58 @@ test('thinking phrase preferences share and persist the enabled state and select
   assert.deepEqual(JSON.parse(storage.get(storageKey)), { enabled: true, style: 'maid' });
   assert.equal(secondConsumer.thinkingPhrasesEnabled.value, true);
   assert.equal(secondConsumer.thinkingPhraseStyle.value, 'maid');
-  assert.equal(secondConsumer.thinkingPhrases.value.length, 20);
+  assert.equal(secondConsumer.thinkingPhrases.value.length, 40);
   assert.match(secondConsumer.thinkingPhrases.value[0], /主人/);
-  assert.equal((source.match(/^\s{4}'[^']+',$/gm) ?? []).length, 120);
+  assert.equal((source.match(/^\s{4}'[^']+',$/gm) ?? []).length, 360);
 
   const reloaded = loadThinkingPhraseModule(Object.fromEntries(storage));
   assert.equal(reloaded.preferences.useSessionThinkingPhrases().thinkingPhrasesEnabled.value, true);
   assert.equal(reloaded.preferences.useSessionThinkingPhrases().thinkingPhraseStyle.value, 'maid');
 });
 
-test('kaomoji and funny emoji styles each expose twenty phrases', () => {
+test('each thinking phrase style exposes forty unique phrases', () => {
   const { preferences } = loadThinkingPhraseModule();
   const consumer = preferences.useSessionThinkingPhrases();
 
+  for (const { value } of preferences.sessionThinkingPhraseStyleOptions) {
+    consumer.thinkingPhraseStyle.value = value;
+    assert.equal(consumer.thinkingPhrases.value.length, 40);
+    assert.equal(new Set(consumer.thinkingPhrases.value).size, 40);
+  }
+
   consumer.thinkingPhraseStyle.value = 'kaomoji';
-  assert.equal(consumer.thinkingPhrases.value.length, 20);
   assert.match(consumer.thinkingPhrases.value[0], /[()]/);
 
   consumer.thinkingPhraseStyle.value = 'funny_emoji';
-  assert.equal(consumer.thinkingPhrases.value.length, 20);
   assert.match(consumer.thinkingPhrases.value[0], /🤔/u);
+
+  consumer.thinkingPhraseStyle.value = 'clown';
+  assert.match(consumer.thinkingPhrases.value.join('\n'), /混乱/);
+  assert.doesNotMatch(
+    consumer.thinkingPhrases.value.join('\n'),
+    /马戏团|红鼻子|香蕉皮|独轮车|高跷/,
+  );
+
+  consumer.thinkingPhraseStyle.value = 'cat';
+  assert.equal(
+    consumer.thinkingPhrases.value.every((phrase) => /^[喵呜咪呼噜咕嗷？！…]+$/u.test(phrase)),
+    true,
+  );
+
+  consumer.thinkingPhraseStyle.value = 'deadpool';
+  assert.match(consumer.thinkingPhrases.value[0], /思考框/);
+});
+
+test('new thinking phrase styles restore from stored preferences', () => {
+  for (const style of ['clown', 'cat', 'deadpool']) {
+    const { preferences } = loadThinkingPhraseModule({
+      [storageKey]: JSON.stringify({ enabled: true, style }),
+    });
+
+    const consumer = preferences.useSessionThinkingPhrases();
+    assert.equal(consumer.thinkingPhrasesEnabled.value, true);
+    assert.equal(consumer.thinkingPhraseStyle.value, style);
+  }
 });
 
 test('invalid stored thinking phrase preferences fall back to disabled normal', () => {
