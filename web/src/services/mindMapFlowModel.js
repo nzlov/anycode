@@ -1,5 +1,5 @@
 const nodeWidth = 172;
-const nodeHeight = 48;
+const nodeHeight = 56;
 
 export function buildRadialLayout(nodes, edges, rootNodeId = 'project-root') {
   const layout = {};

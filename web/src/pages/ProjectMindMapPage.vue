@@ -131,17 +131,21 @@
     <div class="mind-map-canvas">
       <VueFlow
         id="project-mind-map-flow"
+        :class="{ 'mind-map-flow--moving': flowMoving }"
         v-model:nodes="flowNodes"
         v-model:edges="flowEdges"
-        :min-zoom="0.2"
+        :min-zoom="$q.screen.lt.sm ? 0.6 : 0.2"
         :max-zoom="2"
         :pan-on-drag="true"
         :zoom-on-pinch="true"
+        :only-render-visible-elements="true"
         :nodes-connectable="true"
         :elements-selectable="true"
         @node-click="selectNode"
         @nodes-initialized="fitGraph"
         @pane-click="clearSelection"
+        @move-start="startFlowMove"
+        @move-end="endFlowMove"
         @connect="createEdge"
       >
         <template #node-radial="{ id, data }">
@@ -149,7 +153,8 @@
             v-touch-hold.mouse="() => openNodeMenu(id)"
             class="mind-map-node-content"
             @contextmenu.prevent="openNodeMenu(id)"
-            @mouseenter="showNodeInfo(id)"
+            @mouseenter="scheduleNodeInfo(id)"
+            @mouseleave="cancelScheduledNodeInfo"
           >
             <Handle
               v-for="side in handleSides"
@@ -171,6 +176,7 @@
               {{ data.cardLabel }}
             </small>
             <q-menu
+              v-if="infoNodeId === id"
               no-parent-event
               anchor="top right"
               self="top left"
@@ -220,6 +226,7 @@
               </q-card>
             </q-menu>
             <q-menu
+              v-if="menuNodeId === id"
               no-parent-event
               :model-value="menuNodeId === id"
               @update:model-value="syncNodeMenu(id, $event)"
@@ -231,9 +238,7 @@
                   v-close-popup
                   clickable
                   :disable="
-                    id === rootNodeId ||
-                    data.changeType === 'deleted' ||
-                    editorLoadingNodeId === id
+                    id === rootNodeId || data.changeType === 'deleted' || editorLoadingNodeId === id
                   "
                   @click="openNodeEditor(id)"
                 >
@@ -423,6 +428,7 @@ const projectId = computed(() => String(route.params.projectId ?? ''));
 const project = computed(() => projects.value.find((item) => item.id === projectId.value));
 const loading = ref(false);
 const saving = ref(false);
+const flowMoving = ref(false);
 const mainGraph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt: '' });
 const cards = ref<MindMapCard[]>([]);
 const activeCardSessionId = ref('');
@@ -454,6 +460,7 @@ let subscriptionRevision = 0;
 let mindMapSubscription: { unsubscribe: () => void } | null = null;
 let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let taskRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let nodeInfoHoverTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<void> | null = null;
 let refreshPending = false;
 let loadedRevision = '';
@@ -733,6 +740,7 @@ onBeforeUnmount(() => {
   editorRequestRevision += 1;
   stopMindMapSubscription();
   if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
+  cancelScheduledNodeInfo();
 });
 
 async function loadCards() {
@@ -921,6 +929,31 @@ function selectNode({ node }: NodeMouseEvent) {
   if ($q.platform.is.mobile) void showNodeInfo(node.id);
 }
 
+function startFlowMove() {
+  flowMoving.value = true;
+  cancelScheduledNodeInfo();
+  closeNodeInfo();
+  menuNodeId.value = '';
+}
+
+function endFlowMove() {
+  flowMoving.value = false;
+}
+
+function scheduleNodeInfo(nodeId: string) {
+  if ($q.platform.is.mobile || flowMoving.value || infoNodeId.value === nodeId) return;
+  cancelScheduledNodeInfo();
+  nodeInfoHoverTimer = setTimeout(() => {
+    nodeInfoHoverTimer = null;
+    if (!flowMoving.value) void showNodeInfo(nodeId);
+  }, 220);
+}
+
+function cancelScheduledNodeInfo() {
+  if (nodeInfoHoverTimer) clearTimeout(nodeInfoHoverTimer);
+  nodeInfoHoverTimer = null;
+}
+
 function toggleCardHighlight(sessionId: string) {
   activeCardSessionId.value = activeCardSessionId.value === sessionId ? '' : sessionId;
   clearSelection();
@@ -936,11 +969,7 @@ async function showNodeInfo(nodeId: string) {
   nodeInfoDetail.value = null;
   nodeInfoLoading.value = true;
   try {
-    const detail = await getProjectMindMapNode(
-      requestedProjectId,
-      node.entityId,
-      node.sessionId,
-    );
+    const detail = await getProjectMindMapNode(requestedProjectId, node.entityId, node.sessionId);
     if (
       disposed ||
       requestRevision !== nodeInfoRequestRevision ||
@@ -977,6 +1006,8 @@ function closeNodeInfo() {
 }
 
 function openNodeMenu(nodeId: string) {
+  cancelScheduledNodeInfo();
+  closeNodeInfo();
   selectedNodeId.value = nodeId;
   menuNodeId.value = nodeId;
 }
@@ -1006,11 +1037,7 @@ async function openNodeEditor(nodeId: string) {
   const requestRevision = ++editorRequestRevision;
   editorLoadingNodeId.value = nodeId;
   try {
-    const detail = await getProjectMindMapNode(
-      requestedProjectId,
-      node.entityId,
-      node.sessionId,
-    );
+    const detail = await getProjectMindMapNode(requestedProjectId, node.entityId, node.sessionId);
     if (
       disposed ||
       requestRevision !== editorRequestRevision ||
@@ -1158,8 +1185,8 @@ function taskStatusColor(status: string) {
 .mind-map-card-strip {
   display: flex;
   flex: 0 0 auto;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   overflow-x: auto;
   border-bottom: 1px solid var(--ac-border);
   background: var(--ac-page-bg);
@@ -1169,18 +1196,15 @@ function taskStatusColor(status: string) {
 .mind-map-card {
   width: 240px;
   min-width: 240px;
-  border-radius: 14px;
+  border-radius: 6px;
   background: var(--ac-surface);
-  box-shadow: var(--ac-shadow-card);
   cursor: pointer;
-  transition:
-    filter 160ms ease,
-    transform 160ms ease;
+  transition: border-color 120ms ease;
 }
 
 .mind-map-card:hover,
 .mind-map-card:focus-visible {
-  filter: brightness(1.04);
+  border-color: color-mix(in srgb, var(--q-primary) 45%, var(--ac-border));
 }
 
 .mind-map-card:focus-visible {
@@ -1189,8 +1213,8 @@ function taskStatusColor(status: string) {
 }
 
 .mind-map-card--active {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  border-color: var(--q-primary);
+  box-shadow: inset 3px 0 0 var(--q-primary);
 }
 
 .mind-map-card__body {
@@ -1245,9 +1269,8 @@ function taskStatusColor(status: string) {
   gap: 8px 14px;
   padding: 7px 10px;
   border: 1px solid var(--ac-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--ac-surface) 92%, transparent);
-  box-shadow: var(--ac-shadow-card);
+  border-radius: 6px;
+  background: var(--ac-surface);
   color: var(--ac-text-muted);
   font-size: 12px;
 }
@@ -1281,6 +1304,7 @@ function taskStatusColor(status: string) {
   min-height: 0;
   flex: 1 1 auto;
   overflow: hidden;
+  background: var(--ac-surface);
   border-radius: 0;
   touch-action: none;
 }
@@ -1316,22 +1340,27 @@ function taskStatusColor(status: string) {
   touch-action: none;
 }
 
+.mind-map-canvas :deep(.vue-flow__viewport) {
+  will-change: transform;
+}
+
 .mind-map-node-content {
   display: flex;
+  box-sizing: border-box;
   width: 172px;
-  min-height: 48px;
+  min-height: 56px;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--ac-border);
-  border-radius: 24px;
+  border-radius: 6px;
   background: var(--ac-surface);
-  box-shadow: var(--ac-shadow-card);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ac-text) 8%, transparent);
   color: var(--ac-text);
   font-size: 13px;
   font-weight: 600;
-  text-align: center;
+  text-align: left;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -1339,24 +1368,27 @@ function taskStatusColor(status: string) {
 }
 
 .mind-map-node-content__title {
+  display: -webkit-box;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .mind-map-node-content__tag {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--q-primary);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .mind-map-node-content__card {
   display: block;
   max-width: 100%;
-  margin-top: 2px;
+  margin-top: 4px;
   overflow: hidden;
   color: var(--ac-text-muted);
   font-size: 10px;
@@ -1403,15 +1435,14 @@ function taskStatusColor(status: string) {
 
 .mind-map-canvas :deep(.vue-flow__node),
 .mind-map-canvas :deep(.vue-flow__edge) {
-  transition:
-    filter 160ms ease,
-    opacity 160ms ease;
+  transition: opacity 120ms ease;
 }
 
 .mind-map-canvas :deep(.mind-map-node--root .mind-map-node-content) {
   border-color: var(--q-primary);
   background: var(--q-primary);
   color: white;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--q-primary) 24%, transparent);
 }
 
 .mind-map-canvas :deep(.mind-map-node--tag .mind-map-node-content) {
@@ -1421,9 +1452,7 @@ function taskStatusColor(status: string) {
 
 .mind-map-canvas :deep(.mind-map-node--active .mind-map-node-content) {
   border-color: var(--q-primary);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--q-primary) 24%, transparent),
-    var(--ac-shadow-card);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 22%, transparent);
 }
 
 .mind-map-canvas :deep(.mind-map-node--related .mind-map-node-content) {
@@ -1432,10 +1461,7 @@ function taskStatusColor(status: string) {
 }
 
 .mind-map-canvas :deep(.mind-map-node--search-match .mind-map-node-content) {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--q-primary) 32%, transparent),
-    0 0 18px color-mix(in srgb, var(--q-primary) 24%, transparent),
-    var(--ac-shadow-card);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--q-primary) 28%, transparent);
 }
 
 .mind-map-canvas :deep(.mind-map-node--added .mind-map-node-content) {
@@ -1461,16 +1487,16 @@ function taskStatusColor(status: string) {
 }
 
 .mind-map-canvas :deep(.mind-map-element--highlighted) {
-  filter: brightness(1.14);
   opacity: 1;
 }
 
 .mind-map-canvas :deep(.mind-map-element--muted) {
-  filter: brightness(0.58);
-  opacity: 0.2;
+  opacity: 0.16;
 }
 
 .mind-map-canvas :deep(.vue-flow__edge-path) {
+  stroke: color-mix(in srgb, var(--ac-text-muted) 52%, transparent);
+  stroke-width: 1.25;
   transition:
     stroke 160ms ease,
     stroke-width 160ms ease,
@@ -1487,10 +1513,52 @@ function taskStatusColor(status: string) {
   height: 7px;
   border-color: var(--ac-surface);
   background: var(--q-primary);
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
-.mind-map-canvas :deep(.vue-flow__handle.target) {
-  opacity: 0;
+.mind-map-canvas :deep(.vue-flow__node:hover .vue-flow__handle.source),
+.mind-map-canvas :deep(.mind-map-node--active .vue-flow__handle.source) {
+  opacity: 1;
+}
+
+.mind-map-canvas :deep(.mind-map-flow--moving .vue-flow__node),
+.mind-map-canvas :deep(.mind-map-flow--moving .vue-flow__edge),
+.mind-map-canvas :deep(.mind-map-flow--moving .vue-flow__edge-path),
+.mind-map-canvas :deep(.mind-map-flow--moving .mind-map-node-content) {
+  transition: none;
+}
+
+.mind-map-canvas :deep(.mind-map-flow--moving .mind-map-node-content) {
+  box-shadow: none;
+}
+
+.mind-map-canvas :deep(.mind-map-flow--moving .vue-flow__edge-text),
+.mind-map-canvas :deep(.mind-map-flow--moving .vue-flow__edge-textbg) {
+  display: none;
+}
+
+.mind-map-canvas :deep(.vue-flow__edge-text) {
+  fill: var(--ac-text-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.mind-map-canvas :deep(.vue-flow__edge-textbg) {
+  fill: var(--ac-surface);
+}
+
+.mind-map-canvas :deep(.vue-flow__controls) {
+  overflow: hidden;
+  border: 1px solid var(--ac-border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.mind-map-canvas :deep(.vue-flow__controls-button) {
+  border-bottom-color: var(--ac-border);
+  background: var(--ac-surface);
+  color: var(--ac-text);
 }
 
 .mind-map-dialog {

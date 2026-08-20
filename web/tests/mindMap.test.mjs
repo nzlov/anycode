@@ -84,6 +84,8 @@ test('mind map uses a full-screen radial canvas with direct relation highlightin
   assert.match(page, /@nodes-initialized="fitGraph"/);
   assert.match(page, /:pan-on-drag="true"/);
   assert.match(page, /:zoom-on-pinch="true"/);
+  assert.match(page, /:min-zoom="\$q\.screen\.lt\.sm \? 0\.6 : 0\.2"/);
+  assert.match(page, /:only-render-visible-elements="true"/);
   assert.match(page, /<div class="mind-map-canvas">/);
   assert.doesNotMatch(page, /<PageToolbar[^>]*title-icon=/);
   assert.match(page, /flex: 1 1 auto/);
@@ -150,10 +152,13 @@ test('mind map node long-press menu edits in a dialog and confirms cascading del
   assert.doesNotMatch(page, /\.map\(\(edge\) => \(\{ kind: 'delete_edge'/);
 });
 
-test('mind map node information opens on desktop hover and mobile click with a close button', () => {
+test('mind map node information opens after a settled desktop hover and on mobile click', () => {
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
 
-  assert.match(page, /@mouseenter="showNodeInfo\(id\)"/);
+  assert.match(page, /@mouseenter="scheduleNodeInfo\(id\)"/);
+  assert.match(page, /@mouseleave="cancelScheduledNodeInfo"/);
+  assert.match(page, /nodeInfoHoverTimer = setTimeout/);
+  assert.match(page, /if \(!flowMoving\.value\) void showNodeInfo\(nodeId\)/);
   assert.match(page, /if \(\$q\.platform\.is\.mobile\) void showNodeInfo\(node\.id\)/);
   assert.match(page, /class="mind-map-node-info"/);
   assert.match(page, /\{\{ data\.label \}\}/);
@@ -174,6 +179,22 @@ test('mind map node information opens on desktop hover and mobile click with a c
   );
   assert.match(page, /aria-label="关闭节点信息"/);
   assert.match(page, /@click="closeNodeInfo"/);
+});
+
+test('mind map keeps canvas movement lightweight and mounts only active node overlays', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+
+  assert.match(page, /@move-start="startFlowMove"/);
+  assert.match(page, /@move-end="endFlowMove"/);
+  assert.match(page, /startFlowMove\(\)[\s\S]*cancelScheduledNodeInfo\(\)[\s\S]*closeNodeInfo\(\)/);
+  assert.match(page, /v-if="infoNodeId === id"[\s\S]*<q-card class="mind-map-node-info"/);
+  assert.match(page, /v-if="menuNodeId === id"[\s\S]*class="app-touch-list mind-map-node-menu"/);
+  assert.match(
+    page,
+    /\.mind-map-flow--moving \.mind-map-node-content[^{]*\{[^}]*box-shadow:\s*none/s,
+  );
+  assert.match(page, /\.mind-map-flow--moving \.vue-flow__edge-text[\s\S]*display:\s*none/s);
+  assert.doesNotMatch(page, /\.mind-map-element--muted[^{]*\{[^}]*filter:/s);
 });
 
 test('mind map combines compact card deltas and previews selected card modifications', () => {
@@ -232,7 +253,7 @@ test('mind map combines compact card deltas and previews selected card modificat
   assert.match(page, /var\(--q-negative\)/);
 });
 
-test('mind map cards toggle related elements with brightness without replacing operation colors', () => {
+test('mind map cards emphasize related elements with opacity without replacing operation colors', () => {
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
 
   assert.match(page, /:aria-pressed="activeCardSessionId === card\.sessionId"/);
@@ -247,8 +268,8 @@ test('mind map cards toggle related elements with brightness without replacing o
   );
   assert.match(page, /cardDisplayId\(card\.sessionId, edge\.id\)/);
   assert.match(page, /'mind-map-element--highlighted'/);
-  assert.match(page, /\.mind-map-element--highlighted[\s\S]*filter: brightness\(1\.14\)/);
-  assert.match(page, /\.mind-map-element--muted[\s\S]*filter: brightness\(0\.58\)/);
+  assert.match(page, /\.mind-map-element--highlighted[^{]*\{[^}]*opacity:\s*1/s);
+  assert.match(page, /\.mind-map-element--muted[^{]*\{[^}]*opacity:\s*0\.16/s);
   assert.match(page, /\.mind-map-node--added[\s\S]*var\(--q-positive\)/);
   assert.match(page, /\.mind-map-node--modified[\s\S]*var\(--q-warning\)/);
   assert.match(page, /\.mind-map-node--deleted[\s\S]*var\(--q-negative\)/);
@@ -304,10 +325,10 @@ test('radial layout centers the root, groups connected depths into rings, and cu
   ];
   const layout = buildRadialLayout(nodes, edges);
 
-  assert.deepEqual(layout['project-root'], { x: -86, y: -24 });
-  const radiusA = Math.hypot(layout.a.x + 86, layout.a.y + 24);
-  const radiusB = Math.hypot(layout.b.x + 86, layout.b.y + 24);
-  const radiusC = Math.hypot(layout.c.x + 86, layout.c.y + 24);
+  assert.deepEqual(layout['project-root'], { x: -86, y: -28 });
+  const radiusA = Math.hypot(layout.a.x + 86, layout.a.y + 28);
+  const radiusB = Math.hypot(layout.b.x + 86, layout.b.y + 28);
+  const radiusC = Math.hypot(layout.c.x + 86, layout.c.y + 28);
   assert.equal(Math.round(radiusA), 240);
   assert.equal(Math.round(radiusB), 480);
   assert.equal(Math.round(radiusC), 720);
@@ -319,7 +340,7 @@ test('radial layout centers the root, groups connected depths into rings, and cu
   const disconnectedLayout = buildRadialLayout([{ id: 'project-root' }, { id: 'new-node' }], []);
   assert.equal(
     Math.round(
-      Math.hypot(disconnectedLayout['new-node'].x + 86, disconnectedLayout['new-node'].y + 24),
+      Math.hypot(disconnectedLayout['new-node'].x + 86, disconnectedLayout['new-node'].y + 28),
     ),
     240,
   );
@@ -341,7 +362,7 @@ test('radial layout keeps dense adjacent rings from overlapping', () => {
       const right = nodes[rightIndex];
       const overlaps =
         Math.abs(layout[left.id].x - layout[right.id].x) < 172 &&
-        Math.abs(layout[left.id].y - layout[right.id].y) < 48;
+        Math.abs(layout[left.id].y - layout[right.id].y) < 56;
       assert.equal(overlaps, false, `${left.id} overlaps ${right.id}`);
     }
   }
@@ -361,9 +382,9 @@ test('nested layout expands children around their parent and offsets cross-linke
     { id: 'cross', sourceId: 'a-child', targetId: 'b-child' },
   ]);
 
-  assert.deepEqual(treeLayout['project-root'], { x: -86, y: -24 });
-  assert.equal(Math.round(Math.hypot(treeLayout.a.x + 86, treeLayout.a.y + 24)), 320);
-  assert.equal(Math.round(Math.hypot(treeLayout.b.x + 86, treeLayout.b.y + 24)), 320);
+  assert.deepEqual(treeLayout['project-root'], { x: -86, y: -28 });
+  assert.equal(Math.round(Math.hypot(treeLayout.a.x + 86, treeLayout.a.y + 28)), 320);
+  assert.equal(Math.round(Math.hypot(treeLayout.b.x + 86, treeLayout.b.y + 28)), 320);
   assert.equal(
     Math.round(
       Math.hypot(
@@ -414,7 +435,7 @@ test('nested layout reserves branch space for dense child groups', () => {
       const left = layout[nodes[leftIndex].id];
       const right = layout[nodes[rightIndex].id];
       assert.equal(
-        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 48,
+        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 56,
         false,
         `${nodes[leftIndex].id} overlaps ${nodes[rightIndex].id}`,
       );
@@ -438,7 +459,7 @@ test('nested layout keeps cross-linked siblings from overlapping after relation 
       const left = layout[nodes[leftIndex].id];
       const right = layout[nodes[rightIndex].id];
       assert.equal(
-        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 48,
+        Math.abs(left.x - right.x) < 172 && Math.abs(left.y - right.y) < 56,
         false,
         `${nodes[leftIndex].id} overlaps ${nodes[rightIndex].id}`,
       );
