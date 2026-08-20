@@ -26,10 +26,7 @@ test('statistics page exposes today totals and project series over time', () => 
   assert.match(pageSource, /v-for="item in summaryItems"/);
   assert.match(pageSource, /formatSummaryValue\(item\.key, item\.today\)/);
   assert.match(pageSource, /formatSummaryValue\(item\.key, item\.total\)/);
-  assert.match(
-    pageSource,
-    /key === 'tokens' \? formatTokenCount\(value\) : formatNumber\(value\)/,
-  );
+  assert.match(pageSource, /key === 'tokens' \? formatTokenCount\(value\) : formatNumber\(value\)/);
   assert.match(pageSource, /today: dashboard\.value\.today\.createdCards/);
   assert.match(pageSource, /total: dashboard\.value\.total\.totalTokens/);
   assert.match(pageSource, /label: '近 7 天'/);
@@ -71,6 +68,33 @@ test('statistics charts remain inspectable with long timelines and project names
   assert.match(chartSource, /emit\('viewportScroll', viewport\.value\.scrollLeft\)/);
   assert.match(pageSource, /:scroll-left="chartScrollLeft"/);
   assert.match(pageSource, /@viewport-scroll="syncChartScroll"/);
+});
+
+test('statistics charts share token units and linked pointer inspection', () => {
+  assert.match(pageSource, /:active-index="chartActiveIndex"/);
+  assert.match(pageSource, /:active-ratio="chartInspectionRatio"/);
+  assert.match(pageSource, /@inspect="syncChartInspection"/);
+  assert.match(pageSource, /value-format="tokens"/);
+  assert.match(chartSource, /import \{ formatTokenCount \}/);
+  assert.match(chartSource, /props\.valueFormat === 'tokens' \? formatTokenCount\(value\)/);
+  assert.match(chartSource, /@mousemove="handleMouseMove"/);
+  assert.match(chartSource, /@touchstart\.passive="handleTouch"/);
+  assert.match(chartSource, /@touchmove\.passive="handleTouch"/);
+  assert.match(chartSource, /class="statistics-chart__inspection"/);
+  assert.match(chartSource, /label: props\.keys\[index\] \?\? props\.labels\[index\]!/);
+  assert.match(chartSource, /chartY < padding\.top/);
+  assert.match(chartSource, /chartY > chartHeight - padding\.bottom/);
+  assert.match(chartSource, /emit\('inspect', index, pointerRatio\)/);
+  assert.match(chartSource, /left: `\$\{activeRatio\.value \* 100\}%`/);
+});
+
+test('statistics charts only show changed projects and allow toggling series', () => {
+  assert.match(pageSource, /values\.some\(\(value\) => value > 0\)/);
+  assert.match(chartSource, /const visibleSeries = computed/);
+  assert.match(chartSource, /<button[\s\S]*?@click="toggleSeries\(item\.key\)"/);
+  assert.match(chartSource, /:aria-pressed="!hiddenSeriesKeys\.has\(item\.key\)"/);
+  assert.match(chartSource, /v-for="item in visibleSeries"/);
+  assert.match(chartSource, /visibleSeries\.value\.flatMap/);
 });
 
 test('overview toolbar and router expose statistics navigation', () => {

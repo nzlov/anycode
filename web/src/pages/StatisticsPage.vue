@@ -100,8 +100,11 @@
         :labels="chartLabels"
         :series="createdSeries"
         :scroll-left="chartScrollLeft"
+        :active-index="chartActiveIndex"
+        :active-ratio="chartInspectionRatio"
         kind="line"
         @viewport-scroll="syncChartScroll"
+        @inspect="syncChartInspection"
       />
       <StatisticsChart
         title="关闭卡片"
@@ -110,8 +113,11 @@
         :labels="chartLabels"
         :series="closedSeries"
         :scroll-left="chartScrollLeft"
+        :active-index="chartActiveIndex"
+        :active-ratio="chartInspectionRatio"
         kind="line"
         @viewport-scroll="syncChartScroll"
+        @inspect="syncChartInspection"
       />
       <StatisticsChart
         title="修改文件"
@@ -120,8 +126,11 @@
         :labels="chartLabels"
         :series="fileSeries"
         :scroll-left="chartScrollLeft"
+        :active-index="chartActiveIndex"
+        :active-ratio="chartInspectionRatio"
         kind="line"
         @viewport-scroll="syncChartScroll"
+        @inspect="syncChartInspection"
       />
       <StatisticsChart
         title="Token 用量"
@@ -130,8 +139,12 @@
         :labels="chartLabels"
         :series="tokenSeries"
         :scroll-left="chartScrollLeft"
+        :active-index="chartActiveIndex"
+        :active-ratio="chartInspectionRatio"
         kind="line"
+        value-format="tokens"
         @viewport-scroll="syncChartScroll"
+        @inspect="syncChartInspection"
       />
       <q-inner-loading :showing="loading">
         <q-spinner color="primary" size="36px" />
@@ -178,6 +191,8 @@ const selectedRange = ref<StatisticsRange>(initialRange);
 const customStartDate = ref(initialRange.startDate);
 const customEndDate = ref(initialRange.endDate);
 const chartScrollLeft = ref(0);
+const chartActiveIndex = ref<number | null>(null);
+const chartInspectionRatio = ref<number | null>(null);
 const buckets = computed<StatisticsTimelineBucket[]>(() => {
   const archived = new Map(dashboard.value.byDay.map((bucket) => [bucket.key, bucket]));
   const result: StatisticsTimelineBucket[] = [];
@@ -260,14 +275,16 @@ const projects = computed(() => {
 });
 
 function buildProjectSeries(metric: MetricKey): StatisticsChartSeries[] {
-  return projects.value.map((project, index) => ({
-    key: project.key,
-    label: project.label,
-    color: projectColors[index % projectColors.length]!,
-    values: buckets.value.map(
-      (bucket) => bucket.projects.find((item) => item.key === project.key)?.metrics[metric] ?? 0,
-    ),
-  }));
+  return projects.value
+    .map((project, index) => ({
+      key: project.key,
+      label: project.label,
+      color: projectColors[index % projectColors.length]!,
+      values: buckets.value.map(
+        (bucket) => bucket.projects.find((item) => item.key === project.key)?.metrics[metric] ?? 0,
+      ),
+    }))
+    .filter((series) => series.values.some((value) => value > 0));
 }
 
 const createdSeries = computed(() => buildProjectSeries('createdCards'));
@@ -296,6 +313,8 @@ function selectPreset(preset: Exclude<RangePreset, 'custom'>) {
   customEndDate.value = dateRange.endDate;
   rangeMenuOpen.value = false;
   chartScrollLeft.value = 0;
+  chartActiveIndex.value = null;
+  chartInspectionRatio.value = null;
   void load();
 }
 
@@ -305,11 +324,18 @@ function applyCustomRange() {
   selectedRange.value = { startDate: customStartDate.value, endDate: customEndDate.value };
   rangeMenuOpen.value = false;
   chartScrollLeft.value = 0;
+  chartActiveIndex.value = null;
+  chartInspectionRatio.value = null;
   void load();
 }
 
 function syncChartScroll(value: number) {
   chartScrollLeft.value = value;
+}
+
+function syncChartInspection(index: number | null, ratio: number | null) {
+  chartActiveIndex.value = index;
+  chartInspectionRatio.value = ratio;
 }
 
 function presetDateRange(preset: Exclude<RangePreset, 'custom'>): StatisticsRange {
