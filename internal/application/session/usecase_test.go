@@ -5700,14 +5700,23 @@ func TestAppendPromptResumesStoredCodexSessionID(t *testing.T) {
 		ID:             "session-1",
 		ProjectID:      "project-1",
 		Requirement:    "original requirement",
+		Mentions:       []domain.PromptMention{{Path: "old.go"}},
 		Mode:           domain.ModeChat,
 		Status:         domain.StatusStopped,
 		CodexSessionID: "codex-session-current",
 		WorktreePath:   "/workspace/session-1",
 	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID: "staged-1", Filename: "current.png", Path: "/attachments/staged/staged-1/current.png", MimeType: "image/png",
+	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-current"}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["requirement-image"] = domain.SessionAttachment{
+		ID: "requirement-image", SessionID: "session-1", Role: domain.FileRoleInput,
+		SourceType: domain.AttachmentSourceRequirement, Path: "/archive/original.png", MimeType: "image/png",
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
 	ids := []domain.ID{"append-1", "process-run-1"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
@@ -5716,8 +5725,10 @@ func TestAppendPromptResumesStoredCodexSessionID(t *testing.T) {
 	}
 
 	_, err := service.AppendPrompt(ctx, AppendPromptInput{
-		SessionID: "session-1",
-		Body:      "use latest thread",
+		SessionID:           "session-1",
+		Body:                "use latest thread",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+		Mentions:            []domain.PromptMention{{Path: "current.go"}},
 	})
 	if err != nil {
 		t.Fatalf("AppendPrompt() error = %v", err)
@@ -5739,6 +5750,13 @@ func TestAppendPromptResumesStoredCodexSessionID(t *testing.T) {
 	}
 	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-current" {
 		t.Fatalf("resume input = %#v", codex.resumeInput)
+	}
+	if paths := codexInputPaths(codex.resumeInput.Input, "localImage"); len(paths) != 1 || paths[0] != "/attachments/sessions/session-1/staged-1/current.png" {
+		t.Fatalf("resume local images = %#v", codex.resumeInput.Input)
+	}
+	prompt := codexInputText(codex.resumeInput.Input)
+	if !strings.Contains(prompt, `path="current.go"`) || strings.Contains(prompt, `path="old.go"`) {
+		t.Fatalf("resume prompt mentions = %q", prompt)
 	}
 }
 
@@ -9265,6 +9283,7 @@ func TestExecuteSessionStartsNewThreadOnlyWhenResumeThreadIsUnavailable(t *testi
 		ID:             "session-1",
 		ProjectID:      "project-1",
 		Requirement:    "implement session",
+		Mentions:       []domain.PromptMention{{Path: "original.go"}},
 		Status:         domain.StatusStopped,
 		CodexSessionID: "codex-session-old",
 		WorktreePath:   "/workspace/session-1",
@@ -9274,7 +9293,12 @@ func TestExecuteSessionStartsNewThreadOnlyWhenResumeThreadIsUnavailable(t *testi
 		resumeErr:   processdomain.ErrThreadUnavailable,
 		startHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-new"},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["requirement-image"] = domain.SessionAttachment{
+		ID: "requirement-image", SessionID: "session-1", Role: domain.FileRoleInput,
+		SourceType: domain.AttachmentSourceRequirement, Path: "/archive/original.png", MimeType: "image/png",
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
 	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
@@ -9288,8 +9312,14 @@ func TestExecuteSessionStartsNewThreadOnlyWhenResumeThreadIsUnavailable(t *testi
 	if !codex.resumeCalled || codexInputText(codex.resumeInput.Input) != "continue" {
 		t.Fatalf("Codex resume input = %#v", codex.resumeInput)
 	}
-	if !codex.startCalled || codexInputText(codex.startInput.Input) != rebuiltPromptNotice+"\n\n原始需求：\nimplement session" {
+	if paths := codexInputPaths(codex.resumeInput.Input, "localImage"); len(paths) != 0 {
+		t.Fatalf("Codex resume local images = %#v", codex.resumeInput.Input)
+	}
+	if !codex.startCalled || !strings.Contains(codexInputText(codex.startInput.Input), rebuiltPromptNotice+"\n\n原始需求：\nimplement session") || !strings.Contains(codexInputText(codex.startInput.Input), `path="original.go"`) {
 		t.Fatalf("Codex fallback start input = %#v", codex.startInput)
+	}
+	if paths := codexInputPaths(codex.startInput.Input, "localImage"); len(paths) != 1 || paths[0] != "/archive/original.png" {
+		t.Fatalf("Codex fallback start local images = %#v", codex.startInput.Input)
 	}
 }
 
@@ -10163,7 +10193,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.ProcessRunID != "process-run-2" {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
 	}
-	if prompt := codexInputText(codex.resumeInput.Input); !strings.Contains(prompt, "continue work") || !strings.Contains(prompt, "/archive/model.3mf") || repo.appends[0].Status != domain.PromptAppendInflight {
+	if prompt := codexInputText(codex.resumeInput.Input); !strings.Contains(prompt, "continue work") || strings.Contains(prompt, "/archive/model.3mf") || repo.appends[0].Status != domain.PromptAppendInflight {
 		t.Fatalf("resume prompt delivery = %#v appends=%#v", codex.resumeInput, repo.appends)
 	}
 	if !slices.Equal(codexInputPaths(codex.resumeInput.Input, "localImage"), []string{"/archive/image.png"}) {

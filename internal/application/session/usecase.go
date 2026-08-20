@@ -3980,12 +3980,8 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	developerInstructions := joinPromptParts(anyCodeDeveloperInstructions(session, artifactDir), mindMapGuidance)
-	files, err := s.listSessionAttachments(ctx, session.ID)
-	if err != nil {
-		return processdomain.CodexHandle{}, err
-	}
-	files = appendUniqueSessionFiles(files, options.promptFiles...)
-	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
+	turnFiles := appendUniqueSessionFiles(nil, options.promptFiles...)
+	turnMentions := appendUniquePromptMentions(nil, options.promptMentions...)
 	if options.resumeCodexSessionID != "" {
 		handle, resumeErr := s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:          runID,
@@ -3993,7 +3989,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			CodexSessionID:        options.resumeCodexSessionID,
 			Workdir:               workdir,
 			ArtifactDir:           artifactDir,
-			Input:                 codexInput(prompt, files, mentions),
+			Input:                 codexInput(prompt, turnFiles, turnMentions),
 			Action:                action,
 			ActionArgument:        actionArgument,
 			DeveloperInstructions: developerInstructions,
@@ -4012,6 +4008,12 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		}
 		prompt = strings.TrimSpace(options.fallbackPrompt)
 	}
+	files, err := s.listSessionAttachments(ctx, session.ID)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
+	files = appendUniqueSessionFiles(files, turnFiles...)
+	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), turnMentions...)
 	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots, developerInstructions, mindMapTools))
 }
 
