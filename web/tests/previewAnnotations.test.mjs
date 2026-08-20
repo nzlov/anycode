@@ -109,7 +109,7 @@ test('touch text selections survive tapping the mobile annotation toolbar', () =
   assert.match(annotator, /if \(selection\.isCollapsed\) return;/);
 });
 
-test('preview dialogs merge their close action into the annotation toolbar', () => {
+test('preview dialogs keep their close action available with annotation tools', () => {
   assert.equal(supportsPreviewAnnotations('image'), true);
   assert.equal(supportsPreviewAnnotations('text'), true);
   assert.equal(supportsPreviewAnnotations('pdf'), false);
@@ -120,10 +120,12 @@ test('preview dialogs merge their close action into the annotation toolbar', () 
   assert.match(annotator, /\.preview-annotator__toolbar-actions\s*{[^}]*flex:\s*0 0 auto/s);
   assert.match(annotator, /\.preview-annotator__toolbar-controls\s*{[^}]*overflow-x:\s*auto/s);
   assert.equal((filePreview.match(/<slot name="toolbar-actions"/g) ?? []).length, 2);
-  for (const source of [artifactsPanel, artifactEvent, questionsPanel, detail]) {
+  for (const source of [artifactsPanel, artifactEvent, questionsPanel]) {
     assert.match(source, /#toolbar-actions>[\s\S]*icon="close"/);
     assert.match(source, /supportsPreviewAnnotations/);
   }
+  assert.match(detail, /<q-card-section class="event-resource-dialog__header">/);
+  assert.doesNotMatch(detail, /#toolbar-(?:leading|actions)/);
   assert.match(filePreview, /v-if="file\?\.previewKind === 'image'"/);
   assert.doesNotMatch(filePreview, /previewKind === 'image' && imageURL/);
   assert.match(

@@ -85,7 +85,7 @@ test('event stream routes local markdown and authenticated images through modal 
   assert.match(detail, /'app-content-dialog': !isMobileLayout/);
 });
 
-test('mobile event file and diff previews reuse the titleless full-screen temporary-file viewer', () => {
+test('event file and diff previews keep a centered title bar above preview tools', () => {
   const detail = readFileSync(
     new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
@@ -111,22 +111,16 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
     detail,
     /<q-dialog[\s\S]*?v-model="eventResourceDialogOpen"[\s\S]*?:maximized="isMobileLayout"/,
   );
-  assert.match(
-    detail,
-    /v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible"[\s\S]*?class="event-resource-dialog__header"/,
-  );
+  assert.match(detail, /<q-card-section class="event-resource-dialog__header">/);
   assert.match(
     detail,
     /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,
   );
   assert.match(
     detail,
-    /v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible"[\s\S]*?class="event-resource-dialog__mobile-actions"/,
+    /event-resource-dialog__title[\s\S]*?event-resource-dialog__header-action[\s\S]*?icon="download"[\s\S]*?icon="close"/,
   );
-  assert.match(
-    detail,
-    /#toolbar-actions>[\s\S]*?:class="\{ 'event-resource-dialog__close': isMobileLayout \}"[\s\S]*?icon="close"/,
-  );
+  assert.doesNotMatch(detail, /#toolbar-(?:leading|actions)/);
   assert.match(
     artifactEvent,
     /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-event-preview__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
@@ -134,6 +128,18 @@ test('mobile event file and diff previews reuse the titleless full-screen tempor
   assert.match(
     detail,
     /\.event-resource-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
+  );
+  assert.match(
+    detail,
+    /\.event-resource-dialog__header\s*\{[^}]*display:\s*flex[^}]*min-width:\s*0/s,
+  );
+  assert.match(
+    detail,
+    /\.event-resource-dialog__title\s*\{[^}]*flex:\s*1 1 auto[^}]*justify-content:\s*center/s,
+  );
+  assert.match(
+    detail,
+    /\.event-resource-dialog__title-content\s*\{[^}]*min-width:\s*0[^}]*flex:\s*1 1 auto[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*text-align:\s*center[^}]*white-space:\s*nowrap/s,
   );
 });
 

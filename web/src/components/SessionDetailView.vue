@@ -532,29 +532,16 @@
         }"
         aria-label="事件文件"
       >
-        <q-card-section
-          v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible"
-          class="event-resource-dialog__header"
-        >
+        <q-card-section class="event-resource-dialog__header">
           <div class="event-resource-dialog__title">
             <q-icon
               :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)"
             />
-            <div class="event-resource-dialog__title-content">
-              <span>{{ eventResourceTitle }}</span>
-              <div
-                v-if="eventResourceKind === 'diff' && eventDiffFile"
-                class="event-resource-dialog__diff-meta"
-              >
-                <q-badge outline color="positive" :label="`+${eventDiffFile.additions}`" />
-                <q-badge outline color="negative" :label="`-${eventDiffFile.deletions}`" />
-                <q-badge outline color="primary" :label="eventDiffFile.status" />
-              </div>
-            </div>
+            <span class="event-resource-dialog__title-content">{{ eventResourceTitle }}</span>
           </div>
-          <div class="row items-center q-gutter-xs">
+          <div class="event-resource-dialog__header-action">
             <q-btn
-              v-if="eventResourceKind === 'file' && eventResourceFile"
+              v-if="!isMobileLayout && eventResourceKind === 'file' && eventResourceFile"
               flat
               round
               dense
@@ -565,26 +552,28 @@
             >
               <q-tooltip>下载</q-tooltip>
             </q-btn>
-            <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
-              <q-tooltip>关闭</q-tooltip>
+            <q-btn
+              v-close-popup
+              :flat="!isMobileLayout"
+              round
+              dense
+              :class="{ 'event-resource-dialog__close': isMobileLayout }"
+              icon="close"
+              aria-label="关闭"
+            >
+              <q-tooltip v-if="!isMobileLayout">关闭</q-tooltip>
             </q-btn>
           </div>
         </q-card-section>
-        <q-separator v-if="!isMobileLayout && !eventResourceAnnotationToolbarVisible" />
         <div
-          v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible"
-          class="event-resource-dialog__mobile-actions"
+          v-if="eventResourceKind === 'diff' && eventDiffFile"
+          class="event-resource-dialog__diff-meta"
         >
-          <q-btn
-            v-close-popup
-            round
-            dense
-            class="event-resource-dialog__close"
-            icon="close"
-            aria-label="关闭"
-          />
+          <q-badge outline color="positive" :label="`+${eventDiffFile.additions}`" />
+          <q-badge outline color="negative" :label="`-${eventDiffFile.deletions}`" />
+          <q-badge outline color="primary" :label="eventDiffFile.status" />
         </div>
-        <q-separator v-if="isMobileLayout && !eventResourceAnnotationToolbarVisible" />
+        <q-separator />
         <q-card-section
           class="event-resource-dialog__body"
           :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
@@ -604,41 +593,7 @@
             :annotatable="eventResourceFile?.sourceType !== 'workspace'"
             :annotation-session-id="sessionId"
             :annotation-source="`临时文件 ${eventResourceTitle}`"
-          >
-            <template v-if="eventResourceAnnotationToolbarVisible" #toolbar-leading>
-              <div class="event-resource-dialog__title">
-                <q-icon :name="fileIcon(eventResourceFile)" />
-                <div class="event-resource-dialog__title-content">
-                  <span>{{ eventResourceTitle }}</span>
-                </div>
-              </div>
-            </template>
-            <template v-if="eventResourceAnnotationToolbarVisible" #toolbar-actions>
-              <q-btn
-                v-if="!isMobileLayout"
-                flat
-                round
-                dense
-                icon="download"
-                aria-label="下载文件"
-                :loading="eventResourceDownloading"
-                @click="downloadEventResource"
-              >
-                <q-tooltip>下载</q-tooltip>
-              </q-btn>
-              <q-btn
-                v-close-popup
-                :flat="!isMobileLayout"
-                round
-                dense
-                :class="{ 'event-resource-dialog__close': isMobileLayout }"
-                icon="close"
-                aria-label="关闭"
-              >
-                <q-tooltip v-if="!isMobileLayout">关闭</q-tooltip>
-              </q-btn>
-            </template>
-          </SessionFilePreview>
+          />
         </q-card-section>
       </q-card>
     </q-dialog>
@@ -666,10 +621,7 @@ import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAnnotation, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import { provideAnnotationDraftInjector } from '@/services/annotationDraftInjection';
-import {
-  supportsPreviewAnnotations,
-  type PreviewAnnotationAttachment,
-} from '@/services/previewAnnotations';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import type { DiffFile, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import { getSessionDiffFiles } from '@/services/diff';
 import {
@@ -782,12 +734,6 @@ const eventDiffFile = ref<DiffFile | null>(null);
 const eventResourceDialogOpen = ref(false);
 const eventResourceKind = ref<'diff' | 'file'>('file');
 const eventResourceFile = ref<SessionFile | null>(null);
-const eventResourceAnnotationToolbarVisible = computed(
-  () =>
-    eventResourceKind.value === 'file' &&
-    eventResourceFile.value?.sourceType !== 'workspace' &&
-    supportsPreviewAnnotations(eventResourceFile.value?.previewKind),
-);
 const eventResourceDownloading = ref(false);
 let eventResourceRequest = 0;
 let mounted = false;
@@ -1674,49 +1620,56 @@ async function scrollEventsToBottom(force = false) {
   max-height: 100%;
 }
 
-.event-resource-dialog__mobile-actions {
-  display: flex;
-  min-height: 48px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px
-    max(8px, env(safe-area-inset-left));
-}
-
 .event-resource-dialog__close {
   color: var(--ac-text);
   background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
   box-shadow: var(--ac-shadow-card);
 }
 
-.event-resource-dialog__header,
+.event-resource-dialog__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px
+    max(12px, env(safe-area-inset-left));
+}
+
+.event-resource-dialog__header-action,
 .event-resource-dialog__title {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
 }
 
-.event-resource-dialog__header {
-  justify-content: space-between;
+.event-resource-dialog__header-action {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.event-resource-dialog__title {
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
 }
 
 .event-resource-dialog__title-content {
-  display: grid;
   min-width: 0;
-  gap: 6px;
-}
-
-.event-resource-dialog__title-content > span {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .event-resource-dialog__diff-meta {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
+  padding: 0 12px 8px;
 }
 
 .event-resource-dialog__body {
