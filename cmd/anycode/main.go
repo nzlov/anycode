@@ -238,8 +238,9 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		return nil, fmt.Errorf("initialize web push notifications: %w", err)
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
+	projectGit := gitcli.New("")
 	useCases := graph.UseCases{
-		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New(""), projectapp.WithMindMapSettings(settings)),
+		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
 		Sessions:         sessionService,
 		Timeline:         timelineService,

@@ -2,16 +2,25 @@
   <component
     :is="page ? 'div' : QDialog"
     :model-value="page ? undefined : modelValue"
-    :persistent="persistent"
+    :persistent="persistent || creating"
     @update:model-value="emitModel"
   >
     <q-card class="directory-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
         <div class="text-subtitle1 text-weight-bold">
-          {{ selectOnly ? '选择目录' : '选择项目目录' }}
+          {{ dialogTitle }}
         </div>
         <q-space />
-        <q-btn v-if="!persistent" flat round dense icon="close" aria-label="关闭" @click="emitModel(false)">
+        <q-btn
+          v-if="!persistent"
+          flat
+          round
+          dense
+          icon="close"
+          aria-label="关闭"
+          :disable="creating"
+          @click="emitModel(false)"
+        >
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
       </q-card-section>
@@ -19,12 +28,45 @@
       <q-separator />
 
       <q-card-section class="directory-dialog__body">
+        <q-btn-toggle
+          v-if="!selectOnly"
+          v-model="sourceType"
+          spread
+          no-caps
+          unelevated
+          toggle-color="primary"
+          :options="sourceOptions"
+          aria-label="项目来源"
+        />
+
+        <q-input
+          v-if="sourceType === 'remote' && !selectOnly"
+          v-model="repositoryURL"
+          dense
+          outlined
+          label="项目地址"
+          placeholder="https://example.com/owner/project.git"
+          :disable="creating"
+          clearable
+        >
+          <template #prepend>
+            <q-icon name="link" />
+          </template>
+        </q-input>
+
         <q-input v-model="pathInput" dense outlined label="当前路径" @keyup.enter="goToInputPath">
           <template #prepend>
             <q-icon name="folder" />
           </template>
           <template #append>
-            <q-btn flat round dense icon="keyboard_return" aria-label="打开路径" @click="goToInputPath">
+            <q-btn
+              flat
+              round
+              dense
+              icon="keyboard_return"
+              aria-label="打开路径"
+              @click="goToInputPath"
+            >
               <q-tooltip>打开路径</q-tooltip>
             </q-btn>
           </template>
@@ -44,7 +86,14 @@
           </q-btn>
           <span class="text-body2 text-muted directory-breadcrumb__path">{{ currentPath }}</span>
           <q-space />
-          <q-input v-model="filter" dense borderless placeholder="过滤当前目录" clearable class="directory-filter">
+          <q-input
+            v-model="filter"
+            dense
+            borderless
+            placeholder="过滤当前目录"
+            clearable
+            class="directory-filter"
+          >
             <template #prepend>
               <q-icon name="search" />
             </template>
@@ -89,7 +138,9 @@
                   aria-label="选择目录"
                   @click.stop="selectDirectory(entry.path)"
                 >
-                  <q-tooltip>选择目录</q-tooltip>
+                  <q-tooltip>{{
+                    sourceType === 'remote' && !selectOnly ? '选择为克隆父目录' : '选择目录'
+                  }}</q-tooltip>
                 </q-btn>
               </div>
             </q-item-section>
@@ -100,7 +151,7 @@
         </q-list>
         <q-card flat bordered class="selected-directory-card">
           <div>
-            <div class="text-caption text-muted">当前选择</div>
+            <div class="text-caption text-muted">{{ selectionLabel }}</div>
             <div class="mono selected-directory-card__path">{{ selected || '尚未选择目录' }}</div>
           </div>
         </q-card>
@@ -108,18 +159,27 @@
       </q-card-section>
 
       <q-card-actions class="directory-dialog__actions">
-        <q-btn v-if="!persistent" flat round color="primary" icon="close" aria-label="取消" @click="emitModel(false)">
+        <q-btn
+          v-if="!persistent"
+          flat
+          round
+          color="primary"
+          icon="close"
+          aria-label="取消"
+          :disable="creating"
+          @click="emitModel(false)"
+        >
           <q-tooltip>取消</q-tooltip>
         </q-btn>
         <q-btn
           unelevated
           color="primary"
           class="app-on-primary"
-          icon="folder_open"
-          :label="selectOnly ? '选择该目录' : '打开该项目'"
+          :icon="sourceType === 'remote' && !selectOnly ? 'cloud_download' : 'folder_open'"
+          :label="confirmLabel"
           no-caps
           :loading="creating"
-          :disable="!selected"
+          :disable="!canConfirm"
           @click="confirmSelectedDirectory"
         />
       </q-card-actions>
@@ -129,7 +189,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { QDialog } from 'quasar';
+import { QDialog, useQuasar } from 'quasar';
 
 import { useDirectoryBrowser } from '@/composables/useDirectoryBrowser';
 import type { DirectoryEntry } from '@/services/projects';
@@ -152,13 +212,38 @@ const filter = ref('');
 const selected = ref('');
 const pathInput = ref('/');
 const creating = ref(false);
+const sourceType = ref<'local' | 'remote'>('local');
+const repositoryURL = ref('');
+const $q = useQuasar();
 const { currentPath, parentPath, entries, loading, loadDirectory } = useDirectoryBrowser();
-const { createProjectFromPath } = useProjects();
+const { createProjectFromPath, createRemoteProject } = useProjects();
+
+const sourceOptions = [
+  { label: '本地项目', value: 'local', icon: 'folder' },
+  { label: '远程项目', value: 'remote', icon: 'cloud_download' },
+];
+
+const dialogTitle = computed(() => (props.selectOnly ? '选择目录' : '添加项目'));
+const selectionLabel = computed(() =>
+  sourceType.value === 'remote' && !props.selectOnly ? '本地克隆父目录' : '当前选择',
+);
+const confirmLabel = computed(() => {
+  if (props.selectOnly) return '选择该目录';
+  return sourceType.value === 'remote' ? '克隆并添加' : '打开该项目';
+});
+const canConfirm = computed(
+  () =>
+    Boolean(selected.value) &&
+    (props.selectOnly || sourceType.value === 'local' || Boolean(repositoryURL.value.trim())),
+);
 
 const filteredEntries = computed(() => {
   const keyword = filter.value.trim().toLowerCase();
   if (!keyword) return entries.value;
-  return entries.value.filter((entry) => entry.name.toLowerCase().includes(keyword) || entry.path.toLowerCase().includes(keyword));
+  return entries.value.filter(
+    (entry) =>
+      entry.name.toLowerCase().includes(keyword) || entry.path.toLowerCase().includes(keyword),
+  );
 });
 
 watch(
@@ -166,6 +251,8 @@ watch(
   (open) => {
     if (open) {
       selected.value = '';
+      sourceType.value = 'local';
+      repositoryURL.value = '';
       pathInput.value = props.initialPath || pathInput.value || '/';
       void openInitialPath();
     }
@@ -175,6 +262,11 @@ watch(
 
 watch(currentPath, (path) => {
   pathInput.value = path;
+});
+
+watch(sourceType, (source) => {
+  if (props.selectOnly) return;
+  selected.value = source === 'remote' ? currentPath.value : '';
 });
 
 function emitModel(value: boolean) {
@@ -189,23 +281,34 @@ async function confirmSelectedDirectory() {
     return;
   }
   creating.value = true;
+  const cloning = sourceType.value === 'remote';
+  if (cloning) {
+    $q.loading.show({ message: '正在克隆并添加远程项目…' });
+  }
   try {
-    await createProjectFromPath(selected.value);
+    if (cloning) {
+      await createRemoteProject(selected.value, repositoryURL.value.trim());
+    } else {
+      await createProjectFromPath(selected.value);
+    }
     emit('update:modelValue', false);
+  } catch {
+    return;
   } finally {
+    if (cloning) $q.loading.hide();
     creating.value = false;
   }
 }
 
 async function goToInputPath() {
   await goToPath(pathInput.value || '/');
-  if (props.selectOnly) selected.value = currentPath.value;
+  if (props.selectOnly || sourceType.value === 'remote') selected.value = currentPath.value;
 }
 
 async function openInitialPath() {
   try {
     await goToPath(pathInput.value);
-    if (props.selectOnly) selected.value = currentPath.value;
+    if (props.selectOnly || sourceType.value === 'remote') selected.value = currentPath.value;
   } catch {
     return;
   }
@@ -213,6 +316,7 @@ async function openInitialPath() {
 
 async function goToPath(path: string) {
   await loadDirectory(path);
+  if (!props.selectOnly && sourceType.value === 'remote') selected.value = currentPath.value;
 }
 
 async function enterDirectory(entry: DirectoryEntry) {

@@ -63,12 +63,9 @@ test('agent writable roots use a dedicated editable list with direct input and d
     /<ProjectDirectoryDialog[\s\S]*select-only[\s\S]*@select="selectWritableRoot"/,
   );
   assert.doesNotMatch(settingsSource, /v-model="agentWritableRootsText"/);
-  assert.match(directorySource, /selectOnly \? '选择目录' : '选择项目目录'/);
+  assert.match(directorySource, /props\.selectOnly \? '选择目录' : '添加项目'/);
   assert.match(directorySource, /emit\('select', selected\.value\)/);
-  assert.match(
-    stylesSource,
-    /\.global-settings-add-fab\s*\{[^}]*position:\s*relative;/s,
-  );
+  assert.match(stylesSource, /\.global-settings-add-fab\s*\{[^}]*position:\s*relative;/s);
   assert.match(
     stylesSource,
     /\.writable-root-editor\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;[^}]*align-items:\s*flex-start;/s,

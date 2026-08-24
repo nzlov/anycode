@@ -187,6 +187,21 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input model.Create
 	return mapProject(dto), nil
 }
 
+// CloneProject is the resolver for the cloneProject field.
+func (r *mutationResolver) CloneProject(ctx context.Context, input model.CloneProjectInput) (*model.Project, error) {
+	if r.UseCases.Projects == nil {
+		return nil, missingUseCase("projects")
+	}
+	dto, err := r.UseCases.Projects.CloneProject(ctx, projectapp.CloneProjectInput{
+		ParentPath:    input.ParentPath,
+		RepositoryURL: input.RepositoryURL,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapProject(dto), nil
+}
+
 // UpdateProjectSettings is the resolver for the updateProjectSettings field.
 func (r *mutationResolver) UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error) {
 	if r.UseCases.Projects == nil {

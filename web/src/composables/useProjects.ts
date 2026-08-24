@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 
 import {
+  cloneProject,
   createProject,
   listProjects,
   removeProject,
@@ -41,6 +42,17 @@ export function useProjects() {
 
   async function createProjectFromPath(path: string) {
     const project = await createProject({ path, name: basename(path) });
+    storeCreatedProject(project);
+    return project;
+  }
+
+  async function createRemoteProject(parentPath: string, repositoryUrl: string) {
+    const project = await cloneProject({ parentPath, repositoryUrl });
+    storeCreatedProject(project);
+    return project;
+  }
+
+  function storeCreatedProject(project: ProjectSummary) {
     mutationRevision += 1;
     const existingIndex = projects.value.findIndex((item) => item.id === project.id);
     if (existingIndex >= 0) {
@@ -48,7 +60,6 @@ export function useProjects() {
     } else {
       projects.value.push(project);
     }
-    return project;
   }
 
   async function removeProjectById(id: string) {
@@ -83,6 +94,7 @@ export function useProjects() {
     loaded,
     loadProjects,
     createProjectFromPath,
+    createRemoteProject,
     removeProjectById,
     updateProjectSettingsById,
   };

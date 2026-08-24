@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	domain "github.com/nzlov/anycode/internal/domain/project"
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
@@ -92,6 +93,55 @@ func TestCreateProjectRestoresRemovedProjectByPath(t *testing.T) {
 	}
 	if repo.byID["project-1"].RemovedAt != nil {
 		t.Fatalf("saved removedAt = %#v", repo.byID["project-1"].RemovedAt)
+	}
+}
+
+func TestCloneProjectClonesThenCreatesProject(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	cloner := &fakeRepositoryCloner{path: "/workspace/anycode"}
+	service := New(repo, nil, &fakeGitInspector{
+		states: map[string]domain.GitState{
+			"/workspace/anycode": {IsRepository: true, CurrentBranch: "main"},
+		},
+	}, WithRepositoryCloner(cloner))
+	service.generateID = func() (domain.ID, error) { return "project-1", nil }
+
+	got, err := service.CloneProject(ctx, CloneProjectInput{
+		ParentPath:    " /workspace ",
+		RepositoryURL: " https://example.test/anycode.git ",
+	})
+	if err != nil {
+		t.Fatalf("CloneProject() error = %v", err)
+	}
+	if cloner.parentPath != "/workspace" || cloner.repositoryURL != "https://example.test/anycode.git" {
+		t.Fatalf("Clone() input = parent:%q repository:%q", cloner.parentPath, cloner.repositoryURL)
+	}
+	if got.ID != "project-1" || got.Name != "anycode" || got.Path != "/workspace/anycode" || !got.IsGit {
+		t.Fatalf("CloneProject() = %#v", got)
+	}
+	if len(repo.saved) != 1 {
+		t.Fatalf("saved projects = %d", len(repo.saved))
+	}
+}
+
+func TestCloneProjectFailureDoesNotCreateProject(t *testing.T) {
+	repo := newFakeRepository()
+	service := New(repo, nil, &fakeGitInspector{}, WithRepositoryCloner(&fakeRepositoryCloner{err: errors.New("authentication failed")}))
+
+	_, err := service.CloneProject(context.Background(), CloneProjectInput{
+		ParentPath:    "/workspace",
+		RepositoryURL: "https://example.test/private.git",
+	})
+	if err == nil {
+		t.Fatal("CloneProject() expected error")
+	}
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeProjectCloneFailed || !appErr.Retryable {
+		t.Fatalf("CloneProject() error = %#v", err)
+	}
+	if len(repo.saved) != 0 {
+		t.Fatalf("saved projects = %d, want 0", len(repo.saved))
 	}
 }
 
@@ -441,6 +491,19 @@ func (b *fakeDirectoryBrowser) List(_ context.Context, path string) (domain.Dire
 		return domain.DirectoryListing{}, b.err
 	}
 	return b.listing, nil
+}
+
+type fakeRepositoryCloner struct {
+	parentPath    string
+	repositoryURL string
+	path          string
+	err           error
+}
+
+func (c *fakeRepositoryCloner) Clone(_ context.Context, parentPath string, repositoryURL string) (string, error) {
+	c.parentPath = parentPath
+	c.repositoryURL = repositoryURL
+	return c.path, c.err
 }
 
 type fakeGitInspector struct {

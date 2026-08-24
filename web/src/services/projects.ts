@@ -154,6 +154,23 @@ export async function createProject(input: { path: string; name: string }) {
   return normalizeProject(data.createProject, false);
 }
 
+export async function cloneProject(input: { parentPath: string; repositoryUrl: string }) {
+  const data = await graphqlFetch<
+    { cloneProject: GraphQLProject },
+    { input: { parentPath: string; repositoryUrl: string } }
+  >({
+    query: `
+      mutation CloneProject($input: CloneProjectInput!) {
+        cloneProject(input: $input) {
+          ${projectFields}
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return normalizeProject(data.cloneProject, false);
+}
+
 export async function removeProject(id: string) {
   const data = await graphqlFetch<{ removeProject: boolean }, { id: string }>({
     query: `

@@ -66,6 +66,10 @@ type DirectoryBrowser interface {
 	List(ctx context.Context, path string) (DirectoryListing, error)
 }
 
+type RepositoryCloner interface {
+	Clone(ctx context.Context, parentPath string, repositoryURL string) (string, error)
+}
+
 type GitInspector interface {
 	Detect(ctx context.Context, path string) (GitState, error)
 	Branches(ctx context.Context, path string) ([]GitBranch, error)

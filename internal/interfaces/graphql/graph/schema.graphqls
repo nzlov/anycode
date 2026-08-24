@@ -96,6 +96,7 @@ type Mutation {
   updateQuickCommand(input: UpdateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
+  cloneProject(input: CloneProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
   updateProjectMindMap(input: UpdateMindMapInput!): MindMapUpdateEvent!
   retryMindMapTask(id: ID!): MindMapCard!
@@ -878,6 +879,11 @@ input BrowseDirectoryInput {
 input CreateProjectInput {
   path: String!
   name: String!
+}
+
+input CloneProjectInput {
+  parentPath: String!
+  repositoryUrl: String!
 }
 
 input UpdateProjectSettingsInput {

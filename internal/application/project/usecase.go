@@ -11,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	domain "github.com/nzlov/anycode/internal/domain/project"
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
 type UseCase interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (DTO, error)
+	CloneProject(ctx context.Context, input CloneProjectInput) (DTO, error)
 	BrowseDirectory(ctx context.Context, input BrowseDirectoryInput) (DirectoryPageDTO, error)
 	UpdateProjectSettings(ctx context.Context, input UpdateProjectSettingsInput) (DTO, error)
 	SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkflowInput) (DTO, error)
@@ -28,6 +30,11 @@ type UseCase interface {
 type CreateProjectInput struct {
 	Path string
 	Name string
+}
+
+type CloneProjectInput struct {
+	ParentPath    string
+	RepositoryURL string
 }
 
 type BrowseDirectoryInput struct {
@@ -78,6 +85,7 @@ type Service struct {
 	repo            domain.Repository
 	browser         domain.DirectoryBrowser
 	inspector       domain.GitInspector
+	cloner          domain.RepositoryCloner
 	gitCacheMu      sync.Mutex
 	gitCache        map[domain.ID]domain.GitState
 	now             func() time.Time
@@ -89,6 +97,10 @@ type Option func(*Service)
 
 func WithMindMapSettings(provider settingdomain.MindMapConfigurationProvider) Option {
 	return func(service *Service) { service.mindMapSettings = provider }
+}
+
+func WithRepositoryCloner(cloner domain.RepositoryCloner) Option {
+	return func(service *Service) { service.cloner = cloner }
 }
 
 func New(repo domain.Repository, browser domain.DirectoryBrowser, inspector domain.GitInspector, options ...Option) *Service {
@@ -155,6 +167,25 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 	}
 	s.cacheGitState(project.ID, gitState)
 	return toDTO(project, gitState), nil
+}
+
+func (s *Service) CloneProject(ctx context.Context, input CloneProjectInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("project usecase: nil service")
+	}
+	parentPath := strings.TrimSpace(input.ParentPath)
+	repositoryURL := strings.TrimSpace(input.RepositoryURL)
+	if parentPath == "" || repositoryURL == "" {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "本地父目录和项目地址不能为空")
+	}
+	if s.cloner == nil {
+		return DTO{}, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "远程项目克隆服务不可用").WithRetryable(true)
+	}
+	projectPath, err := s.cloner.Clone(ctx, parentPath, repositoryURL)
+	if err != nil {
+		return DTO{}, apperror.Wrap(err, apperror.CodeProjectCloneFailed, apperror.CategoryInfraError, "克隆远程项目失败，请检查项目地址、访问权限和本地父目录").WithRetryable(true)
+	}
+	return s.CreateProject(ctx, CreateProjectInput{Path: projectPath})
 }
 
 func (s *Service) BrowseDirectory(ctx context.Context, input BrowseDirectoryInput) (DirectoryPageDTO, error) {

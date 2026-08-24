@@ -32,6 +32,7 @@ const (
 	CodeDiffUnavailable       = "diff_unavailable"
 	CodeCloseFailed           = "close_failed"
 	CodePromptEditAfterStart  = "prompt_edit_after_start"
+	CodeProjectCloneFailed    = "project_clone_failed"
 	CodeValidationFailed      = "validation_failed"
 	CodeNotFound              = "not_found"
 	CodeInternal              = "internal_error"

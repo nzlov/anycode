@@ -147,11 +147,13 @@
         icon="add"
         aria-label="新增项目"
         :disable="loading"
-        :to="{ name: 'project-create' }"
+        @click="openCreateProject"
       >
         <q-tooltip>新增项目</q-tooltip>
       </q-btn>
     </q-page-sticky>
+
+    <ProjectDirectoryDialog v-model="createDialogOpen" />
 
     <q-dialog v-model="removeDialogOpen">
       <q-card class="confirm-dialog">
@@ -196,17 +198,21 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
+import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import type { ProjectSummary } from '@/services/projects';
 import { getGeneralSettings, type GeneralSettings } from '@/services/generalSettings';
 
 const router = useRouter();
+const $q = useQuasar();
 const { projects, loading, loadProjects, removeProjectById } = useProjects();
 const loadError = ref('');
+const createDialogOpen = ref(false);
 const removeDialogOpen = ref(false);
 const removingProjectId = ref('');
 const removingProjectName = ref('');
@@ -222,7 +228,10 @@ if (generalSettingsInvalidation) {
 async function refreshProjects() {
   loadError.value = '';
   try {
-    const [, settings] = await Promise.all([loadProjects(), getGeneralSettings().catch(() => null)]);
+    const [, settings] = await Promise.all([
+      loadProjects(),
+      getGeneralSettings().catch(() => null),
+    ]);
     generalSettings.value = settings;
   } catch {
     loadError.value = '无法加载项目';
@@ -231,6 +240,14 @@ async function refreshProjects() {
 
 async function refreshGeneralSettings() {
   generalSettings.value = await getGeneralSettings().catch(() => null);
+}
+
+function openCreateProject() {
+  if ($q.screen.lt.sm) {
+    void router.push({ name: 'project-create' });
+    return;
+  }
+  createDialogOpen.value = true;
 }
 
 function openProjectOverview(projectId: string) {

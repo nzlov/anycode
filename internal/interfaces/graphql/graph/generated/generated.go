@@ -242,6 +242,7 @@ type ComplexityRoot struct {
 		ActivateWorkflowDefinition  func(childComplexity int, id string) int
 		AppendPrompt                func(childComplexity int, input model.AppendPromptInput) int
 		CleanupSessions             func(childComplexity int, input model.CleanupSessionsInput) int
+		CloneProject                func(childComplexity int, input model.CloneProjectInput) int
 		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
 		CloseTunnel                 func(childComplexity int, id string) int
 		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
@@ -847,6 +848,7 @@ type MutationResolver interface {
 	UpdateQuickCommand(ctx context.Context, input model.UpdateQuickCommandInput) (*model.QuickCommand, error)
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
+	CloneProject(ctx context.Context, input model.CloneProjectInput) (*model.Project, error)
 	UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error)
 	UpdateProjectMindMap(ctx context.Context, input model.UpdateMindMapInput) (*model.MindMapUpdateEvent, error)
 	RetryMindMapTask(ctx context.Context, id string) (*model.MindMapCard, error)
@@ -1693,6 +1695,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CleanupSessions(childComplexity, args["input"].(model.CleanupSessionsInput)), true
+	case "Mutation.cloneProject":
+		if e.ComplexityRoot.Mutation.CloneProject == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_cloneProject_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CloneProject(childComplexity, args["input"].(model.CloneProjectInput)), true
 	case "Mutation.closeSession":
 		if e.ComplexityRoot.Mutation.CloseSession == nil {
 			break
@@ -4471,6 +4484,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBranchDiffInput,
 		ec.unmarshalInputBrowseDirectoryInput,
 		ec.unmarshalInputCleanupSessionsInput,
+		ec.unmarshalInputCloneProjectInput,
 		ec.unmarshalInputCloseSessionInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateQuickCommandInput,
@@ -4707,6 +4721,7 @@ type Mutation {
   updateQuickCommand(input: UpdateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
+  cloneProject(input: CloneProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
   updateProjectMindMap(input: UpdateMindMapInput!): MindMapUpdateEvent!
   retryMindMapTask(id: ID!): MindMapCard!
@@ -5491,6 +5506,11 @@ input CreateProjectInput {
   name: String!
 }
 
+input CloneProjectInput {
+  parentPath: String!
+  repositoryUrl: String!
+}
+
 input UpdateProjectSettingsInput {
   projectId: ID!
   worktreeInitCommand: String!
@@ -5839,6 +5859,17 @@ func (ec *executionContext) field_Mutation_cleanupSessions_args(ctx context.Cont
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCleanupSessionsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCleanupSessionsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_cloneProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCloneProjectInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCloneProjectInput)
 	if err != nil {
 		return nil, err
 	}
@@ -10638,6 +10669,69 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cloneProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_cloneProject,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CloneProject(ctx, fc.Args["input"].(model.CloneProjectInput))
+		},
+		nil,
+		ec.marshalNProject2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐProject,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_cloneProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "path":
+				return ec.fieldContext_Project_path(ctx, field)
+			case "isGit":
+				return ec.fieldContext_Project_isGit(ctx, field)
+			case "worktreeInitCommand":
+				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "mindMapEnabled":
+				return ec.fieldContext_Project_mindMapEnabled(ctx, field)
+			case "defaultWorkflowId":
+				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
+			case "gitState":
+				return ec.fieldContext_Project_gitState(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_cloneProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -26402,6 +26496,43 @@ func (ec *executionContext) unmarshalInputCleanupSessionsInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCloneProjectInput(ctx context.Context, obj any) (model.CloneProjectInput, error) {
+	var it model.CloneProjectInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"parentPath", "repositoryUrl"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "parentPath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("parentPath"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ParentPath = data
+		case "repositoryUrl":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("repositoryUrl"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RepositoryURL = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCloseSessionInput(ctx context.Context, obj any) (model.CloseSessionInput, error) {
 	var it model.CloseSessionInput
 	if obj == nil {
@@ -30301,6 +30432,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "createProject":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createProject(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cloneProject":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cloneProject(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -35293,6 +35431,11 @@ func (ec *executionContext) unmarshalNBrowseDirectoryInput2githubᚗcomᚋnzlov�
 
 func (ec *executionContext) unmarshalNCleanupSessionsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCleanupSessionsInput(ctx context.Context, v any) (model.CleanupSessionsInput, error) {
 	res, err := ec.unmarshalInputCleanupSessionsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCloneProjectInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCloneProjectInput(ctx context.Context, v any) (model.CloneProjectInput, error) {
+	res, err := ec.unmarshalInputCloneProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

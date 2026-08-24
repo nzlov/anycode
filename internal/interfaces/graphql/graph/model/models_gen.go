@@ -71,6 +71,11 @@ type CleanupSessionsInput struct {
 	OlderThanDays int     `json:"olderThanDays"`
 }
 
+type CloneProjectInput struct {
+	ParentPath    string `json:"parentPath"`
+	RepositoryURL string `json:"repositoryUrl"`
+}
+
 type CloseSessionInput struct {
 	SessionID string `json:"sessionId"`
 	Reason    string `json:"reason"`

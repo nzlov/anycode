@@ -47,6 +47,52 @@ func TestDetectBranchesAndHeadCommit(t *testing.T) {
 	}
 }
 
+func TestCloneCreatesRepositoryUnderSelectedParent(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote-project.git")
+	parent := filepath.Join(base, "clones")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, base, "init", "--bare", remote)
+
+	got, err := New("").Clone(context.Background(), parent, remote)
+	if err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	want := filepath.Join(parent, "remote-project")
+	if got != want {
+		t.Fatalf("Clone() path = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(got, ".git")); err != nil {
+		t.Fatalf("cloned .git not found: %v", err)
+	}
+}
+
+func TestCloneDirectoryNameSupportsCommonRepositoryAddresses(t *testing.T) {
+	tests := map[string]string{
+		"https://example.test/owner/repo.git": "repo",
+		"ssh://git@example.test/owner/repo":   "repo",
+		"git@example.test:owner/repo.git":     "repo",
+		"/srv/git/repo.git":                   "repo",
+	}
+	for repositoryURL, want := range tests {
+		t.Run(repositoryURL, func(t *testing.T) {
+			got, err := cloneDirectoryName(repositoryURL)
+			if err != nil {
+				t.Fatalf("cloneDirectoryName() error = %v", err)
+			}
+			if got != want {
+				t.Fatalf("cloneDirectoryName() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestHeadCommitReturnsEmptyForUnbornHead(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")

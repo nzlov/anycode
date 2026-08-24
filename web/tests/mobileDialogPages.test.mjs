@@ -41,7 +41,10 @@ test('standalone mobile entries navigate while artifact previews open in place',
     layout,
     /function openSettings[\s\S]*\$q\.screen\.lt\.sm[\s\S]*settingsDialogOpen\.value = true/,
   );
-  assert.match(projects, /:to="\{ name: 'project-create' \}"/);
+  assert.match(
+    projects,
+    /function openCreateProject[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'project-create'[\s\S]*createDialogOpen\.value = true/,
+  );
   assert.match(projects, /function openProjectSettings[\s\S]*name: 'project-settings'/);
   assert.match(
     overview,

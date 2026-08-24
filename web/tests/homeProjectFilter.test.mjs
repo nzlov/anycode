@@ -121,7 +121,7 @@ test('an empty first visit requires choosing a project before showing the applic
   );
   assert.match(layoutSource, /projectsLoaded\.value && projects\.value\.length === 0/);
   assert.match(layoutSource, /void loadProjects\(\)[\s\S]*finally\(\(\) => \{/);
-  assert.match(directorySource, /:persistent="persistent"/);
+  assert.match(directorySource, /:persistent="persistent \|\| creating"/);
   assert.equal((directorySource.match(/v-if="!persistent"/g) ?? []).length, 2);
 });
 

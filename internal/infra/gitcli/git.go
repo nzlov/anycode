@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +76,53 @@ func NewWorktrees(dataDir string) *Client {
 		dataDir = absolute
 	}
 	return &Client{gitBin: defaultGitBin, dataDir: dataDir}
+}
+
+func (c *Client) Clone(ctx context.Context, parentPath string, repositoryURL string) (string, error) {
+	parentPath = strings.TrimSpace(parentPath)
+	repositoryURL = strings.TrimSpace(repositoryURL)
+	if parentPath == "" {
+		return "", errors.New("clone parent path is required")
+	}
+	if repositoryURL == "" {
+		return "", errors.New("clone repository URL is required")
+	}
+	absoluteParent, err := filepath.Abs(parentPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve clone parent path: %w", err)
+	}
+	info, err := os.Stat(absoluteParent)
+	if err != nil {
+		return "", fmt.Errorf("inspect clone parent path: %w", err)
+	}
+	if !info.IsDir() {
+		return "", errors.New("clone parent path is not a directory")
+	}
+	directoryName, err := cloneDirectoryName(repositoryURL)
+	if err != nil {
+		return "", err
+	}
+	destination := filepath.Join(absoluteParent, directoryName)
+	if _, err := c.run(ctx, absoluteParent, "clone", "--", repositoryURL, destination); err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+func cloneDirectoryName(repositoryURL string) (string, error) {
+	candidate := strings.TrimSpace(repositoryURL)
+	if parsed, err := url.Parse(candidate); err == nil && parsed.Scheme != "" && parsed.Path != "" {
+		candidate = parsed.Path
+	}
+	candidate = strings.TrimRight(candidate, "/\\")
+	if index := strings.LastIndexAny(candidate, "/\\:"); index >= 0 {
+		candidate = candidate[index+1:]
+	}
+	candidate = strings.TrimSuffix(candidate, ".git")
+	if candidate == "" || candidate == "." || candidate == ".." || filepath.Base(candidate) != candidate {
+		return "", errors.New("clone repository URL has no valid project directory name")
+	}
+	return candidate, nil
 }
 
 func (c *Client) Detect(ctx context.Context, path string) (project.GitState, error) {

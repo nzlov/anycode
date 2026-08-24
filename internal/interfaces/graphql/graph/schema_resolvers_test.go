@@ -523,6 +523,32 @@ func TestMutationCreateProjectForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestMutationCloneProjectForwardsUseCase(t *testing.T) {
+	projects := &fakeProjectUseCase{
+		cloneResult: projectapp.DTO{
+			ID:    "project-1",
+			Name:  "AnyCode",
+			Path:  "/workspace/AnyCode",
+			IsGit: true,
+		},
+	}
+	resolver := NewResolver(UseCases{Projects: projects}).Mutation()
+
+	got, err := resolver.CloneProject(context.Background(), model.CloneProjectInput{
+		ParentPath:    "/workspace",
+		RepositoryURL: "https://example.test/AnyCode.git",
+	})
+	if err != nil {
+		t.Fatalf("CloneProject() error = %v", err)
+	}
+	if projects.cloneInput.ParentPath != "/workspace" || projects.cloneInput.RepositoryURL != "https://example.test/AnyCode.git" {
+		t.Fatalf("CloneProject input = %#v", projects.cloneInput)
+	}
+	if got.ID != "project-1" || got.Path != "/workspace/AnyCode" || !got.IsGit {
+		t.Fatalf("CloneProject() = %#v", got)
+	}
+}
+
 func TestMutationUpdateProjectSettingsForwardsRawCommand(t *testing.T) {
 	command := "  echo first\necho second\n\n"
 	projects := &fakeProjectUseCase{
@@ -1406,6 +1432,8 @@ type fakeProjectUseCase struct {
 	projectapp.UseCase
 	createInput          projectapp.CreateProjectInput
 	createResult         projectapp.DTO
+	cloneInput           projectapp.CloneProjectInput
+	cloneResult          projectapp.DTO
 	removeInput          projectapp.RemoveProjectInput
 	removeCalls          int
 	listResult           []projectapp.DTO
@@ -1507,6 +1535,11 @@ func (f *fakeSettingUseCase) DeleteQuickCommand(_ context.Context, input setting
 func (f *fakeProjectUseCase) CreateProject(_ context.Context, input projectapp.CreateProjectInput) (projectapp.DTO, error) {
 	f.createInput = input
 	return f.createResult, nil
+}
+
+func (f *fakeProjectUseCase) CloneProject(_ context.Context, input projectapp.CloneProjectInput) (projectapp.DTO, error) {
+	f.cloneInput = input
+	return f.cloneResult, nil
 }
 
 func (f *fakeProjectUseCase) RemoveProject(_ context.Context, input projectapp.RemoveProjectInput) error {
