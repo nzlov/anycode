@@ -353,6 +353,34 @@ func (_c *SessionCreate) SetNillableCodexSessionID(v *string) *SessionCreate {
 	return _c
 }
 
+// SetForkedFromSessionID sets the "forked_from_session_id" field.
+func (_c *SessionCreate) SetForkedFromSessionID(v string) *SessionCreate {
+	_c.mutation.SetForkedFromSessionID(v)
+	return _c
+}
+
+// SetNillableForkedFromSessionID sets the "forked_from_session_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableForkedFromSessionID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetForkedFromSessionID(*v)
+	}
+	return _c
+}
+
+// SetForkedFromCodexSessionID sets the "forked_from_codex_session_id" field.
+func (_c *SessionCreate) SetForkedFromCodexSessionID(v string) *SessionCreate {
+	_c.mutation.SetForkedFromCodexSessionID(v)
+	return _c
+}
+
+// SetNillableForkedFromCodexSessionID sets the "forked_from_codex_session_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableForkedFromCodexSessionID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetForkedFromCodexSessionID(*v)
+	}
+	return _c
+}
+
 // SetCodexModel sets the "codex_model" field.
 func (_c *SessionCreate) SetCodexModel(v string) *SessionCreate {
 	_c.mutation.SetCodexModel(v)
@@ -840,6 +868,14 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultCodexSessionID
 		_c.mutation.SetCodexSessionID(v)
 	}
+	if _, ok := _c.mutation.ForkedFromSessionID(); !ok {
+		v := entsession.DefaultForkedFromSessionID
+		_c.mutation.SetForkedFromSessionID(v)
+	}
+	if _, ok := _c.mutation.ForkedFromCodexSessionID(); !ok {
+		v := entsession.DefaultForkedFromCodexSessionID
+		_c.mutation.SetForkedFromCodexSessionID(v)
+	}
 	if _, ok := _c.mutation.CodexModel(); !ok {
 		v := entsession.DefaultCodexModel
 		_c.mutation.SetCodexModel(v)
@@ -995,6 +1031,12 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		return &ValidationError{Name: "codex_session_id", err: errors.New(`ent: missing required field "Session.codex_session_id"`)}
+	}
+	if _, ok := _c.mutation.ForkedFromSessionID(); !ok {
+		return &ValidationError{Name: "forked_from_session_id", err: errors.New(`ent: missing required field "Session.forked_from_session_id"`)}
+	}
+	if _, ok := _c.mutation.ForkedFromCodexSessionID(); !ok {
+		return &ValidationError{Name: "forked_from_codex_session_id", err: errors.New(`ent: missing required field "Session.forked_from_codex_session_id"`)}
 	}
 	if _, ok := _c.mutation.CodexModel(); !ok {
 		return &ValidationError{Name: "codex_model", err: errors.New(`ent: missing required field "Session.codex_model"`)}
@@ -1204,6 +1246,14 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
 		_node.CodexSessionID = value
+	}
+	if value, ok := _c.mutation.ForkedFromSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromSessionID, field.TypeString, value)
+		_node.ForkedFromSessionID = value
+	}
+	if value, ok := _c.mutation.ForkedFromCodexSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromCodexSessionID, field.TypeString, value)
+		_node.ForkedFromCodexSessionID = value
 	}
 	if value, ok := _c.mutation.CodexModel(); ok {
 		_spec.SetField(entsession.FieldCodexModel, field.TypeString, value)

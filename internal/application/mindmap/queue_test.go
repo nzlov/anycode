@@ -133,6 +133,10 @@ func (c *blockingCodex) Resume(ctx context.Context, input processdomain.CodexRes
 	})
 }
 
+func (c *blockingCodex) Fork(ctx context.Context, input processdomain.CodexForkInput) (processdomain.CodexHandle, error) {
+	return c.Start(ctx, input.CodexStartInput)
+}
+
 func (c *blockingCodex) resumeAttemptCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()

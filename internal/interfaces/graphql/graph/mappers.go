@@ -396,6 +396,11 @@ func mapTodoList(todoList sessiondomain.TodoList) *model.TodoList {
 }
 
 func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
+	var forkedFromSessionID *string
+	if dto.ForkedFromSessionID != "" {
+		value := string(dto.ForkedFromSessionID)
+		forkedFromSessionID = &value
+	}
 	attachments := make([]*model.SessionAttachment, 0, len(dto.Attachments))
 	for _, attachment := range dto.Attachments {
 		attachments = append(attachments, mapSessionAttachment(attachment))
@@ -405,33 +410,34 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		appends = append(appends, mapPromptAppend(appendDTO))
 	}
 	return &model.SessionDetail{
-		ID:               string(dto.ID),
-		ProjectID:        string(dto.ProjectID),
-		ProjectName:      dto.ProjectName,
-		Requirement:      dto.Requirement,
-		Mode:             string(dto.Mode),
-		Status:           string(dto.Status),
-		Priority:         string(dto.Priority),
-		CloseReason:      stringPtr(dto.CloseReason),
-		BaseBranch:       dto.BaseBranch,
-		WorktreeBranch:   dto.WorktreeBranch,
-		CurrentNodeTitle: dto.CurrentNodeTitle,
-		PendingApproval:  mapPendingApproval(dto.PendingApproval),
-		TodoList:         mapTodoList(dto.TodoList),
-		ArtifactCount:    dto.ArtifactCount,
-		FilesChanged:     dto.FilesChanged,
-		WorktreePath:     dto.WorktreePath,
-		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
-		CodexSessionID:   dto.CodexSessionID,
-		Config:           mapSessionConfig(dto.Config),
-		Usage:            mapSessionUsage(dto.Usage),
-		Attachments:      attachments,
-		PromptAppends:    appends,
-		AvailableActions: dto.AvailableActions,
-		CanResume:        dto.CanResume,
-		LastRunAt:        dto.LastRunAt,
-		CreatedAt:        dto.CreatedAt,
-		UpdatedAt:        dto.UpdatedAt,
+		ID:                  string(dto.ID),
+		ProjectID:           string(dto.ProjectID),
+		ProjectName:         dto.ProjectName,
+		ForkedFromSessionID: forkedFromSessionID,
+		Requirement:         dto.Requirement,
+		Mode:                string(dto.Mode),
+		Status:              string(dto.Status),
+		Priority:            string(dto.Priority),
+		CloseReason:         stringPtr(dto.CloseReason),
+		BaseBranch:          dto.BaseBranch,
+		WorktreeBranch:      dto.WorktreeBranch,
+		CurrentNodeTitle:    dto.CurrentNodeTitle,
+		PendingApproval:     mapPendingApproval(dto.PendingApproval),
+		TodoList:            mapTodoList(dto.TodoList),
+		ArtifactCount:       dto.ArtifactCount,
+		FilesChanged:        dto.FilesChanged,
+		WorktreePath:        dto.WorktreePath,
+		WorktreeCleanup:     mapWorktreeCleanup(dto.WorktreeCleanup),
+		CodexSessionID:      dto.CodexSessionID,
+		Config:              mapSessionConfig(dto.Config),
+		Usage:               mapSessionUsage(dto.Usage),
+		Attachments:         attachments,
+		PromptAppends:       appends,
+		AvailableActions:    dto.AvailableActions,
+		CanResume:           dto.CanResume,
+		LastRunAt:           dto.LastRunAt,
+		CreatedAt:           dto.CreatedAt,
+		UpdatedAt:           dto.UpdatedAt,
 	}
 }
 

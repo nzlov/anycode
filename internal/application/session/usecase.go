@@ -37,6 +37,7 @@ import (
 
 type UseCase interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error)
+	ForkSession(ctx context.Context, input ForkSessionInput) (DTO, error)
 	OpenTerminal(ctx context.Context, sourceSessionID domain.ID) (DTO, error)
 	RecoverInitializingSessions(ctx context.Context) (int, error)
 	RecoverInterruptedSessions(ctx context.Context) (int, error)
@@ -87,6 +88,13 @@ type CreateSessionInput struct {
 	StagedAttachmentIDs []domain.StagedAttachmentID
 	Mentions            []domain.PromptMention
 	terminalWorkdir     string
+	forkedFromSessionID domain.ID
+	forkedFromCodexID   string
+}
+
+type ForkSessionInput struct {
+	SourceSessionID domain.ID
+	Requirement     string
 }
 
 type StartSessionOptions struct {
@@ -220,15 +228,16 @@ type CardStatusDTO struct {
 
 type DetailDTO struct {
 	DTO
-	ProjectName      string
-	CloseReason      *domain.CloseReason
-	CurrentNodeTitle string
-	PendingApproval  *PendingApprovalDTO
-	TodoList         domain.TodoList
-	Attachments      []domain.SessionAttachment
-	PromptAppends    []PromptAppendDTO
-	AvailableActions []string
-	CanResume        bool
+	ProjectName         string
+	ForkedFromSessionID domain.ID
+	CloseReason         *domain.CloseReason
+	CurrentNodeTitle    string
+	PendingApproval     *PendingApprovalDTO
+	TodoList            domain.TodoList
+	Attachments         []domain.SessionAttachment
+	PromptAppends       []PromptAppendDTO
+	AvailableActions    []string
+	CanResume           bool
 }
 
 type PromptAppendDTO struct {
@@ -1739,15 +1748,17 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			worktreePath = s.worktrees.PathForSession(input.ProjectID, id)
 		}
 		session := domain.Session{
-			ID:           id,
-			ProjectID:    input.ProjectID,
-			Requirement:  requirement,
-			Mentions:     mentions,
-			Mode:         mode,
-			Status:       domain.StatusInitializing,
-			Priority:     normalizePriority(input.Priority),
-			BaseBranch:   baseBranch,
-			WorktreePath: worktreePath,
+			ID:                       id,
+			ProjectID:                input.ProjectID,
+			Requirement:              requirement,
+			Mentions:                 mentions,
+			Mode:                     mode,
+			Status:                   domain.StatusInitializing,
+			Priority:                 normalizePriority(input.Priority),
+			BaseBranch:               baseBranch,
+			WorktreePath:             worktreePath,
+			ForkedFromSessionID:      input.forkedFromSessionID,
+			ForkedFromCodexSessionID: strings.TrimSpace(input.forkedFromCodexID),
 			WorktreeCleanup: domain.WorktreeCleanup{
 				Status: domain.WorktreeCleanupNotApplicable,
 			},
@@ -1813,6 +1824,42 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return s.initializeSession(ctx, id, false)
 	}
 	return DTO{}, fmt.Errorf("create session: exhausted %d session id attempts", maxSessionIDAttempts)
+}
+
+func (s *Service) ForkSession(ctx context.Context, input ForkSessionInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	source, err := s.repo.Find(ctx, input.SourceSessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find source session: %w", err)
+	}
+	if !canForkSession(source) {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "当前卡片不能 Fork").WithDetails(map[string]any{
+			"sessionId": string(source.ID),
+			"status":    string(source.Status),
+		})
+	}
+	baseBranch := ""
+	if strings.TrimSpace(source.BaseBranch) != "" {
+		baseBranch = strings.TrimSpace(source.WorktreeBranch)
+	}
+	fastMode := source.Config.FastMode
+	return s.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   source.ProjectID,
+		Requirement: input.Requirement,
+		Mode:        domain.ModeChat,
+		BaseBranch:  baseBranch,
+		Priority:    source.Priority,
+		Config: ConfigInput{
+			CodexModel:      source.Config.CodexModel,
+			ReasoningEffort: source.Config.ReasoningEffort,
+			PermissionMode:  source.Config.PermissionMode,
+			FastMode:        &fastMode,
+		},
+		forkedFromSessionID: source.ID,
+		forkedFromCodexID:   strings.TrimSpace(source.CodexSessionID),
+	})
 }
 
 func (s *Service) OpenTerminal(ctx context.Context, sourceSessionID domain.ID) (DTO, error) {
@@ -1913,7 +1960,10 @@ func (s *Service) initializeSession(ctx context.Context, id domain.ID, recovery 
 			}
 			dto, err = s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true, "")
 		} else {
-			dto, err = s.enqueueCodex(ctx, session, codexStartOptions{initialStart: true}, queuePriorityForSession(session))
+			dto, err = s.enqueueCodex(ctx, session, codexStartOptions{
+				initialStart:       true,
+				forkCodexSessionID: forkCodexSessionID(session),
+			}, queuePriorityForSession(session))
 		}
 		if err != nil {
 			return s.failSessionInitialization(ctx, session, err, "session_queue_failed")
@@ -2189,7 +2239,11 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	options := codexStartOptions{initialStart: session.Status == domain.StatusCreated, queueKind: startOptions.queueKind}
+	options := codexStartOptions{
+		initialStart:       session.Status == domain.StatusCreated,
+		queueKind:          startOptions.queueKind,
+		forkCodexSessionID: forkCodexSessionID(session),
+	}
 	if session.Status == domain.StatusResumeFailed {
 		options.reviewAfterReuseFailure = true
 	}
@@ -3291,6 +3345,7 @@ func questionAnswerResumePrompt(request questiondomain.Request) string {
 
 type codexStartOptions struct {
 	resumeCodexSessionID       string
+	forkCodexSessionID         string
 	resumeOfProcessRunID       processdomain.RunID
 	sessionID                  domain.ID
 	nodeRunID                  *processdomain.NodeRunID
@@ -3485,6 +3540,8 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 			processEventType = "resume_failed"
 			sessionEventType = "session.resume_failed"
 			status = domain.StatusResumeFailed
+		} else if options.forkCodexSessionID != "" {
+			processEventType = "fork_failed"
 		}
 		if transitionErr := transitionSession(&session, status, failedAt); transitionErr != nil {
 			return DTO{}, transitionErr
@@ -3519,7 +3576,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		startErr := apperror.Wrap(err, code, apperror.CategoryCodexError, "start codex process failed").WithDetails(map[string]any{
 			"processRunId": string(runID),
 			"sessionId":    string(session.ID),
-		}).WithRetryable(options.resumeCodexSessionID != "")
+		}).WithRetryable(options.resumeCodexSessionID != "" || options.forkCodexSessionID != "")
 		if workflowResumeStateErr != nil {
 			return DTO{}, errors.Join(startErr, workflowResumeStateErr)
 		}
@@ -3917,6 +3974,7 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 	nodeRunID := queueProcessNodeRunID(session.Queue.NodeRunID)
 	return codexStartOptions{
 		resumeCodexSessionID:    session.Queue.ResumeCodexSessionID,
+		forkCodexSessionID:      forkCodexSessionID(session),
 		resumeOfProcessRunID:    processdomain.RunID(session.Queue.ResumeOfProcessRunID),
 		sessionID:               session.ID,
 		nodeRunID:               nodeRunID,
@@ -4014,7 +4072,14 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	files = appendUniqueSessionFiles(files, turnFiles...)
 	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), turnMentions...)
-	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots, developerInstructions, mindMapTools))
+	startInput := newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots, developerInstructions, mindMapTools)
+	if options.forkCodexSessionID != "" {
+		return s.codex.Fork(ctx, processdomain.CodexForkInput{
+			SourceCodexSessionID: options.forkCodexSessionID,
+			CodexStartInput:      startInput,
+		})
+	}
+	return s.codex.Start(ctx, startInput)
 }
 
 func (s *Service) mindMapCodexContext(ctx context.Context, session domain.Session) ([]processdomain.DynamicToolName, string, error) {
@@ -8753,16 +8818,17 @@ func toDetailDTO(session domain.Session, projectName string, attachments []domai
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
 	}
 	return DetailDTO{
-		DTO:              toDTO(session),
-		ProjectName:      projectName,
-		CloseReason:      session.CloseReason,
-		CurrentNodeTitle: currentNodeTitle,
-		PendingApproval:  pendingApproval,
-		TodoList:         session.TodoList,
-		Attachments:      attachments,
-		PromptAppends:    promptAppends,
-		AvailableActions: availableActions(session),
-		CanResume:        canResume(session),
+		DTO:                 toDTO(session),
+		ProjectName:         projectName,
+		ForkedFromSessionID: session.ForkedFromSessionID,
+		CloseReason:         session.CloseReason,
+		CurrentNodeTitle:    currentNodeTitle,
+		PendingApproval:     pendingApproval,
+		TodoList:            session.TodoList,
+		Attachments:         attachments,
+		PromptAppends:       promptAppends,
+		AvailableActions:    availableActions(session),
+		CanResume:           canResume(session),
 	}
 }
 
@@ -8903,6 +8969,9 @@ func availableActions(session domain.Session) []string {
 	}
 	switch session.Status {
 	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
+		if canForkSession(session) {
+			return []string{"execute", "fork", "close"}
+		}
 		return []string{"execute", "close"}
 	case domain.StatusQueued:
 		return []string{"execute", "stop", "close"}
@@ -8915,12 +8984,41 @@ func availableActions(session domain.Session) []string {
 	case domain.StatusBlocked:
 		return []string{"close"}
 	case domain.StatusResumeFailed:
+		if canForkSession(session) {
+			return []string{"execute", "fork", "stop", "close"}
+		}
 		return []string{"execute", "stop", "close"}
 	case domain.StatusClosed:
 		return []string{}
 	default:
 		return []string{"close"}
 	}
+}
+
+func canForkSession(session domain.Session) bool {
+	if session.Mode != domain.ModeChat || strings.TrimSpace(session.CodexSessionID) == "" {
+		return false
+	}
+	if strings.TrimSpace(session.BaseBranch) != "" &&
+		(session.WorktreeCleanup.Status != domain.WorktreeCleanupActive || strings.TrimSpace(session.WorktreeBranch) == "") {
+		return false
+	}
+	if session.Status == domain.StatusFailed && strings.TrimSpace(session.InitializationErrorCode) != "" {
+		return false
+	}
+	switch session.Status {
+	case domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted, domain.StatusResumeFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func forkCodexSessionID(session domain.Session) string {
+	if strings.TrimSpace(session.CodexSessionID) != "" {
+		return ""
+	}
+	return strings.TrimSpace(session.ForkedFromCodexSessionID)
 }
 
 func stringValuePtr(value *domain.NodeRunID) string {

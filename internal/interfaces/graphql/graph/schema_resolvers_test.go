@@ -1055,6 +1055,36 @@ func TestMutationCreateSessionPreservesNullableFastMode(t *testing.T) {
 	}
 }
 
+func TestMutationForkSession(t *testing.T) {
+	now := time.Unix(34, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		forkResult: sessionapp.DTO{
+			ID:          "session-fork",
+			ProjectID:   "project-1",
+			Requirement: "continue independently",
+			Mode:        "chat",
+			Status:      "queued",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.ForkSession(context.Background(), model.ForkSessionInput{
+		SourceSessionID: "session-source",
+		Requirement:     "continue independently",
+	})
+	if err != nil {
+		t.Fatalf("ForkSession() error = %v", err)
+	}
+	if sessions.gotFork.SourceSessionID != "session-source" || sessions.gotFork.Requirement != "continue independently" {
+		t.Fatalf("ForkSession() input = %#v", sessions.gotFork)
+	}
+	if got.ID != "session-fork" || got.Requirement != "continue independently" {
+		t.Fatalf("ForkSession() = %#v", got)
+	}
+}
+
 func TestMutationOpenSessionTerminalForwardsSourceSessionID(t *testing.T) {
 	now := time.Unix(33, 0).UTC()
 	sessions := &fakeSessionUseCase{
@@ -1570,6 +1600,8 @@ type fakeSessionUseCase struct {
 	getResult                 sessionapp.DetailDTO
 	gotCreate                 sessionapp.CreateSessionInput
 	createResult              sessionapp.DTO
+	gotFork                   sessionapp.ForkSessionInput
+	forkResult                sessionapp.DTO
 	gotOpenTerminalID         sessiondomain.ID
 	openTerminalResult        sessionapp.DTO
 	gotResumeID               sessiondomain.ID
@@ -1606,6 +1638,11 @@ func (f *fakeSessionUseCase) CleanupSessions(_ context.Context, input sessionapp
 func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {
 	f.gotCreate = input
 	return f.createResult, f.err
+}
+
+func (f *fakeSessionUseCase) ForkSession(_ context.Context, input sessionapp.ForkSessionInput) (sessionapp.DTO, error) {
+	f.gotFork = input
+	return f.forkResult, f.err
 }
 
 func (f *fakeSessionUseCase) OpenTerminal(_ context.Context, sourceSessionID sessiondomain.ID) (sessionapp.DTO, error) {

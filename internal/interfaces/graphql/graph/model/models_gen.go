@@ -177,6 +177,11 @@ type FileDiff struct {
 	Hunks []*DiffHunk `json:"hunks"`
 }
 
+type ForkSessionInput struct {
+	SourceSessionID string `json:"sourceSessionId"`
+	Requirement     string `json:"requirement"`
+}
+
 type GeneralSettings struct {
 	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
 	AgentWritableRoots     []string `json:"agentWritableRoots"`
@@ -593,33 +598,34 @@ type SessionConfigInput struct {
 }
 
 type SessionDetail struct {
-	ID               string                `json:"id"`
-	ProjectID        string                `json:"projectId"`
-	ProjectName      string                `json:"projectName"`
-	Requirement      string                `json:"requirement"`
-	Mode             string                `json:"mode"`
-	Status           string                `json:"status"`
-	Priority         string                `json:"priority"`
-	CloseReason      *string               `json:"closeReason,omitempty"`
-	BaseBranch       string                `json:"baseBranch"`
-	WorktreeBranch   string                `json:"worktreeBranch"`
-	CurrentNodeTitle string                `json:"currentNodeTitle"`
-	PendingApproval  *PendingApproval      `json:"pendingApproval,omitempty"`
-	TodoList         *TodoList             `json:"todoList,omitempty"`
-	ArtifactCount    int                   `json:"artifactCount"`
-	FilesChanged     int                   `json:"filesChanged"`
-	WorktreePath     string                `json:"worktreePath"`
-	WorktreeCleanup  *WorktreeCleanup      `json:"worktreeCleanup"`
-	CodexSessionID   string                `json:"codexSessionId"`
-	Config           *SessionConfig        `json:"config"`
-	Usage            *TranscriptTokenUsage `json:"usage,omitempty"`
-	Attachments      []*SessionAttachment  `json:"attachments"`
-	PromptAppends    []*PromptAppend       `json:"promptAppends"`
-	AvailableActions []string              `json:"availableActions"`
-	CanResume        bool                  `json:"canResume"`
-	LastRunAt        *time.Time            `json:"lastRunAt,omitempty"`
-	CreatedAt        time.Time             `json:"createdAt"`
-	UpdatedAt        time.Time             `json:"updatedAt"`
+	ID                  string                `json:"id"`
+	ProjectID           string                `json:"projectId"`
+	ProjectName         string                `json:"projectName"`
+	ForkedFromSessionID *string               `json:"forkedFromSessionId,omitempty"`
+	Requirement         string                `json:"requirement"`
+	Mode                string                `json:"mode"`
+	Status              string                `json:"status"`
+	Priority            string                `json:"priority"`
+	CloseReason         *string               `json:"closeReason,omitempty"`
+	BaseBranch          string                `json:"baseBranch"`
+	WorktreeBranch      string                `json:"worktreeBranch"`
+	CurrentNodeTitle    string                `json:"currentNodeTitle"`
+	PendingApproval     *PendingApproval      `json:"pendingApproval,omitempty"`
+	TodoList            *TodoList             `json:"todoList,omitempty"`
+	ArtifactCount       int                   `json:"artifactCount"`
+	FilesChanged        int                   `json:"filesChanged"`
+	WorktreePath        string                `json:"worktreePath"`
+	WorktreeCleanup     *WorktreeCleanup      `json:"worktreeCleanup"`
+	CodexSessionID      string                `json:"codexSessionId"`
+	Config              *SessionConfig        `json:"config"`
+	Usage               *TranscriptTokenUsage `json:"usage,omitempty"`
+	Attachments         []*SessionAttachment  `json:"attachments"`
+	PromptAppends       []*PromptAppend       `json:"promptAppends"`
+	AvailableActions    []string              `json:"availableActions"`
+	CanResume           bool                  `json:"canResume"`
+	LastRunAt           *time.Time            `json:"lastRunAt,omitempty"`
+	CreatedAt           time.Time             `json:"createdAt"`
+	UpdatedAt           time.Time             `json:"updatedAt"`
 }
 
 type SessionDiff struct {

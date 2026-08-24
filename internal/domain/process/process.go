@@ -195,6 +195,11 @@ type CodexResumeInput struct {
 	DynamicTools          []DynamicToolName
 }
 
+type CodexForkInput struct {
+	SourceCodexSessionID string
+	CodexStartInput
+}
+
 type CodexInputItem struct {
 	Type string
 	Text string
@@ -266,6 +271,7 @@ type CodexProcess interface {
 	Probe(ctx context.Context) (CodexCapabilities, error)
 	Start(ctx context.Context, input CodexStartInput) (CodexHandle, error)
 	Resume(ctx context.Context, input CodexResumeInput) (CodexHandle, error)
+	Fork(ctx context.Context, input CodexForkInput) (CodexHandle, error)
 	Steer(ctx context.Context, input CodexSteerInput) error
 	Stop(ctx context.Context, processRunID RunID) error
 	Events(ctx context.Context, handle CodexHandle) (<-chan CodexEvent, error)

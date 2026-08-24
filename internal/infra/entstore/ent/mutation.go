@@ -13706,6 +13706,8 @@ type SessionMutation struct {
 	initialization_error_code        *string
 	initialization_error             *string
 	codex_session_id                 *string
+	forked_from_session_id           *string
+	forked_from_codex_session_id     *string
 	codex_model                      *string
 	reasoning_effort                 *string
 	permission_mode                  *string
@@ -14908,6 +14910,78 @@ func (m *SessionMutation) OldCodexSessionID(ctx context.Context) (v string, err 
 // ResetCodexSessionID resets all changes to the "codex_session_id" field.
 func (m *SessionMutation) ResetCodexSessionID() {
 	m.codex_session_id = nil
+}
+
+// SetForkedFromSessionID sets the "forked_from_session_id" field.
+func (m *SessionMutation) SetForkedFromSessionID(s string) {
+	m.forked_from_session_id = &s
+}
+
+// ForkedFromSessionID returns the value of the "forked_from_session_id" field in the mutation.
+func (m *SessionMutation) ForkedFromSessionID() (r string, exists bool) {
+	v := m.forked_from_session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForkedFromSessionID returns the old "forked_from_session_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldForkedFromSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForkedFromSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForkedFromSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForkedFromSessionID: %w", err)
+	}
+	return oldValue.ForkedFromSessionID, nil
+}
+
+// ResetForkedFromSessionID resets all changes to the "forked_from_session_id" field.
+func (m *SessionMutation) ResetForkedFromSessionID() {
+	m.forked_from_session_id = nil
+}
+
+// SetForkedFromCodexSessionID sets the "forked_from_codex_session_id" field.
+func (m *SessionMutation) SetForkedFromCodexSessionID(s string) {
+	m.forked_from_codex_session_id = &s
+}
+
+// ForkedFromCodexSessionID returns the value of the "forked_from_codex_session_id" field in the mutation.
+func (m *SessionMutation) ForkedFromCodexSessionID() (r string, exists bool) {
+	v := m.forked_from_codex_session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForkedFromCodexSessionID returns the old "forked_from_codex_session_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldForkedFromCodexSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForkedFromCodexSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForkedFromCodexSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForkedFromCodexSessionID: %w", err)
+	}
+	return oldValue.ForkedFromCodexSessionID, nil
+}
+
+// ResetForkedFromCodexSessionID resets all changes to the "forked_from_codex_session_id" field.
+func (m *SessionMutation) ResetForkedFromCodexSessionID() {
+	m.forked_from_codex_session_id = nil
 }
 
 // SetCodexModel sets the "codex_model" field.
@@ -16145,7 +16219,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 55)
+	fields := make([]string, 0, 57)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -16223,6 +16297,12 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.codex_session_id != nil {
 		fields = append(fields, entsession.FieldCodexSessionID)
+	}
+	if m.forked_from_session_id != nil {
+		fields = append(fields, entsession.FieldForkedFromSessionID)
+	}
+	if m.forked_from_codex_session_id != nil {
+		fields = append(fields, entsession.FieldForkedFromCodexSessionID)
 	}
 	if m.codex_model != nil {
 		fields = append(fields, entsession.FieldCodexModel)
@@ -16371,6 +16451,10 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.InitializationError()
 	case entsession.FieldCodexSessionID:
 		return m.CodexSessionID()
+	case entsession.FieldForkedFromSessionID:
+		return m.ForkedFromSessionID()
+	case entsession.FieldForkedFromCodexSessionID:
+		return m.ForkedFromCodexSessionID()
 	case entsession.FieldCodexModel:
 		return m.CodexModel()
 	case entsession.FieldReasoningEffort:
@@ -16490,6 +16574,10 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldInitializationError(ctx)
 	case entsession.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
+	case entsession.FieldForkedFromSessionID:
+		return m.OldForkedFromSessionID(ctx)
+	case entsession.FieldForkedFromCodexSessionID:
+		return m.OldForkedFromCodexSessionID(ctx)
 	case entsession.FieldCodexModel:
 		return m.OldCodexModel(ctx)
 	case entsession.FieldReasoningEffort:
@@ -16738,6 +16826,20 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCodexSessionID(v)
+		return nil
+	case entsession.FieldForkedFromSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForkedFromSessionID(v)
+		return nil
+	case entsession.FieldForkedFromCodexSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForkedFromCodexSessionID(v)
 		return nil
 	case entsession.FieldCodexModel:
 		v, ok := value.(string)
@@ -17206,6 +17308,12 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldCodexSessionID:
 		m.ResetCodexSessionID()
+		return nil
+	case entsession.FieldForkedFromSessionID:
+		m.ResetForkedFromSessionID()
+		return nil
+	case entsession.FieldForkedFromCodexSessionID:
+		m.ResetForkedFromCodexSessionID()
 		return nil
 	case entsession.FieldCodexModel:
 		m.ResetCodexModel()

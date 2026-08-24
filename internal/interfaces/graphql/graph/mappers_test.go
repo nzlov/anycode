@@ -44,7 +44,8 @@ func TestMapTranscriptCommandContentPreservesInvocations(t *testing.T) {
 
 func TestMapSessionDetailPreservesTodoList(t *testing.T) {
 	mapped := mapSessionDetail(sessionapp.DetailDTO{
-		ProjectName: "Project One",
+		ProjectName:         "Project One",
+		ForkedFromSessionID: "source-session",
 		TodoList: sessiondomain.TodoList{Items: []sessiondomain.TodoItem{
 			{Text: "inspect", Completed: true},
 			{Text: "verify"},
@@ -63,6 +64,9 @@ func TestMapSessionDetailPreservesTodoList(t *testing.T) {
 	}
 	if mapped.ProjectName != "Project One" {
 		t.Fatalf("mapped project name = %q", mapped.ProjectName)
+	}
+	if mapped.ForkedFromSessionID == nil || *mapped.ForkedFromSessionID != "source-session" {
+		t.Fatalf("mapped fork source = %#v", mapped.ForkedFromSessionID)
 	}
 }
 

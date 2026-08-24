@@ -58,6 +58,7 @@
           @update:width="setSessionColumnWidth(card.id, $event)"
           @set-priority="setCardPriority(card, $event)"
           @terminal-opened="refreshOverviewCard"
+          @forked="refreshOverviewCard"
           @close="closeCard(card)"
           @merge-close="closeCard(card, true)"
         />

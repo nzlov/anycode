@@ -251,6 +251,22 @@
                       <q-item-label>{{ session?.projectName ?? '-' }}</q-item-label>
                     </q-item-section>
                   </q-item>
+                  <q-item v-if="session?.forkedFromSessionId">
+                    <q-item-section>
+                      <q-item-label caption>Fork 来源</q-item-label>
+                      <q-item-label>
+                        <router-link
+                          class="fork-source-link"
+                          :to="{
+                            name: 'session-detail',
+                            params: { id: session.forkedFromSessionId },
+                          }"
+                        >
+                          {{ session.forkedFromSessionId }}
+                        </router-link>
+                      </q-item-label>
+                    </q-item-section>
+                  </q-item>
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>分支</q-item-label>
@@ -352,6 +368,7 @@
                     :source-session-id="sessionId"
                     full-width
                   />
+                  <SessionForkButton v-if="canFork" :source-session-id="sessionId" full-width />
                   <q-btn
                     v-if="mindMapAvailable"
                     class="session-detail-tool-button q-mt-md app-command-btn"
@@ -614,6 +631,7 @@ import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
+import SessionForkButton from '@/components/SessionForkButton.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -936,6 +954,7 @@ const knownUserPrompts = computed(() => {
 });
 const canExecute = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
+const canFork = computed(() => session.value?.availableActions.includes('fork') ?? false);
 const canRetryInitialization = computed(
   () => session.value?.availableActions.includes('retry_initialization') ?? false,
 );
@@ -1845,6 +1864,17 @@ async function scrollEventsToBottom(force = false) {
 .session-requirement-title {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.fork-source-link {
+  color: var(--q-primary);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.fork-source-link:hover,
+.fork-source-link:focus-visible {
+  text-decoration: underline;
 }
 
 .workflow-progress__header,

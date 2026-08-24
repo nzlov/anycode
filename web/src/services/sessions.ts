@@ -114,6 +114,7 @@ export interface SessionTodoItem {
 
 export interface SessionDetail extends SessionCard {
   codexSessionId: string;
+  forkedFromSessionId?: string | null;
   pendingApproval?: PendingApproval | null;
   config: SessionConfig;
   closeReason?: string | null;
@@ -241,6 +242,11 @@ export interface CreateSessionInput {
   mentions?: PromptMention[];
 }
 
+export interface ForkSessionInput {
+  sourceSessionId: string;
+  requirement: string;
+}
+
 export interface PromptMention {
   path: string;
 }
@@ -315,6 +321,7 @@ interface GraphQLSessionDetail {
   id: string;
   projectId: string;
   projectName: string;
+  forkedFromSessionId?: string | null;
   requirement: string;
   mode: string;
   status: string;
@@ -468,6 +475,7 @@ const sessionDetailFields = `
   id
   projectId
   projectName
+  forkedFromSessionId
   requirement
   mode
   status
@@ -1066,6 +1074,20 @@ export async function createSession(input: CreateSessionInput) {
   return normalizeSession(data.createSession);
 }
 
+export async function forkSession(input: ForkSessionInput) {
+  const data = await graphqlFetch<{ forkSession: GraphQLSession }, { input: ForkSessionInput }>({
+    query: `
+      mutation ForkSession($input: ForkSessionInput!) {
+        forkSession(input: $input) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return normalizeSession(data.forkSession);
+}
+
 export async function openSessionTerminal(sourceSessionId: string) {
   const data = await graphqlFetch<{ openSessionTerminal: GraphQLSession }, { sessionId: string }>({
     query: `
@@ -1205,6 +1227,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     branch: session.baseBranch || 'main',
     worktreeBranch: session.worktreeBranch || '',
     codexSessionId: session.codexSessionId || '',
+    forkedFromSessionId: session.forkedFromSessionId ?? null,
     node: session.currentNodeTitle || statusNode(status),
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),

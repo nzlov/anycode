@@ -189,6 +189,16 @@ func CodexSessionID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldCodexSessionID, v))
 }
 
+// ForkedFromSessionID applies equality check predicate on the "forked_from_session_id" field. It's identical to ForkedFromSessionIDEQ.
+func ForkedFromSessionID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromCodexSessionID applies equality check predicate on the "forked_from_codex_session_id" field. It's identical to ForkedFromCodexSessionIDEQ.
+func ForkedFromCodexSessionID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldForkedFromCodexSessionID, v))
+}
+
 // CodexModel applies equality check predicate on the "codex_model" field. It's identical to CodexModelEQ.
 func CodexModel(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldCodexModel, v))
@@ -1797,6 +1807,136 @@ func CodexSessionIDEqualFold(v string) predicate.Session {
 // CodexSessionIDContainsFold applies the ContainsFold predicate on the "codex_session_id" field.
 func CodexSessionIDContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldCodexSessionID, v))
+}
+
+// ForkedFromSessionIDEQ applies the EQ predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDNEQ applies the NEQ predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDIn applies the In predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldForkedFromSessionID, vs...))
+}
+
+// ForkedFromSessionIDNotIn applies the NotIn predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldForkedFromSessionID, vs...))
+}
+
+// ForkedFromSessionIDGT applies the GT predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDGTE applies the GTE predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDLT applies the LT predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDLTE applies the LTE predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDContains applies the Contains predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDHasPrefix applies the HasPrefix predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDHasSuffix applies the HasSuffix predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDEqualFold applies the EqualFold predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromSessionIDContainsFold applies the ContainsFold predicate on the "forked_from_session_id" field.
+func ForkedFromSessionIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldForkedFromSessionID, v))
+}
+
+// ForkedFromCodexSessionIDEQ applies the EQ predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDNEQ applies the NEQ predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDIn applies the In predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldForkedFromCodexSessionID, vs...))
+}
+
+// ForkedFromCodexSessionIDNotIn applies the NotIn predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldForkedFromCodexSessionID, vs...))
+}
+
+// ForkedFromCodexSessionIDGT applies the GT predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDGTE applies the GTE predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDLT applies the LT predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDLTE applies the LTE predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDContains applies the Contains predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDHasPrefix applies the HasPrefix predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDHasSuffix applies the HasSuffix predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDEqualFold applies the EqualFold predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldForkedFromCodexSessionID, v))
+}
+
+// ForkedFromCodexSessionIDContainsFold applies the ContainsFold predicate on the "forked_from_codex_session_id" field.
+func ForkedFromCodexSessionIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldForkedFromCodexSessionID, v))
 }
 
 // CodexModelEQ applies the EQ predicate on the "codex_model" field.

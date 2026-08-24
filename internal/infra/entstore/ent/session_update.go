@@ -441,6 +441,34 @@ func (_u *SessionUpdate) SetNillableCodexSessionID(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetForkedFromSessionID sets the "forked_from_session_id" field.
+func (_u *SessionUpdate) SetForkedFromSessionID(v string) *SessionUpdate {
+	_u.mutation.SetForkedFromSessionID(v)
+	return _u
+}
+
+// SetNillableForkedFromSessionID sets the "forked_from_session_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableForkedFromSessionID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetForkedFromSessionID(*v)
+	}
+	return _u
+}
+
+// SetForkedFromCodexSessionID sets the "forked_from_codex_session_id" field.
+func (_u *SessionUpdate) SetForkedFromCodexSessionID(v string) *SessionUpdate {
+	_u.mutation.SetForkedFromCodexSessionID(v)
+	return _u
+}
+
+// SetNillableForkedFromCodexSessionID sets the "forked_from_codex_session_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableForkedFromCodexSessionID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetForkedFromCodexSessionID(*v)
+	}
+	return _u
+}
+
 // SetCodexModel sets the "codex_model" field.
 func (_u *SessionUpdate) SetCodexModel(v string) *SessionUpdate {
 	_u.mutation.SetCodexModel(v)
@@ -1059,6 +1087,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ForkedFromSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ForkedFromCodexSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromCodexSessionID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.CodexModel(); ok {
 		_spec.SetField(entsession.FieldCodexModel, field.TypeString, value)
 	}
@@ -1603,6 +1637,34 @@ func (_u *SessionUpdateOne) SetCodexSessionID(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillableCodexSessionID(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetCodexSessionID(*v)
+	}
+	return _u
+}
+
+// SetForkedFromSessionID sets the "forked_from_session_id" field.
+func (_u *SessionUpdateOne) SetForkedFromSessionID(v string) *SessionUpdateOne {
+	_u.mutation.SetForkedFromSessionID(v)
+	return _u
+}
+
+// SetNillableForkedFromSessionID sets the "forked_from_session_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableForkedFromSessionID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetForkedFromSessionID(*v)
+	}
+	return _u
+}
+
+// SetForkedFromCodexSessionID sets the "forked_from_codex_session_id" field.
+func (_u *SessionUpdateOne) SetForkedFromCodexSessionID(v string) *SessionUpdateOne {
+	_u.mutation.SetForkedFromCodexSessionID(v)
+	return _u
+}
+
+// SetNillableForkedFromCodexSessionID sets the "forked_from_codex_session_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableForkedFromCodexSessionID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetForkedFromCodexSessionID(*v)
 	}
 	return _u
 }
@@ -2254,6 +2316,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ForkedFromSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ForkedFromCodexSessionID(); ok {
+		_spec.SetField(entsession.FieldForkedFromCodexSessionID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.CodexModel(); ok {
 		_spec.SetField(entsession.FieldCodexModel, field.TypeString, value)

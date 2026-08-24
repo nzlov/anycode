@@ -35,6 +35,12 @@
           stay-on-page
           @opened="emit('terminal-opened', $event)"
         />
+        <SessionForkButton
+          v-if="card.availableActions.includes('fork')"
+          :source-session-id="card.id"
+          stay-on-page
+          @forked="emit('forked', $event)"
+        />
         <q-btn
           v-if="mindMapUpdated"
           flat
@@ -101,6 +107,7 @@
 
 <script setup lang="ts">
 import SessionDetailView from '@/components/SessionDetailView.vue';
+import SessionForkButton from '@/components/SessionForkButton.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
@@ -126,6 +133,7 @@ defineProps<{
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
+  forked: [sessionId: string];
   close: [];
   'merge-close': [];
 }>();

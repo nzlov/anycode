@@ -65,6 +65,8 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetInitializationErrorCode(s.InitializationErrorCode).
 			SetInitializationError(s.InitializationError).
 			SetCodexSessionID(s.CodexSessionID).
+			SetForkedFromSessionID(string(s.ForkedFromSessionID)).
+			SetForkedFromCodexSessionID(s.ForkedFromCodexSessionID).
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
 			SetPermissionMode(s.Config.PermissionMode).
@@ -190,6 +192,8 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetInitializationErrorCode(s.InitializationErrorCode).
 		SetInitializationError(s.InitializationError).
 		SetCodexSessionID(s.CodexSessionID).
+		SetForkedFromSessionID(string(s.ForkedFromSessionID)).
+		SetForkedFromCodexSessionID(s.ForkedFromCodexSessionID).
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
 		SetPermissionMode(s.Config.PermissionMode).
@@ -760,9 +764,11 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			Error:                row.WorktreeCleanupError,
 			Retryable:            row.WorktreeCleanupRetryable,
 		},
-		InitializationErrorCode: row.InitializationErrorCode,
-		InitializationError:     row.InitializationError,
-		CodexSessionID:          row.CodexSessionID,
+		InitializationErrorCode:  row.InitializationErrorCode,
+		InitializationError:      row.InitializationError,
+		CodexSessionID:           row.CodexSessionID,
+		ForkedFromSessionID:      domainsession.ID(row.ForkedFromSessionID),
+		ForkedFromCodexSessionID: row.ForkedFromCodexSessionID,
 		Config: domainsession.Config{
 			CodexModel:      row.CodexModel,
 			ReasoningEffort: row.ReasoningEffort,

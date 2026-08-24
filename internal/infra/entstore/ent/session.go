@@ -71,6 +71,10 @@ type Session struct {
 	InitializationError string `json:"initialization_error,omitempty"`
 	// CodexSessionID holds the value of the "codex_session_id" field.
 	CodexSessionID string `json:"codex_session_id,omitempty"`
+	// ForkedFromSessionID holds the value of the "forked_from_session_id" field.
+	ForkedFromSessionID string `json:"forked_from_session_id,omitempty"`
+	// ForkedFromCodexSessionID holds the value of the "forked_from_codex_session_id" field.
+	ForkedFromCodexSessionID string `json:"forked_from_codex_session_id,omitempty"`
 	// CodexModel holds the value of the "codex_model" field.
 	CodexModel string `json:"codex_model,omitempty"`
 	// ReasoningEffort holds the value of the "reasoning_effort" field.
@@ -143,7 +147,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldInitializationErrorCode, entsession.FieldInitializationError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldInitializationErrorCode, entsession.FieldInitializationError, entsession.FieldCodexSessionID, entsession.FieldForkedFromSessionID, entsession.FieldForkedFromCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldWorkflowStartedAt, entsession.FieldWorkflowStoppedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -331,6 +335,18 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field codex_session_id", values[i])
 			} else if value.Valid {
 				_m.CodexSessionID = value.String
+			}
+		case entsession.FieldForkedFromSessionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field forked_from_session_id", values[i])
+			} else if value.Valid {
+				_m.ForkedFromSessionID = value.String
+			}
+		case entsession.FieldForkedFromCodexSessionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field forked_from_codex_session_id", values[i])
+			} else if value.Valid {
+				_m.ForkedFromCodexSessionID = value.String
 			}
 		case entsession.FieldCodexModel:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -647,6 +663,12 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("codex_session_id=")
 	builder.WriteString(_m.CodexSessionID)
+	builder.WriteString(", ")
+	builder.WriteString("forked_from_session_id=")
+	builder.WriteString(_m.ForkedFromSessionID)
+	builder.WriteString(", ")
+	builder.WriteString("forked_from_codex_session_id=")
+	builder.WriteString(_m.ForkedFromCodexSessionID)
 	builder.WriteString(", ")
 	builder.WriteString("codex_model=")
 	builder.WriteString(_m.CodexModel)

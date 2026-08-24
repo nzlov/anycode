@@ -403,6 +403,75 @@ cat >/dev/null
 	}
 }
 
+func TestForkCreatesIndependentThreadAndStartsTurn(t *testing.T) {
+	codexHome := t.TempDir()
+	forkRequest := filepath.Join(t.TempDir(), "fork-request")
+	t.Setenv("APP_SERVER_FORK_REQUEST", forkRequest)
+	bin := fakeCodex(t, `#!/bin/sh
+IFS= read -r request
+printf '%s\n' '{"id":1,"result":{"userAgent":"codex-test"}}'
+IFS= read -r request
+IFS= read -r request
+printf '%s\n' "$request" > "$APP_SERVER_FORK_REQUEST"
+mkdir -p "$CODEX_HOME/sessions/2026/07/22"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"thread-fork","cwd":"/workspace"}}' > "$CODEX_HOME/sessions/2026/07/22/rollout-thread-fork.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:00.500Z","type":"response_item","payload":{"type":"message","id":"old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-fork.jsonl"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-fork"}}}'
+IFS= read -r request
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-fork","status":"inProgress","items":[]}}}'
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"message","id":"new","role":"assistant","content":[{"type":"output_text","text":"forked"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-fork.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:02Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-fork"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-fork.jsonl"
+printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-fork","turn":{"id":"turn-fork","status":"completed","items":[]}}}'
+cat >/dev/null
+`)
+	client := New(bin, WithCodexHome(codexHome))
+	t.Cleanup(func() { _ = client.Close() })
+	handle, err := client.Fork(context.Background(), process.CodexForkInput{
+		SourceCodexSessionID: "thread-source",
+		CodexStartInput: process.CodexStartInput{
+			ProcessRunID: "run-fork", SessionID: "session-fork", Workdir: t.TempDir(), ArtifactDir: "/outputs/session-fork",
+			Input: []process.CodexInputItem{{Type: "text", Text: "try another way"}}, DeveloperInstructions: "AnyCode rules",
+			PermissionMode: "workspace-write", WritableRoots: []string{"/cache/go-build"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handle.CodexSessionID != "thread-fork" || handle.TurnID != "turn-fork" {
+		t.Fatalf("fork handle = %#v", handle)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []process.CodexEvent
+	for event := range events {
+		got = append(got, event)
+	}
+	if len(got) != 3 {
+		t.Fatalf("fork events = %#v", got)
+	}
+	message, ok := got[0].Content.(process.CodexMessageContent)
+	if !ok || message.Text != "forked" {
+		t.Fatalf("fork message = %#v", got[0])
+	}
+	content, err := os.ReadFile(forkRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request struct {
+		Method string `json:"method"`
+		Params struct {
+			ThreadID              string           `json:"threadId"`
+			DeveloperInstructions string           `json:"developerInstructions"`
+			DynamicTools          []map[string]any `json:"dynamicTools"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/fork" || request.Params.ThreadID != "thread-source" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.DynamicTools != nil {
+		t.Fatalf("fork request = %s", content)
+	}
+}
+
 func TestPlanTurnKeepsAnyCodeDeveloperInstructions(t *testing.T) {
 	turnRequest := filepath.Join(t.TempDir(), "turn-request")
 	t.Setenv("APP_SERVER_TURN_REQUEST", turnRequest)

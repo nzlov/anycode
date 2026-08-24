@@ -42,6 +42,8 @@ func (Session) Fields() []ent.Field {
 		field.String("initialization_error_code").Default(""),
 		field.String("initialization_error").Default(""),
 		field.String("codex_session_id").Default(""),
+		field.String("forked_from_session_id").Default(""),
+		field.String("forked_from_codex_session_id").Default(""),
 		field.String("codex_model").Default(""),
 		field.String("reasoning_effort").Default(""),
 		field.String("permission_mode").Default(""),

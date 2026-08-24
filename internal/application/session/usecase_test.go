@@ -275,6 +275,84 @@ func TestOpenTerminalUsesSourceSessionWorktreeWithoutCreatingAnotherWorktree(t *
 	}
 }
 
+func TestForkSessionCreatesIndependentThreadFromSourceBranchHead(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["source-session"] = domain.Session{
+		ID:             "source-session",
+		ProjectID:      "project-1",
+		Requirement:    "original task",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusCompleted,
+		Priority:       domain.PriorityHigh,
+		BaseBranch:     "main",
+		WorktreePath:   "/data/worktrees/project-1/source-session",
+		WorktreeBranch: "source-session",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status: domain.WorktreeCleanupActive,
+		},
+		CodexSessionID: "codex-source",
+		Config: domain.Config{
+			CodexModel:      "gpt-test",
+			ReasoningEffort: "high",
+			PermissionMode:  "workspace-write",
+			FastMode:        true,
+		},
+	}
+	projects := newFakeProjectRepository("project-1")
+	project := projects.projects["project-1"]
+	project.Path = projectdomain.ProjectPath{Value: "/workspace/project-1"}
+	project.IsGit = true
+	projects.projects["project-1"] = project
+	worktrees := newFakeWorktreeManager()
+	worktrees.headCommit = "source-head"
+	codex := &fakeCodexProcess{forkHandle: processdomain.CodexHandle{CodexSessionID: "codex-fork", TurnID: "turn-fork"}}
+	service := New(repo, projects, WithWorktrees(worktrees), WithProcesses(newFakeProcessRepository(), codex))
+	t.Cleanup(service.Close)
+	service.generateID = func() (domain.ID, error) { return "fork-session", nil }
+
+	created, err := service.ForkSession(context.Background(), ForkSessionInput{
+		SourceSessionID: "source-session",
+		Requirement:     "try another implementation",
+	})
+	if err != nil {
+		t.Fatalf("ForkSession() error = %v", err)
+	}
+	if created.ID != "fork-session" || created.Status != domain.StatusQueued || created.BaseBranch != "source-session" {
+		t.Fatalf("ForkSession() = %#v", created)
+	}
+	saved := repo.sessions["fork-session"]
+	if saved.ForkedFromSessionID != "source-session" || saved.ForkedFromCodexSessionID != "codex-source" || saved.Priority != domain.PriorityHigh || saved.Config != repo.sessions["source-session"].Config {
+		t.Fatalf("fork lineage/config = %#v", saved)
+	}
+	if worktrees.createBaseBranch != "source-session" || worktrees.headCommit != "source-head" {
+		t.Fatalf("fork worktree = base:%q head:%q", worktrees.createBaseBranch, worktrees.headCommit)
+	}
+
+	running, err := service.ExecuteSessionWithOptions(context.Background(), "fork-session", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("ExecuteSessionWithOptions() error = %v", err)
+	}
+	if running.CodexSessionID != "codex-fork" || !codex.forkCalled || codex.startCalled || codex.resumeCalled {
+		t.Fatalf("fork execution = session:%#v codex:%#v", running, codex)
+	}
+	if codex.forkInput.SourceCodexSessionID != "codex-source" || codex.forkInput.Workdir != saved.WorktreePath || len(codex.forkInput.Input) == 0 || !strings.Contains(codex.forkInput.Input[0].Text, "try another implementation") {
+		t.Fatalf("fork input = %#v", codex.forkInput)
+	}
+}
+
+func TestForkSessionRejectsSourceWithoutCompletedChatThread(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["source-session"] = domain.Session{
+		ID: "source-session", ProjectID: "project-1", Mode: domain.ModeChat,
+		Status: domain.StatusRunning, CodexSessionID: "codex-source",
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+
+	if _, err := service.ForkSession(context.Background(), ForkSessionInput{SourceSessionID: "source-session", Requirement: "new task"}); err == nil {
+		t.Fatal("ForkSession() expected running source validation error")
+	}
+}
+
 func TestStopTerminalSessionStopsRuntime(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["terminal-session-1"] = domain.Session{
@@ -4464,11 +4542,12 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
-		ID:             "session-1",
-		ProjectID:      "project-1",
-		Requirement:    "resume this",
-		Status:         domain.StatusStopped,
-		CodexSessionID: "codex-1",
+		ID:                  "session-1",
+		ProjectID:           "project-1",
+		Requirement:         "resume this",
+		Status:              domain.StatusStopped,
+		CodexSessionID:      "codex-1",
+		ForkedFromSessionID: "source-session",
 		TodoList: domain.TodoList{Items: []domain.TodoItem{
 			{Text: "inspect", Completed: true},
 			{Text: "verify"},
@@ -4496,6 +4575,9 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	}
 	if got.ProjectName != "Project One" {
 		t.Fatalf("GetSession() ProjectName = %q", got.ProjectName)
+	}
+	if got.ForkedFromSessionID != "source-session" {
+		t.Fatalf("GetSession() ForkedFromSessionID = %q", got.ForkedFromSessionID)
 	}
 	if !got.CanResume {
 		t.Fatal("GetSession() CanResume = false")
@@ -13672,6 +13754,10 @@ type fakeCodexProcess struct {
 	resumeInput     processdomain.CodexResumeInput
 	resumeHandle    processdomain.CodexHandle
 	resumeErr       error
+	forkCalled      bool
+	forkInput       processdomain.CodexForkInput
+	forkHandle      processdomain.CodexHandle
+	forkErr         error
 	steerCalled     bool
 	steerInput      processdomain.CodexSteerInput
 	steerErr        error
@@ -13775,6 +13861,20 @@ func (p *fakeCodexProcess) Resume(_ context.Context, input processdomain.CodexRe
 	handle.ProcessRunID = input.ProcessRunID
 	if handle.CodexSessionID == "" {
 		handle.CodexSessionID = input.CodexSessionID
+	}
+	return handle, nil
+}
+
+func (p *fakeCodexProcess) Fork(_ context.Context, input processdomain.CodexForkInput) (processdomain.CodexHandle, error) {
+	p.forkCalled = true
+	p.forkInput = input
+	if p.forkErr != nil {
+		return processdomain.CodexHandle{}, p.forkErr
+	}
+	handle := p.forkHandle
+	handle.ProcessRunID = input.ProcessRunID
+	if handle.CodexSessionID == "" {
+		handle.CodexSessionID = "codex-session-fork"
 	}
 	return handle, nil
 }

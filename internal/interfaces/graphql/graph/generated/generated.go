@@ -252,6 +252,7 @@ type ComplexityRoot struct {
 		DeleteSessionFile           func(childComplexity int, id string) int
 		DeleteStagedAttachment      func(childComplexity int, id string) int
 		ExecuteSession              func(childComplexity int, id string, force *bool) int
+		ForkSession                 func(childComplexity int, input model.ForkSessionInput) int
 		OpenSessionTerminal         func(childComplexity int, sessionID string) int
 		RegisterPushSubscription    func(childComplexity int, input model.RegisterPushSubscriptionInput) int
 		RemoveProject               func(childComplexity int, id string) int
@@ -490,33 +491,34 @@ type ComplexityRoot struct {
 	}
 
 	SessionDetail struct {
-		ArtifactCount    func(childComplexity int) int
-		Attachments      func(childComplexity int) int
-		AvailableActions func(childComplexity int) int
-		BaseBranch       func(childComplexity int) int
-		CanResume        func(childComplexity int) int
-		CloseReason      func(childComplexity int) int
-		CodexSessionID   func(childComplexity int) int
-		Config           func(childComplexity int) int
-		CreatedAt        func(childComplexity int) int
-		CurrentNodeTitle func(childComplexity int) int
-		FilesChanged     func(childComplexity int) int
-		ID               func(childComplexity int) int
-		LastRunAt        func(childComplexity int) int
-		Mode             func(childComplexity int) int
-		PendingApproval  func(childComplexity int) int
-		Priority         func(childComplexity int) int
-		ProjectID        func(childComplexity int) int
-		ProjectName      func(childComplexity int) int
-		PromptAppends    func(childComplexity int) int
-		Requirement      func(childComplexity int) int
-		Status           func(childComplexity int) int
-		TodoList         func(childComplexity int) int
-		UpdatedAt        func(childComplexity int) int
-		Usage            func(childComplexity int) int
-		WorktreeBranch   func(childComplexity int) int
-		WorktreeCleanup  func(childComplexity int) int
-		WorktreePath     func(childComplexity int) int
+		ArtifactCount       func(childComplexity int) int
+		Attachments         func(childComplexity int) int
+		AvailableActions    func(childComplexity int) int
+		BaseBranch          func(childComplexity int) int
+		CanResume           func(childComplexity int) int
+		CloseReason         func(childComplexity int) int
+		CodexSessionID      func(childComplexity int) int
+		Config              func(childComplexity int) int
+		CreatedAt           func(childComplexity int) int
+		CurrentNodeTitle    func(childComplexity int) int
+		FilesChanged        func(childComplexity int) int
+		ForkedFromSessionID func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		LastRunAt           func(childComplexity int) int
+		Mode                func(childComplexity int) int
+		PendingApproval     func(childComplexity int) int
+		Priority            func(childComplexity int) int
+		ProjectID           func(childComplexity int) int
+		ProjectName         func(childComplexity int) int
+		PromptAppends       func(childComplexity int) int
+		Requirement         func(childComplexity int) int
+		Status              func(childComplexity int) int
+		TodoList            func(childComplexity int) int
+		UpdatedAt           func(childComplexity int) int
+		Usage               func(childComplexity int) int
+		WorktreeBranch      func(childComplexity int) int
+		WorktreeCleanup     func(childComplexity int) int
+		WorktreePath        func(childComplexity int) int
 	}
 
 	SessionDiff struct {
@@ -851,6 +853,7 @@ type MutationResolver interface {
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
+	ForkSession(ctx context.Context, input model.ForkSessionInput) (*model.Session, error)
 	OpenSessionTerminal(ctx context.Context, sessionID string) (*model.Session, error)
 	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
 	UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error)
@@ -1800,6 +1803,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ExecuteSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.forkSession":
+		if e.ComplexityRoot.Mutation.ForkSession == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_forkSession_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ForkSession(childComplexity, args["input"].(model.ForkSessionInput)), true
 	case "Mutation.openSessionTerminal":
 		if e.ComplexityRoot.Mutation.OpenSessionTerminal == nil {
 			break
@@ -3161,6 +3175,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.FilesChanged(childComplexity), true
+	case "SessionDetail.forkedFromSessionId":
+		if e.ComplexityRoot.SessionDetail.ForkedFromSessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.ForkedFromSessionID(childComplexity), true
 	case "SessionDetail.id":
 		if e.ComplexityRoot.SessionDetail.ID == nil {
 			break
@@ -4455,6 +4475,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateQuickCommandInput,
 		ec.unmarshalInputCreateSessionInput,
+		ec.unmarshalInputForkSessionInput,
 		ec.unmarshalInputListQuickCommandsInput,
 		ec.unmarshalInputListSessionFilesInput,
 		ec.unmarshalInputListSessionsInput,
@@ -4692,6 +4713,7 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
+  forkSession(input: ForkSessionInput!): Session!
   openSessionTerminal(sessionId: ID!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
@@ -4991,6 +5013,7 @@ type SessionDetail {
   id: ID!
   projectId: ID!
   projectName: String!
+  forkedFromSessionId: ID
   requirement: String!
   mode: String!
   status: String!
@@ -5616,6 +5639,11 @@ input CreateSessionInput {
   mentions: [PromptMentionInput!]
 }
 
+input ForkSessionInput {
+  sourceSessionId: ID!
+  requirement: String!
+}
+
 input PromptMentionInput {
   path: String!
 }
@@ -5930,6 +5958,17 @@ func (ec *executionContext) field_Mutation_executeSession_args(ctx context.Conte
 		return nil, err
 	}
 	args["force"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_forkSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNForkSessionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐForkSessionInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -10963,6 +11002,81 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_forkSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_forkSession,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ForkSession(ctx, fc.Args["input"].(model.ForkSessionInput))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_forkSession(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_forkSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_openSessionTerminal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14156,6 +14270,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_projectId(ctx, field)
 			case "projectName":
 				return ec.fieldContext_SessionDetail_projectName(ctx, field)
+			case "forkedFromSessionId":
+				return ec.fieldContext_SessionDetail_forkedFromSessionId(ctx, field)
 			case "requirement":
 				return ec.fieldContext_SessionDetail_requirement(ctx, field)
 			case "mode":
@@ -17762,6 +17878,35 @@ func (ec *executionContext) fieldContext_SessionDetail_projectName(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_forkedFromSessionId(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_forkedFromSessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.ForkedFromSessionID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_forkedFromSessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -26447,6 +26592,43 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputForkSessionInput(ctx context.Context, obj any) (model.ForkSessionInput, error) {
+	var it model.ForkSessionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sourceSessionId", "requirement"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sourceSessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceSessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceSessionID = data
+		case "requirement":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requirement"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Requirement = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputListQuickCommandsInput(ctx context.Context, obj any) (model.ListQuickCommandsInput, error) {
 	var it model.ListQuickCommandsInput
 	if obj == nil {
@@ -30165,6 +30347,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "forkSession":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_forkSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "openSessionTerminal":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_openSessionTerminal(ctx, field)
@@ -32292,6 +32481,8 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "forkedFromSessionId":
+			out.Values[i] = ec._SessionDetail_forkedFromSessionId(ctx, field, obj)
 		case "requirement":
 			out.Values[i] = ec._SessionDetail_requirement(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -35397,6 +35588,11 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 		}
 	}
 	return graphql.WrapContextMarshaler(ctx, res)
+}
+
+func (ec *executionContext) unmarshalNForkSessionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐForkSessionInput(ctx context.Context, v any) (model.ForkSessionInput, error) {
+	res, err := ec.unmarshalInputForkSessionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNGeneralSettings2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGeneralSettings(ctx context.Context, sel ast.SelectionSet, v model.GeneralSettings) graphql.Marshaler {

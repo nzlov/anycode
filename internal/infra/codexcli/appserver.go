@@ -24,14 +24,21 @@ func (c *Client) SlashCommands() []process.CodexSlashCommand {
 }
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
-	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	if strings.TrimSpace(input.CodexSessionID) == "" {
 		return process.CodexHandle{}, process.ErrThreadUnavailable
 	}
-	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+}
+
+func (c *Client) Fork(ctx context.Context, input process.CodexForkInput) (process.CodexHandle, error) {
+	if strings.TrimSpace(input.SourceCodexSessionID) == "" {
+		return process.CodexHandle{}, process.ErrThreadUnavailable
+	}
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.SourceCodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
 }
 
 func (c *Client) start(
@@ -39,6 +46,7 @@ func (c *Client) start(
 	runID process.RunID,
 	sessionID process.SessionID,
 	threadID string,
+	forkFromThreadID string,
 	workdir string,
 	artifactDir string,
 	input []process.CodexInputItem,
@@ -61,9 +69,27 @@ func (c *Client) start(
 	}
 	workspaceWrite := newWorkspaceWriteSettings(permissionMode, writableRoots, artifactDir)
 	resuming := threadID != ""
+	forking := strings.TrimSpace(forkFromThreadID) != ""
 	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode, workspaceWrite)
-	params["dynamicTools"] = anyCodeDynamicTools(dynamicTools...)
-	if threadID == "" {
+	if !forking {
+		params["dynamicTools"] = anyCodeDynamicTools(dynamicTools...)
+	}
+	if forking {
+		params["threadId"] = strings.TrimSpace(forkFromThreadID)
+		params["ephemeral"] = false
+		var response struct {
+			Thread struct {
+				ID string `json:"id"`
+			} `json:"thread"`
+		}
+		if err := runtime.request(ctx, "thread/fork", params, &response); err != nil {
+			if isUnavailableThreadResumeError(err) {
+				return process.CodexHandle{}, fmt.Errorf("fork codex thread: %w: %v", process.ErrThreadUnavailable, err)
+			}
+			return process.CodexHandle{}, fmt.Errorf("fork codex thread: %w", err)
+		}
+		threadID = strings.TrimSpace(response.Thread.ID)
+	} else if threadID == "" {
 		params["ephemeral"] = false
 		params["historyMode"] = "paginated"
 		var response struct {
@@ -97,14 +123,14 @@ func (c *Client) start(
 	}
 	transcriptPath := ""
 	transcriptOffset := int64(0)
-	if resuming {
+	if resuming || forking {
 		transcriptPath, err = waitForSessionLog(ctx, c.CodexHome(), threadID)
 		if err != nil {
-			return process.CodexHandle{}, fmt.Errorf("find codex session log for resume: %w", err)
+			return process.CodexHandle{}, fmt.Errorf("find codex session log: %w", err)
 		}
 		info, statErr := os.Stat(transcriptPath)
 		if statErr != nil {
-			return process.CodexHandle{}, fmt.Errorf("stat codex session log for resume: %w", statErr)
+			return process.CodexHandle{}, fmt.Errorf("stat codex session log: %w", statErr)
 		}
 		transcriptOffset = info.Size()
 	}

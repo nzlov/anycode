@@ -170,35 +170,37 @@ const (
 )
 
 type Session struct {
-	ID                      ID
-	ProjectID               ProjectID
-	Requirement             string
-	Mentions                []PromptMention
-	Mode                    Mode
-	Status                  Status
-	Priority                Priority
-	CloseReason             *CloseReason
-	BaseBranch              string
-	WorktreePath            string
-	WorktreeBranch          string
-	WorktreeBaseCommit      string
-	WorktreeHeadCommit      string
-	WorktreeCleanup         WorktreeCleanup
-	InitializationErrorCode string
-	InitializationError     string
-	CodexSessionID          string
-	Config                  Config
-	TodoList                TodoList
-	Usage                   TokenUsage
-	ArtifactCount           int
-	FilesChanged            int
-	QueuedAt                *time.Time
-	Queue                   QueueIntent
-	AppliedSystemCommands   map[string]bool
-	LastRunAt               *time.Time
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
-	ClosedAt                *time.Time
+	ID                       ID
+	ProjectID                ProjectID
+	Requirement              string
+	Mentions                 []PromptMention
+	Mode                     Mode
+	Status                   Status
+	Priority                 Priority
+	CloseReason              *CloseReason
+	BaseBranch               string
+	WorktreePath             string
+	WorktreeBranch           string
+	WorktreeBaseCommit       string
+	WorktreeHeadCommit       string
+	WorktreeCleanup          WorktreeCleanup
+	InitializationErrorCode  string
+	InitializationError      string
+	CodexSessionID           string
+	ForkedFromSessionID      ID
+	ForkedFromCodexSessionID string
+	Config                   Config
+	TodoList                 TodoList
+	Usage                    TokenUsage
+	ArtifactCount            int
+	FilesChanged             int
+	QueuedAt                 *time.Time
+	Queue                    QueueIntent
+	AppliedSystemCommands    map[string]bool
+	LastRunAt                *time.Time
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	ClosedAt                 *time.Time
 }
 
 type TokenUsage struct {

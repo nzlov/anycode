@@ -102,6 +102,7 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
+  forkSession(input: ForkSessionInput!): Session!
   openSessionTerminal(sessionId: ID!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
@@ -401,6 +402,7 @@ type SessionDetail {
   id: ID!
   projectId: ID!
   projectName: String!
+  forkedFromSessionId: ID
   requirement: String!
   mode: String!
   status: String!
@@ -1024,6 +1026,11 @@ input CreateSessionInput {
   config: SessionConfigInput
   stagedAttachmentIds: [ID!]
   mentions: [PromptMentionInput!]
+}
+
+input ForkSessionInput {
+  sourceSessionId: ID!
+  requirement: String!
 }
 
 input PromptMentionInput {

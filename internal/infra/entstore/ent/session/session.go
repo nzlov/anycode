@@ -65,6 +65,10 @@ const (
 	FieldInitializationError = "initialization_error"
 	// FieldCodexSessionID holds the string denoting the codex_session_id field in the database.
 	FieldCodexSessionID = "codex_session_id"
+	// FieldForkedFromSessionID holds the string denoting the forked_from_session_id field in the database.
+	FieldForkedFromSessionID = "forked_from_session_id"
+	// FieldForkedFromCodexSessionID holds the string denoting the forked_from_codex_session_id field in the database.
+	FieldForkedFromCodexSessionID = "forked_from_codex_session_id"
 	// FieldCodexModel holds the string denoting the codex_model field in the database.
 	FieldCodexModel = "codex_model"
 	// FieldReasoningEffort holds the string denoting the reasoning_effort field in the database.
@@ -156,6 +160,8 @@ var Columns = []string{
 	FieldInitializationErrorCode,
 	FieldInitializationError,
 	FieldCodexSessionID,
+	FieldForkedFromSessionID,
+	FieldForkedFromCodexSessionID,
 	FieldCodexModel,
 	FieldReasoningEffort,
 	FieldPermissionMode,
@@ -236,6 +242,10 @@ var (
 	DefaultInitializationError string
 	// DefaultCodexSessionID holds the default value on creation for the "codex_session_id" field.
 	DefaultCodexSessionID string
+	// DefaultForkedFromSessionID holds the default value on creation for the "forked_from_session_id" field.
+	DefaultForkedFromSessionID string
+	// DefaultForkedFromCodexSessionID holds the default value on creation for the "forked_from_codex_session_id" field.
+	DefaultForkedFromCodexSessionID string
 	// DefaultCodexModel holds the default value on creation for the "codex_model" field.
 	DefaultCodexModel string
 	// DefaultReasoningEffort holds the default value on creation for the "reasoning_effort" field.
@@ -415,6 +425,16 @@ func ByInitializationError(opts ...sql.OrderTermOption) OrderOption {
 // ByCodexSessionID orders the results by the codex_session_id field.
 func ByCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCodexSessionID, opts...).ToFunc()
+}
+
+// ByForkedFromSessionID orders the results by the forked_from_session_id field.
+func ByForkedFromSessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldForkedFromSessionID, opts...).ToFunc()
+}
+
+// ByForkedFromCodexSessionID orders the results by the forked_from_codex_session_id field.
+func ByForkedFromCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldForkedFromCodexSessionID, opts...).ToFunc()
 }
 
 // ByCodexModel orders the results by the codex_model field.

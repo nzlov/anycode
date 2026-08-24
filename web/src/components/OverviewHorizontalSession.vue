@@ -26,6 +26,7 @@
         :mind-map-updated="mindMapUpdated"
         @set-priority="emit('set-priority', $event)"
         @terminal-opened="emit('terminal-opened', $event)"
+        @forked="emit('forked', $event)"
         @close="emit('close')"
         @merge-close="emit('merge-close')"
       />
@@ -75,6 +76,7 @@ const emit = defineEmits<{
   'update:width': [width: number];
   'set-priority': [priority: SessionPriority];
   'terminal-opened': [sessionId: string];
+  forked: [sessionId: string];
   close: [];
   'merge-close': [];
 }>();
