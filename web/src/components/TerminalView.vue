@@ -1,6 +1,10 @@
 <template>
   <div class="terminal-view">
-    <div ref="terminalHost" class="terminal-view__host" aria-label="Terminal 终端" />
+    <div
+      ref="terminalHost"
+      class="terminal-view__host terminal-view__host--native-selection"
+      aria-label="Terminal 终端"
+    />
     <div v-if="$q.screen.lt.sm" class="terminal-view__mobile-keys" aria-label="终端辅助按键">
       <q-btn dense flat no-caps label="Esc" :disable="!interactive" @click="sendKey('\u001b')" />
       <q-btn dense flat no-caps label="Tab" :disable="!interactive" @click="sendKey('\t')" />
@@ -121,6 +125,7 @@ onMounted(async () => {
     cursorBlink: true,
     allowProposedApi: false,
     scrollback: 5000,
+    screenReaderMode: true,
     fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, Liberation Mono, monospace',
     fontSize: $q.screen.lt.sm ? 13 : 14,
     theme: terminalTheme(),
@@ -128,6 +133,10 @@ onMounted(async () => {
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(terminalHost.value);
+  // GLUE: xterm 6 intercepts mouse selection and renders text to canvas; remove these listeners when it supports native selection.
+  terminal.element?.addEventListener('mousedown', handleNativeSelectionMouseDown, true);
+  terminal.element?.addEventListener('contextmenu', handleNativeSelectionContextMenu, true);
+  terminal.element?.addEventListener('click', handleNativeSelectionClick);
   terminalHost.value.addEventListener('touchstart', handleTouchStart, { passive: true });
   terminalHost.value.addEventListener('touchmove', handleTouchMove, { passive: false });
   terminalHost.value.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -181,6 +190,9 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  terminal?.element?.removeEventListener('mousedown', handleNativeSelectionMouseDown, true);
+  terminal?.element?.removeEventListener('contextmenu', handleNativeSelectionContextMenu, true);
+  terminal?.element?.removeEventListener('click', handleNativeSelectionClick);
   terminalHost.value?.removeEventListener('touchstart', handleTouchStart);
   terminalHost.value?.removeEventListener('touchmove', handleTouchMove);
   terminalHost.value?.removeEventListener('touchend', handleTouchEnd);
@@ -246,11 +258,15 @@ function controlSequence(data: string) {
 }
 
 function handleTouchStart(event: TouchEvent) {
-  touchScrollY = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null;
+  touchScrollY = event.touches.length === 1 ? (event.touches[0]?.clientY ?? null) : null;
 }
 
 function handleTouchMove(event: TouchEvent) {
   if (!terminal || touchScrollY === null || event.touches.length !== 1) return;
+  if (hasNativeTerminalSelection()) {
+    touchScrollY = null;
+    return;
+  }
   const currentY = event.touches[0]?.clientY;
   if (currentY === undefined) return;
   const lineHeight = Math.max(1, (terminalHost.value?.clientHeight ?? 0) / terminal.rows);
@@ -259,6 +275,28 @@ function handleTouchMove(event: TouchEvent) {
   terminal.scrollLines(lines);
   touchScrollY -= lines * lineHeight;
   event.preventDefault();
+}
+
+function hasNativeTerminalSelection() {
+  const selection = document.getSelection();
+  return Boolean(
+    selection &&
+    !selection.isCollapsed &&
+    selection.anchorNode &&
+    terminal?.element?.contains(selection.anchorNode),
+  );
+}
+
+function handleNativeSelectionMouseDown(event: MouseEvent) {
+  if (event.button === 0) event.stopImmediatePropagation();
+}
+
+function handleNativeSelectionContextMenu(event: MouseEvent) {
+  if (hasNativeTerminalSelection()) event.stopImmediatePropagation();
+}
+
+function handleNativeSelectionClick() {
+  if (!hasNativeTerminalSelection()) terminal?.focus();
 }
 
 function handleTouchEnd() {
@@ -326,6 +364,19 @@ function terminalTheme() {
   flex: 1 1 auto;
   padding: 8px;
   touch-action: none;
+}
+
+.terminal-view__host--native-selection {
+  touch-action: auto;
+}
+
+.terminal-view__host--native-selection :deep(.xterm) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.terminal-view__host--native-selection :deep(.xterm-accessibility:not(.debug)) {
+  pointer-events: auto;
 }
 
 .terminal-view__mobile-keys {

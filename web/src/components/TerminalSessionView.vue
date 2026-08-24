@@ -1,5 +1,8 @@
 <template>
-  <q-page class="terminal-session-page page-shell">
+  <q-page
+    class="terminal-session-page page-shell"
+    :style="{ '--terminal-session-viewport-bottom': visualViewportBottom }"
+  >
     <PageToolbar :title="session?.title || 'Terminal'" title-icon="terminal">
       <q-badge
         v-if="session"
@@ -116,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
@@ -141,6 +144,8 @@ const loading = ref(true);
 const action = ref<'start' | 'stop' | 'close' | ''>('');
 const terminalError = ref('');
 const terminalGeneration = ref(0);
+const visualViewportBottom = ref('100dvh');
+let viewportResizeFrame = 0;
 const canStop = computed(() => session.value?.availableActions.includes('stop') ?? false);
 const canStart = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
@@ -148,7 +153,31 @@ const stoppedMessage = computed(() =>
   session.value?.status === 'closed' ? 'Terminal 卡片已关闭' : 'Terminal 已停止',
 );
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  syncVisualViewportBottom();
+  window.visualViewport?.addEventListener('resize', scheduleVisualViewportSync);
+  window.visualViewport?.addEventListener('scroll', scheduleVisualViewportSync);
+});
+
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', scheduleVisualViewportSync);
+  window.visualViewport?.removeEventListener('scroll', scheduleVisualViewportSync);
+  if (viewportResizeFrame) cancelAnimationFrame(viewportResizeFrame);
+});
+
+function scheduleVisualViewportSync() {
+  if (viewportResizeFrame) cancelAnimationFrame(viewportResizeFrame);
+  viewportResizeFrame = requestAnimationFrame(syncVisualViewportBottom);
+}
+
+function syncVisualViewportBottom() {
+  viewportResizeFrame = 0;
+  const viewport = window.visualViewport;
+  visualViewportBottom.value = viewport
+    ? `${Math.round(viewport.offsetTop + viewport.height)}px`
+    : '100dvh';
+}
 
 async function load() {
   loading.value = true;
@@ -201,7 +230,7 @@ function handleExit() {
 .terminal-session-page {
   box-sizing: border-box;
   display: flex;
-  height: calc(100dvh - 50px);
+  height: calc(var(--terminal-session-viewport-bottom, 100dvh) - 50px);
   min-height: 0 !important;
   flex-direction: column;
 }
@@ -225,8 +254,8 @@ function handleExit() {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  padding: 2px max(8px, env(safe-area-inset-right))
-    calc(2px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  padding: 2px max(8px, env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
   border-top: 1px solid var(--ac-border);
   background: var(--ac-surface-raised);
 }

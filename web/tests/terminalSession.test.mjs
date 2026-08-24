@@ -28,7 +28,7 @@ test('terminal socket authenticates in-band and reconnects without putting crede
   assert.match(source, /Math\.min\(500 \* 2 \*\*/);
 });
 
-test('terminal view covers resize, output acknowledgement, touch scrolling, and mobile keys', async () => {
+test('terminal view covers resize, output acknowledgement, native selection, touch scrolling, and keys', async () => {
   const [source, sessionView] = await Promise.all([
     read('src/components/TerminalView.vue'),
     read('src/components/TerminalSessionView.vue'),
@@ -41,6 +41,17 @@ test('terminal view covers resize, output acknowledgement, touch scrolling, and 
   assert.match(source, /maxOutputQueueBytes = 2 << 20/);
   assert.match(source, /terminal\.write\(chunk, \(\) =>/);
   assert.match(source, /connection\?\.acknowledge\(chunk\.byteLength\)/);
+  assert.match(source, /screenReaderMode: true/);
+  assert.match(source, /addEventListener\('mousedown', handleNativeSelectionMouseDown, true\)/);
+  assert.match(
+    source,
+    /function handleNativeSelectionMouseDown\(event: MouseEvent\) \{\s*if \(event\.button === 0\) event\.stopImmediatePropagation\(\);/,
+  );
+  assert.match(
+    source,
+    /function handleNativeSelectionClick\(\) \{\s*if \(!hasNativeTerminalSelection\(\)\) terminal\?\.focus\(\);/,
+  );
+  assert.match(source, /if \(hasNativeTerminalSelection\(\)\) \{\s*touchScrollY = null;\s*return;/);
   assert.match(source, /addEventListener\('touchmove', handleTouchMove, \{ passive: false \}\)/);
   assert.match(source, /terminal\.scrollLines\(lines\)/);
   assert.match(source, /label="Ctrl"[\s\S]*:aria-pressed="isModifierPressed\('ctrl'\)"/);
@@ -49,6 +60,15 @@ test('terminal view covers resize, output acknowledgement, touch scrolling, and 
   assert.match(source, /getComputedStyle\(terminalHost\.value \?\? document\.body\)/);
   assert.match(source, /background: color\('--ac-terminal-bg'\)/);
   assert.match(source, /brightWhite: color\('--ac-ansi-bright-white'\)/);
+  assert.match(source, /\.terminal-view__host--native-selection\s*\{[^}]*touch-action:\s*auto/s);
+  assert.match(
+    source,
+    /\.terminal-view__host--native-selection :deep\(\.xterm\)\s*\{[^}]*user-select:\s*text[^}]*-webkit-user-select:\s*text/s,
+  );
+  assert.match(
+    source,
+    /\.terminal-view__host--native-selection :deep\(\.xterm-accessibility:not\(\.debug\)\)\s*\{[^}]*pointer-events:\s*auto/s,
+  );
   assert.match(
     source,
     /themeObserver\.observe\(document\.body, \{ attributes: true, attributeFilter: \['class'\] \}\)/,
@@ -59,7 +79,27 @@ test('terminal view covers resize, output acknowledgement, touch scrolling, and 
   );
   assert.match(sessionView, /aria-label="Terminal 状态控制"/);
   assert.match(sessionView, /class="terminal-session-mobile-actions"[\s\S]*label="停止"/);
-  assert.match(sessionView, /height:\s*calc\(100dvh - 50px\)/);
+  assert.match(
+    sessionView,
+    /:style="\{ '--terminal-session-viewport-bottom': visualViewportBottom \}"/,
+  );
+  assert.match(
+    sessionView,
+    /window\.visualViewport\?\.addEventListener\('resize', scheduleVisualViewportSync\)/,
+  );
+  assert.match(
+    sessionView,
+    /window\.visualViewport\?\.removeEventListener\('resize', scheduleVisualViewportSync\)/,
+  );
+  assert.match(
+    sessionView,
+    /window\.visualViewport\?\.addEventListener\('scroll', scheduleVisualViewportSync\)/,
+  );
+  assert.match(sessionView, /viewport\.offsetTop \+ viewport\.height/);
+  assert.match(
+    sessionView,
+    /height:\s*calc\(var\(--terminal-session-viewport-bottom, 100dvh\) - 50px\)/,
+  );
   assert.match(sessionView, /\.terminal-session-card\s*\{[^}]*min-height:\s*0/s);
 });
 
