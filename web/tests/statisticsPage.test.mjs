@@ -78,6 +78,11 @@ test('statistics charts share token units and linked pointer inspection', () => 
   assert.match(chartSource, /import \{ formatTokenCount \}/);
   assert.match(chartSource, /props\.valueFormat === 'tokens' \? formatTokenCount\(value\)/);
   assert.match(chartSource, /@mousemove="handleMouseMove"/);
+  assert.match(
+    chartSource,
+    /class="statistics-chart__hit-area"[\s\S]*?:width="plotWidth"[\s\S]*?:height="plotHeight"/,
+  );
+  assert.match(chartSource, /\.statistics-chart__hit-area\s*{[^}]*pointer-events:\s*all/s);
   assert.match(chartSource, /@touchstart\.passive="handleTouch"/);
   assert.match(chartSource, /@touchmove\.passive="handleTouch"/);
   assert.match(chartSource, /class="statistics-chart__inspection"/);

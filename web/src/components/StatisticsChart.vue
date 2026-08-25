@@ -41,6 +41,15 @@
           @touchstart.passive="handleTouch"
           @touchmove.passive="handleTouch"
         >
+          <rect
+            class="statistics-chart__hit-area"
+            :x="padding.left"
+            :y="padding.top"
+            :width="plotWidth"
+            :height="plotHeight"
+            aria-hidden="true"
+          />
+
           <g class="statistics-chart__grid">
             <template v-for="tick in ticks" :key="tick.ratio">
               <line
@@ -434,6 +443,11 @@ onMounted(() => syncScrollLeft(props.scrollLeft));
   display: block;
   min-width: 100%;
   height: 260px;
+}
+
+.statistics-chart__hit-area {
+  fill: transparent;
+  pointer-events: all;
 }
 
 .statistics-chart__grid line {
