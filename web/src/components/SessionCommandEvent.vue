@@ -3,6 +3,7 @@
     <button
       type="button"
       class="command-event__header"
+      :class="{ 'session-event-header--sticky': expanded && canExpand }"
       :aria-expanded="canExpand ? expanded : undefined"
       :disabled="!canExpand"
       @click="canExpand && toggleExpanded()"

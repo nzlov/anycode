@@ -3,6 +3,7 @@
     <button
       type="button"
       class="session-file-change__header"
+      :class="{ 'session-event-header--sticky': expanded }"
       :aria-expanded="expanded"
       @click="toggleExpanded"
     >
@@ -95,12 +96,15 @@ function toggleExpanded() {
 
 <style scoped>
 .session-file-change {
+  --session-event-sticky-header-height: 35px;
+
   min-width: 0;
 }
 
 .session-file-change__header {
   display: flex;
   width: 100%;
+  height: var(--session-event-sticky-header-height);
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -119,8 +123,9 @@ function toggleExpanded() {
 .session-file-change__header span {
   flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-file-change__header time {
@@ -185,6 +190,7 @@ function toggleExpanded() {
 }
 
 .session-file-change__body :deep(.diff-file-header) {
+  top: var(--session-event-sticky-header-height);
   padding: 8px 10px;
 }
 </style>

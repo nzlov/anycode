@@ -1611,6 +1611,14 @@ async function scrollEventsToBottom(force = false) {
   min-width: 0;
 }
 
+.event-list :deep(.session-event-header--sticky) {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--ac-surface-raised);
+  box-shadow: 0 1px 0 var(--ac-border);
+}
+
 .event-resource-dialog {
   position: relative;
   display: flex;

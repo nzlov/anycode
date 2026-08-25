@@ -3,6 +3,7 @@
     <button
       type="button"
       class="tool-event__header"
+      :class="{ 'session-event-header--sticky': expanded }"
       :aria-expanded="expanded"
       @click="toggleExpanded"
     >

@@ -1,6 +1,12 @@
 <template>
   <article class="reasoning-event">
-    <button type="button" class="reasoning-event__header" @click="toggleExpanded">
+    <button
+      type="button"
+      class="reasoning-event__header"
+      :class="{ 'session-event-header--sticky': expanded }"
+      :aria-expanded="expanded"
+      @click="toggleExpanded"
+    >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="psychology" size="16px" />
       <span>思考过程</span>

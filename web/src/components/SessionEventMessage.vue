@@ -3,6 +3,7 @@
     <button
       type="button"
       class="event-group__toggle"
+      :class="{ 'session-event-header--sticky': groupExpanded }"
       :aria-expanded="groupExpanded"
       @click="groupExpanded = !groupExpanded"
     >

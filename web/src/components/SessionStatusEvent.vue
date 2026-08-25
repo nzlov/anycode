@@ -1,6 +1,9 @@
 <template>
   <article class="status-event-shell">
-    <div class="status-event" :class="`status-event--${content.level}`">
+    <div
+      class="status-event"
+      :class="[`status-event--${content.level}`, { 'session-event-header--sticky': expanded }]"
+    >
       <q-icon :name="statusIcon(content)" :color="statusColor(content)" size="16px" />
       <div class="status-event__content">
         <strong>{{ statusLabel(content) }}</strong>
