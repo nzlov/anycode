@@ -60,6 +60,11 @@ test('terminal view covers resize, output acknowledgement, native selection, tou
   assert.match(source, /getComputedStyle\(terminalHost\.value \?\? document\.body\)/);
   assert.match(source, /background: color\('--ac-terminal-bg'\)/);
   assert.match(source, /brightWhite: color\('--ac-ansi-bright-white'\)/);
+  assert.doesNotMatch(source, /\.terminal-view__host\s*{[^}]*padding:/s);
+  assert.match(
+    source,
+    /\.terminal-view__host :deep\(\.xterm\)\s*{[^}]*padding:\s*8px/s,
+  );
   assert.match(source, /\.terminal-view__host--native-selection\s*\{[^}]*touch-action:\s*auto/s);
   assert.match(
     source,

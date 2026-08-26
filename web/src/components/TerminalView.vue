@@ -362,8 +362,12 @@ function terminalTheme() {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  padding: 8px;
   touch-action: none;
+}
+
+/* GLUE: FitAddon subtracts padding from .xterm, not its host; keep spacing here until it accounts for host padding. */
+.terminal-view__host :deep(.xterm) {
+  padding: 8px;
 }
 
 .terminal-view__host--native-selection {
