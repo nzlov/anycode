@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { formatTokenCount } from '@/services/tokenUsagePresentation';
 
@@ -186,12 +186,14 @@ const emit = defineEmits<{
   inspect: [index: number | null, ratio: number | null];
 }>();
 const viewport = ref<HTMLElement | null>(null);
+const viewportWidth = ref(0);
 const hiddenSeriesKeys = ref(new Set<string>());
+let viewportResizeObserver: ResizeObserver | null = null;
 
 const chartHeight = 260;
 const padding = { top: 20, right: 20, bottom: 54, left: 56 };
 const chartWidth = computed(() =>
-  Math.max(620, props.labels.length * 72 + padding.left + padding.right),
+  Math.max(620, props.labels.length * 72 + padding.left + padding.right, viewportWidth.value),
 );
 const plotHeight = chartHeight - padding.top - padding.bottom;
 const plotWidth = computed(() => chartWidth.value - padding.left - padding.right);
@@ -242,6 +244,10 @@ function syncScrollLeft(value: number) {
       viewport.value.scrollLeft = value;
     }
   });
+}
+
+function syncViewportWidth() {
+  viewportWidth.value = viewport.value?.clientWidth ?? 0;
 }
 
 function handleViewportScroll() {
@@ -357,7 +363,15 @@ watch(
     hiddenSeriesKeys.value = new Set();
   },
 );
-onMounted(() => syncScrollLeft(props.scrollLeft));
+onMounted(() => {
+  syncScrollLeft(props.scrollLeft);
+  syncViewportWidth();
+  if (viewport.value && typeof ResizeObserver !== 'undefined') {
+    viewportResizeObserver = new ResizeObserver(syncViewportWidth);
+    viewportResizeObserver.observe(viewport.value);
+  }
+});
+onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 </script>
 
 <style scoped>
@@ -441,7 +455,6 @@ onMounted(() => syncScrollLeft(props.scrollLeft));
 
 .statistics-chart__svg {
   display: block;
-  min-width: 100%;
   height: 260px;
 }
 

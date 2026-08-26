@@ -60,7 +60,13 @@ test('statistics query reads the requested daily range from the server-side arch
 
 test('statistics charts remain inspectable with long timelines and project names', () => {
   assert.match(chartSource, /overflow-x: auto/);
-  assert.match(chartSource, /Math\.max\(620, props\.labels\.length \* 72/);
+  assert.match(
+    chartSource,
+    /Math\.max\(620, props\.labels\.length \* 72 \+ padding\.left \+ padding\.right, viewportWidth\.value\)/,
+  );
+  assert.match(chartSource, /viewportWidth\.value = viewport\.value\?\.clientWidth \?\? 0/);
+  assert.match(chartSource, /new ResizeObserver\(syncViewportWidth\)/);
+  assert.doesNotMatch(chartSource, /\.statistics-chart__svg\s*{[^}]*min-width:\s*100%/s);
   assert.match(chartSource, /<title>\{\{ labels\[index\] \}\}/);
   assert.match(chartSource, /shortLabel\(label\)/);
   assert.match(chartSource, /v-if="series\.length"/);
