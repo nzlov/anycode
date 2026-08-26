@@ -501,6 +501,7 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 		StagedAttachmentIDs: stagedAttachmentIDs,
 		ArtifactIDs:         artifactIDs,
 		FileReferences:      promptFileReferencesFromInput(input.FileReferences),
+		Annotations:         promptAnnotationsFromInput(input.Annotations),
 		Mentions:            promptMentionsFromInput(input.Mentions),
 	})
 	if err != nil {

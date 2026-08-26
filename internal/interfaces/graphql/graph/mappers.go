@@ -489,14 +489,66 @@ func mapPromptAppend(dto sessionapp.PromptAppendDTO) *model.PromptAppend {
 	for _, artifact := range dto.Artifacts {
 		artifacts = append(artifacts, mapSessionFile(artifact))
 	}
+	annotations := make([]*model.PromptAnnotation, 0, len(dto.Annotations))
+	for _, annotation := range dto.Annotations {
+		annotations = append(annotations, mapPromptAnnotation(annotation))
+	}
 	return &model.PromptAppend{
 		ID:          dto.ID,
 		SessionID:   string(dto.SessionID),
 		Body:        dto.Body,
 		Attachments: attachments,
 		Artifacts:   artifacts,
+		Annotations: annotations,
 		CreatedAt:   dto.CreatedAt,
 	}
+}
+
+func mapPromptAnnotation(annotation sessiondomain.PromptAnnotation) *model.PromptAnnotation {
+	marks := make([]*model.PromptAnnotationMark, 0, len(annotation.Marks))
+	for _, mark := range annotation.Marks {
+		mapped := &model.PromptAnnotationMark{ID: mark.ID, Kind: mark.Kind, Note: mark.Note}
+		if mark.Kind == "image" {
+			mapped.Shape = &mark.Shape
+			mapped.X, mapped.Y = &mark.X, &mark.Y
+			mapped.Width, mapped.Height = &mark.Width, &mark.Height
+		} else {
+			mapped.Start = mapPromptAnnotationPosition(mark.Start)
+			mapped.End = mapPromptAnnotationPosition(mark.End)
+			mapped.Quote = &mark.Quote
+		}
+		marks = append(marks, mapped)
+	}
+	references := make([]*model.PromptFileReference, 0, len(annotation.FileReferences))
+	for _, reference := range annotation.FileReferences {
+		mapped := &model.PromptFileReference{Kind: string(reference.Kind)}
+		if reference.SessionFileID != "" {
+			value := string(reference.SessionFileID)
+			mapped.SessionFileID = &value
+		}
+		if reference.FilePath != "" {
+			mapped.FilePath = &reference.FilePath
+		}
+		if reference.Version != "" {
+			mapped.Version = &reference.Version
+		}
+		references = append(references, mapped)
+	}
+	return &model.PromptAnnotation{
+		ID: annotation.ID, Source: annotation.Source, Content: annotation.Content,
+		Marks: marks, FileReferences: references,
+	}
+}
+
+func mapPromptAnnotationPosition(position *sessiondomain.PromptAnnotationPosition) *model.PromptAnnotationPosition {
+	if position == nil {
+		return nil
+	}
+	mapped := &model.PromptAnnotationPosition{Line: position.Line, Column: position.Column}
+	if position.Revision != "" {
+		mapped.Revision = &position.Revision
+	}
+	return mapped
 }
 
 func mapAttachment(dto attachmentapp.AttachmentDTO) *model.Attachment {

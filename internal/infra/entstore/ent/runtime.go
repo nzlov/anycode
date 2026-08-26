@@ -427,15 +427,15 @@ func init() {
 	// promptappend.DefaultArtifactIds holds the default value on creation for the artifact_ids field.
 	promptappend.DefaultArtifactIds = promptappendDescArtifactIds.Default.([]string)
 	// promptappendDescStatus is the schema descriptor for status field.
-	promptappendDescStatus := promptappendFields[6].Descriptor()
+	promptappendDescStatus := promptappendFields[7].Descriptor()
 	// promptappend.DefaultStatus holds the default value on creation for the status field.
 	promptappend.DefaultStatus = promptappendDescStatus.Default.(string)
 	// promptappendDescDispatchedProcessRunID is the schema descriptor for dispatched_process_run_id field.
-	promptappendDescDispatchedProcessRunID := promptappendFields[8].Descriptor()
+	promptappendDescDispatchedProcessRunID := promptappendFields[9].Descriptor()
 	// promptappend.DefaultDispatchedProcessRunID holds the default value on creation for the dispatched_process_run_id field.
 	promptappend.DefaultDispatchedProcessRunID = promptappendDescDispatchedProcessRunID.Default.(string)
 	// promptappendDescCreatedAt is the schema descriptor for created_at field.
-	promptappendDescCreatedAt := promptappendFields[9].Descriptor()
+	promptappendDescCreatedAt := promptappendFields[10].Descriptor()
 	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
 	pushsubscriptionFields := schema.PushSubscription{}.Fields()

@@ -311,7 +311,36 @@ type ComplexityRoot struct {
 		WorktreeInitCommand func(childComplexity int) int
 	}
 
+	PromptAnnotation struct {
+		Content        func(childComplexity int) int
+		FileReferences func(childComplexity int) int
+		ID             func(childComplexity int) int
+		Marks          func(childComplexity int) int
+		Source         func(childComplexity int) int
+	}
+
+	PromptAnnotationMark struct {
+		End    func(childComplexity int) int
+		Height func(childComplexity int) int
+		ID     func(childComplexity int) int
+		Kind   func(childComplexity int) int
+		Note   func(childComplexity int) int
+		Quote  func(childComplexity int) int
+		Shape  func(childComplexity int) int
+		Start  func(childComplexity int) int
+		Width  func(childComplexity int) int
+		X      func(childComplexity int) int
+		Y      func(childComplexity int) int
+	}
+
+	PromptAnnotationPosition struct {
+		Column   func(childComplexity int) int
+		Line     func(childComplexity int) int
+		Revision func(childComplexity int) int
+	}
+
 	PromptAppend struct {
+		Annotations func(childComplexity int) int
 		Artifacts   func(childComplexity int) int
 		Attachments func(childComplexity int) int
 		Body        func(childComplexity int) int
@@ -324,6 +353,13 @@ type ComplexityRoot struct {
 		Indices func(childComplexity int) int
 		Path    func(childComplexity int) int
 		Score   func(childComplexity int) int
+	}
+
+	PromptFileReference struct {
+		FilePath      func(childComplexity int) int
+		Kind          func(childComplexity int) int
+		SessionFileID func(childComplexity int) int
+		Version       func(childComplexity int) int
 	}
 
 	PushSubscriptionRegistration struct {
@@ -2237,6 +2273,129 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Project.WorktreeInitCommand(childComplexity), true
 
+	case "PromptAnnotation.content":
+		if e.ComplexityRoot.PromptAnnotation.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotation.Content(childComplexity), true
+	case "PromptAnnotation.fileReferences":
+		if e.ComplexityRoot.PromptAnnotation.FileReferences == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotation.FileReferences(childComplexity), true
+	case "PromptAnnotation.id":
+		if e.ComplexityRoot.PromptAnnotation.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotation.ID(childComplexity), true
+	case "PromptAnnotation.marks":
+		if e.ComplexityRoot.PromptAnnotation.Marks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotation.Marks(childComplexity), true
+	case "PromptAnnotation.source":
+		if e.ComplexityRoot.PromptAnnotation.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotation.Source(childComplexity), true
+
+	case "PromptAnnotationMark.end":
+		if e.ComplexityRoot.PromptAnnotationMark.End == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.End(childComplexity), true
+	case "PromptAnnotationMark.height":
+		if e.ComplexityRoot.PromptAnnotationMark.Height == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Height(childComplexity), true
+	case "PromptAnnotationMark.id":
+		if e.ComplexityRoot.PromptAnnotationMark.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.ID(childComplexity), true
+	case "PromptAnnotationMark.kind":
+		if e.ComplexityRoot.PromptAnnotationMark.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Kind(childComplexity), true
+	case "PromptAnnotationMark.note":
+		if e.ComplexityRoot.PromptAnnotationMark.Note == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Note(childComplexity), true
+	case "PromptAnnotationMark.quote":
+		if e.ComplexityRoot.PromptAnnotationMark.Quote == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Quote(childComplexity), true
+	case "PromptAnnotationMark.shape":
+		if e.ComplexityRoot.PromptAnnotationMark.Shape == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Shape(childComplexity), true
+	case "PromptAnnotationMark.start":
+		if e.ComplexityRoot.PromptAnnotationMark.Start == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Start(childComplexity), true
+	case "PromptAnnotationMark.width":
+		if e.ComplexityRoot.PromptAnnotationMark.Width == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Width(childComplexity), true
+	case "PromptAnnotationMark.x":
+		if e.ComplexityRoot.PromptAnnotationMark.X == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.X(childComplexity), true
+	case "PromptAnnotationMark.y":
+		if e.ComplexityRoot.PromptAnnotationMark.Y == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationMark.Y(childComplexity), true
+
+	case "PromptAnnotationPosition.column":
+		if e.ComplexityRoot.PromptAnnotationPosition.Column == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationPosition.Column(childComplexity), true
+	case "PromptAnnotationPosition.line":
+		if e.ComplexityRoot.PromptAnnotationPosition.Line == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationPosition.Line(childComplexity), true
+	case "PromptAnnotationPosition.revision":
+		if e.ComplexityRoot.PromptAnnotationPosition.Revision == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAnnotationPosition.Revision(childComplexity), true
+
+	case "PromptAppend.annotations":
+		if e.ComplexityRoot.PromptAppend.Annotations == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAppend.Annotations(childComplexity), true
 	case "PromptAppend.artifacts":
 		if e.ComplexityRoot.PromptAppend.Artifacts == nil {
 			break
@@ -2292,6 +2451,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.PromptFileMatch.Score(childComplexity), true
+
+	case "PromptFileReference.filePath":
+		if e.ComplexityRoot.PromptFileReference.FilePath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileReference.FilePath(childComplexity), true
+	case "PromptFileReference.kind":
+		if e.ComplexityRoot.PromptFileReference.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileReference.Kind(childComplexity), true
+	case "PromptFileReference.sessionFileId":
+		if e.ComplexityRoot.PromptFileReference.SessionFileID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileReference.SessionFileID(childComplexity), true
+	case "PromptFileReference.version":
+		if e.ComplexityRoot.PromptFileReference.Version == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileReference.Version(childComplexity), true
 
 	case "PushSubscriptionRegistration.id":
 		if e.ComplexityRoot.PushSubscriptionRegistration.ID == nil {
@@ -4499,6 +4683,9 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMindMapNodeInput,
 		ec.unmarshalInputMindMapOperationInput,
 		ec.unmarshalInputMindMapPageInput,
+		ec.unmarshalInputPromptAnnotationInput,
+		ec.unmarshalInputPromptAnnotationMarkInput,
+		ec.unmarshalInputPromptAnnotationPositionInput,
 		ec.unmarshalInputPromptFileMatchInput,
 		ec.unmarshalInputPromptFileReferenceInput,
 		ec.unmarshalInputPromptMentionInput,
@@ -5150,7 +5337,43 @@ type PromptAppend {
   body: String!
   attachments: [SessionAttachment!]!
   artifacts: [SessionFile!]!
+  annotations: [PromptAnnotation!]!
   createdAt: Time!
+}
+
+type PromptAnnotation {
+  id: ID!
+  source: String!
+  content: String!
+  marks: [PromptAnnotationMark!]!
+  fileReferences: [PromptFileReference!]!
+}
+
+type PromptAnnotationMark {
+  id: ID!
+  kind: String!
+  shape: String
+  x: Float
+  y: Float
+  width: Float
+  height: Float
+  start: PromptAnnotationPosition
+  end: PromptAnnotationPosition
+  quote: String
+  note: String!
+}
+
+type PromptAnnotationPosition {
+  line: Int!
+  column: Int!
+  revision: String
+}
+
+type PromptFileReference {
+  kind: String!
+  sessionFileId: ID
+  filePath: String
+  version: String
 }
 
 type TranscriptPage {
@@ -5696,7 +5919,36 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
   fileReferences: [PromptFileReferenceInput!]
+  annotations: [PromptAnnotationInput!]
   mentions: [PromptMentionInput!]
+}
+
+input PromptAnnotationInput {
+  id: ID!
+  source: String!
+  content: String!
+  marks: [PromptAnnotationMarkInput!]!
+  fileReferences: [PromptFileReferenceInput!]
+}
+
+input PromptAnnotationMarkInput {
+  id: ID!
+  kind: String!
+  shape: String
+  x: Float
+  y: Float
+  width: Float
+  height: Float
+  start: PromptAnnotationPositionInput
+  end: PromptAnnotationPositionInput
+  quote: String
+  note: String
+}
+
+input PromptAnnotationPositionInput {
+  line: Int!
+  column: Int!
+  revision: String
 }
 
 input PromptFileReferenceInput {
@@ -11997,6 +12249,8 @@ func (ec *executionContext) fieldContext_Mutation_appendPrompt(ctx context.Conte
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
 			case "artifacts":
 				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
+			case "annotations":
+				return ec.fieldContext_PromptAppend_annotations(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -12052,6 +12306,8 @@ func (ec *executionContext) fieldContext_Mutation_updatePromptAppend(ctx context
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
 			case "artifacts":
 				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
+			case "annotations":
+				return ec.fieldContext_PromptAppend_annotations(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -13136,6 +13392,607 @@ func (ec *executionContext) fieldContext_Project_updatedAt(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _PromptAnnotation_id(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotation_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotation_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotation_source(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotation_source,
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotation_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotation_content(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotation_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotation_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotation_marks(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotation_marks,
+		func(ctx context.Context) (any, error) {
+			return obj.Marks, nil
+		},
+		nil,
+		ec.marshalNPromptAnnotationMark2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotation_marks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_PromptAnnotationMark_id(ctx, field)
+			case "kind":
+				return ec.fieldContext_PromptAnnotationMark_kind(ctx, field)
+			case "shape":
+				return ec.fieldContext_PromptAnnotationMark_shape(ctx, field)
+			case "x":
+				return ec.fieldContext_PromptAnnotationMark_x(ctx, field)
+			case "y":
+				return ec.fieldContext_PromptAnnotationMark_y(ctx, field)
+			case "width":
+				return ec.fieldContext_PromptAnnotationMark_width(ctx, field)
+			case "height":
+				return ec.fieldContext_PromptAnnotationMark_height(ctx, field)
+			case "start":
+				return ec.fieldContext_PromptAnnotationMark_start(ctx, field)
+			case "end":
+				return ec.fieldContext_PromptAnnotationMark_end(ctx, field)
+			case "quote":
+				return ec.fieldContext_PromptAnnotationMark_quote(ctx, field)
+			case "note":
+				return ec.fieldContext_PromptAnnotationMark_note(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptAnnotationMark", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotation_fileReferences(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotation_fileReferences,
+		func(ctx context.Context) (any, error) {
+			return obj.FileReferences, nil
+		},
+		nil,
+		ec.marshalNPromptFileReference2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotation_fileReferences(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "kind":
+				return ec.fieldContext_PromptFileReference_kind(ctx, field)
+			case "sessionFileId":
+				return ec.fieldContext_PromptFileReference_sessionFileId(ctx, field)
+			case "filePath":
+				return ec.fieldContext_PromptFileReference_filePath(ctx, field)
+			case "version":
+				return ec.fieldContext_PromptFileReference_version(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptFileReference", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_id(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_kind(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_shape(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_shape,
+		func(ctx context.Context) (any, error) {
+			return obj.Shape, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_shape(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_x(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_x,
+		func(ctx context.Context) (any, error) {
+			return obj.X, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_x(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_y(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_y,
+		func(ctx context.Context) (any, error) {
+			return obj.Y, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_y(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_width(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_width,
+		func(ctx context.Context) (any, error) {
+			return obj.Width, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_width(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_height(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_height,
+		func(ctx context.Context) (any, error) {
+			return obj.Height, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_height(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_start(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_start,
+		func(ctx context.Context) (any, error) {
+			return obj.Start, nil
+		},
+		nil,
+		ec.marshalOPromptAnnotationPosition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPosition,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_start(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "line":
+				return ec.fieldContext_PromptAnnotationPosition_line(ctx, field)
+			case "column":
+				return ec.fieldContext_PromptAnnotationPosition_column(ctx, field)
+			case "revision":
+				return ec.fieldContext_PromptAnnotationPosition_revision(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptAnnotationPosition", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_end(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_end,
+		func(ctx context.Context) (any, error) {
+			return obj.End, nil
+		},
+		nil,
+		ec.marshalOPromptAnnotationPosition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPosition,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_end(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "line":
+				return ec.fieldContext_PromptAnnotationPosition_line(ctx, field)
+			case "column":
+				return ec.fieldContext_PromptAnnotationPosition_column(ctx, field)
+			case "revision":
+				return ec.fieldContext_PromptAnnotationPosition_revision(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptAnnotationPosition", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_quote(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_quote,
+		func(ctx context.Context) (any, error) {
+			return obj.Quote, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_quote(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationMark_note(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationMark) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationMark_note,
+		func(ctx context.Context) (any, error) {
+			return obj.Note, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationMark_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationMark",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationPosition_line(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationPosition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationPosition_line,
+		func(ctx context.Context) (any, error) {
+			return obj.Line, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationPosition_line(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationPosition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationPosition_column(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationPosition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationPosition_column,
+		func(ctx context.Context) (any, error) {
+			return obj.Column, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationPosition_column(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationPosition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAnnotationPosition_revision(ctx context.Context, field graphql.CollectedField, obj *model.PromptAnnotationPosition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAnnotationPosition_revision,
+		func(ctx context.Context) (any, error) {
+			return obj.Revision, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAnnotationPosition_revision(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAnnotationPosition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PromptAppend_id(ctx context.Context, field graphql.CollectedField, obj *model.PromptAppend) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13327,6 +14184,47 @@ func (ec *executionContext) fieldContext_PromptAppend_artifacts(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _PromptAppend_annotations(ctx context.Context, field graphql.CollectedField, obj *model.PromptAppend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAppend_annotations,
+		func(ctx context.Context) (any, error) {
+			return obj.Annotations, nil
+		},
+		nil,
+		ec.marshalNPromptAnnotation2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAppend_annotations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAppend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_PromptAnnotation_id(ctx, field)
+			case "source":
+				return ec.fieldContext_PromptAnnotation_source(ctx, field)
+			case "content":
+				return ec.fieldContext_PromptAnnotation_content(ctx, field)
+			case "marks":
+				return ec.fieldContext_PromptAnnotation_marks(ctx, field)
+			case "fileReferences":
+				return ec.fieldContext_PromptAnnotation_fileReferences(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptAnnotation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PromptAppend_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.PromptAppend) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13438,6 +14336,122 @@ func (ec *executionContext) fieldContext_PromptFileMatch_indices(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileReference_kind(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileReference_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileReference_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileReference_sessionFileId(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileReference_sessionFileId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionFileID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileReference_sessionFileId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileReference_filePath(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileReference_filePath,
+		func(ctx context.Context) (any, error) {
+			return obj.FilePath, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileReference_filePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileReference_version(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileReference_version,
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileReference_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -18650,6 +19664,8 @@ func (ec *executionContext) fieldContext_SessionDetail_promptAppends(_ context.C
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
 			case "artifacts":
 				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
+			case "annotations":
+				return ec.fieldContext_PromptAppend_annotations(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -26259,7 +27275,7 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds", "fileReferences", "mentions"}
+	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds", "fileReferences", "annotations", "mentions"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26301,6 +27317,13 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 				return it, err
 			}
 			it.FileReferences = data
+		case "annotations":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("annotations"))
+			data, err := ec.unmarshalOPromptAnnotationInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Annotations = data
 		case "mentions":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mentions"))
 			data, err := ec.unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx, v)
@@ -27278,6 +28301,208 @@ func (ec *executionContext) unmarshalInputMindMapPageInput(ctx context.Context, 
 				return it, err
 			}
 			it.PageSize = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputPromptAnnotationInput(ctx context.Context, obj any) (model.PromptAnnotationInput, error) {
+	var it model.PromptAnnotationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "source", "content", "marks", "fileReferences"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		case "marks":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("marks"))
+			data, err := ec.unmarshalNPromptAnnotationMarkInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Marks = data
+		case "fileReferences":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fileReferences"))
+			data, err := ec.unmarshalOPromptFileReferenceInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FileReferences = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputPromptAnnotationMarkInput(ctx context.Context, obj any) (model.PromptAnnotationMarkInput, error) {
+	var it model.PromptAnnotationMarkInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "kind", "shape", "x", "y", "width", "height", "start", "end", "quote", "note"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
+		case "shape":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("shape"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Shape = data
+		case "x":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("x"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.X = data
+		case "y":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("y"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Y = data
+		case "width":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("width"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Width = data
+		case "height":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("height"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Height = data
+		case "start":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("start"))
+			data, err := ec.unmarshalOPromptAnnotationPositionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPositionInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Start = data
+		case "end":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("end"))
+			data, err := ec.unmarshalOPromptAnnotationPositionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPositionInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.End = data
+		case "quote":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("quote"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Quote = data
+		case "note":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("note"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Note = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputPromptAnnotationPositionInput(ctx context.Context, obj any) (model.PromptAnnotationPositionInput, error) {
+	var it model.PromptAnnotationPositionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"line", "column", "revision"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "line":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("line"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Line = data
+		case "column":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("column"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Column = data
+		case "revision":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("revision"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Revision = data
 		}
 	}
 	return it, nil
@@ -30869,6 +32094,176 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 	return out
 }
 
+var promptAnnotationImplementors = []string{"PromptAnnotation"}
+
+func (ec *executionContext) _PromptAnnotation(ctx context.Context, sel ast.SelectionSet, obj *model.PromptAnnotation) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, promptAnnotationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PromptAnnotation")
+		case "id":
+			out.Values[i] = ec._PromptAnnotation_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "source":
+			out.Values[i] = ec._PromptAnnotation_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._PromptAnnotation_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "marks":
+			out.Values[i] = ec._PromptAnnotation_marks(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fileReferences":
+			out.Values[i] = ec._PromptAnnotation_fileReferences(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var promptAnnotationMarkImplementors = []string{"PromptAnnotationMark"}
+
+func (ec *executionContext) _PromptAnnotationMark(ctx context.Context, sel ast.SelectionSet, obj *model.PromptAnnotationMark) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, promptAnnotationMarkImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PromptAnnotationMark")
+		case "id":
+			out.Values[i] = ec._PromptAnnotationMark_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._PromptAnnotationMark_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "shape":
+			out.Values[i] = ec._PromptAnnotationMark_shape(ctx, field, obj)
+		case "x":
+			out.Values[i] = ec._PromptAnnotationMark_x(ctx, field, obj)
+		case "y":
+			out.Values[i] = ec._PromptAnnotationMark_y(ctx, field, obj)
+		case "width":
+			out.Values[i] = ec._PromptAnnotationMark_width(ctx, field, obj)
+		case "height":
+			out.Values[i] = ec._PromptAnnotationMark_height(ctx, field, obj)
+		case "start":
+			out.Values[i] = ec._PromptAnnotationMark_start(ctx, field, obj)
+		case "end":
+			out.Values[i] = ec._PromptAnnotationMark_end(ctx, field, obj)
+		case "quote":
+			out.Values[i] = ec._PromptAnnotationMark_quote(ctx, field, obj)
+		case "note":
+			out.Values[i] = ec._PromptAnnotationMark_note(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var promptAnnotationPositionImplementors = []string{"PromptAnnotationPosition"}
+
+func (ec *executionContext) _PromptAnnotationPosition(ctx context.Context, sel ast.SelectionSet, obj *model.PromptAnnotationPosition) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, promptAnnotationPositionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PromptAnnotationPosition")
+		case "line":
+			out.Values[i] = ec._PromptAnnotationPosition_line(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "column":
+			out.Values[i] = ec._PromptAnnotationPosition_column(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revision":
+			out.Values[i] = ec._PromptAnnotationPosition_revision(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var promptAppendImplementors = []string{"PromptAppend"}
 
 func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.SelectionSet, obj *model.PromptAppend) graphql.Marshaler {
@@ -30902,6 +32297,11 @@ func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.Selection
 			}
 		case "artifacts":
 			out.Values[i] = ec._PromptAppend_artifacts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "annotations":
+			out.Values[i] = ec._PromptAppend_annotations(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -30959,6 +32359,51 @@ func (ec *executionContext) _PromptFileMatch(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var promptFileReferenceImplementors = []string{"PromptFileReference"}
+
+func (ec *executionContext) _PromptFileReference(ctx context.Context, sel ast.SelectionSet, obj *model.PromptFileReference) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, promptFileReferenceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PromptFileReference")
+		case "kind":
+			out.Values[i] = ec._PromptFileReference_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionFileId":
+			out.Values[i] = ec._PromptFileReference_sessionFileId(ctx, field, obj)
+		case "filePath":
+			out.Values[i] = ec._PromptFileReference_filePath(ctx, field, obj)
+		case "version":
+			out.Values[i] = ec._PromptFileReference_version(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -36197,6 +37642,83 @@ func (ec *executionContext) marshalNProject2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋ
 	return ec._Project(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNPromptAnnotation2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.PromptAnnotation) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPromptAnnotation2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotation(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPromptAnnotation2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotation(ctx context.Context, sel ast.SelectionSet, v *model.PromptAnnotation) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PromptAnnotation(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNPromptAnnotationInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationInput(ctx context.Context, v any) (*model.PromptAnnotationInput, error) {
+	res, err := ec.unmarshalInputPromptAnnotationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNPromptAnnotationMark2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.PromptAnnotationMark) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPromptAnnotationMark2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMark(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPromptAnnotationMark2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMark(ctx context.Context, sel ast.SelectionSet, v *model.PromptAnnotationMark) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PromptAnnotationMark(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNPromptAnnotationMarkInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkInputᚄ(ctx context.Context, v any) ([]*model.PromptAnnotationMarkInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.PromptAnnotationMarkInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPromptAnnotationMarkInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNPromptAnnotationMarkInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationMarkInput(ctx context.Context, v any) (*model.PromptAnnotationMarkInput, error) {
+	res, err := ec.unmarshalInputPromptAnnotationMarkInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNPromptAppend2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAppend(ctx context.Context, sel ast.SelectionSet, v model.PromptAppend) graphql.Marshaler {
 	return ec._PromptAppend(ctx, sel, &v)
 }
@@ -36256,6 +37778,32 @@ func (ec *executionContext) marshalNPromptFileMatch2ᚖgithubᚗcomᚋnzlovᚋan
 func (ec *executionContext) unmarshalNPromptFileMatchInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatchInput(ctx context.Context, v any) (model.PromptFileMatchInput, error) {
 	res, err := ec.unmarshalInputPromptFileMatchInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNPromptFileReference2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.PromptFileReference) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPromptFileReference2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReference(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPromptFileReference2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReference(ctx context.Context, sel ast.SelectionSet, v *model.PromptFileReference) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PromptFileReference(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNPromptFileReferenceInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInput(ctx context.Context, v any) (*model.PromptFileReferenceInput, error) {
@@ -37621,6 +39169,23 @@ func (ec *executionContext) marshalOFileDiff2ᚖgithubᚗcomᚋnzlovᚋanycode�
 	return ec._FileDiff(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalOFloat2ᚖfloat64(ctx context.Context, v any) (*float64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel ast.SelectionSet, v *float64) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	res := graphql.MarshalFloatContext(*v)
+	return graphql.WrapContextMarshaler(ctx, res)
+}
+
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
 	if v == nil {
 		return nil, nil
@@ -37765,6 +39330,39 @@ func (ec *executionContext) marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋan
 		return graphql.Null
 	}
 	return ec._PendingApproval(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOPromptAnnotationInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationInputᚄ(ctx context.Context, v any) ([]*model.PromptAnnotationInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.PromptAnnotationInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPromptAnnotationInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOPromptAnnotationPosition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPosition(ctx context.Context, sel ast.SelectionSet, v *model.PromptAnnotationPosition) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._PromptAnnotationPosition(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOPromptAnnotationPositionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAnnotationPositionInput(ctx context.Context, v any) (*model.PromptAnnotationPositionInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputPromptAnnotationPositionInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOPromptFileReferenceInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileReferenceInputᚄ(ctx context.Context, v any) ([]*model.PromptFileReferenceInput, error) {

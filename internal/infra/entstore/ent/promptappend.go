@@ -29,6 +29,8 @@ type PromptAppend struct {
 	ArtifactIds []string `json:"artifact_ids,omitempty"`
 	// FileReferences holds the value of the "file_references" field.
 	FileReferences []session.PromptFileReference `json:"file_references,omitempty"`
+	// Annotations holds the value of the "annotations" field.
+	Annotations []session.PromptAnnotation `json:"annotations,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// DispatchedAt holds the value of the "dispatched_at" field.
@@ -45,7 +47,7 @@ func (*PromptAppend) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case promptappend.FieldMentions, promptappend.FieldArtifactIds, promptappend.FieldFileReferences:
+		case promptappend.FieldMentions, promptappend.FieldArtifactIds, promptappend.FieldFileReferences, promptappend.FieldAnnotations:
 			values[i] = new([]byte)
 		case promptappend.FieldID, promptappend.FieldSessionID, promptappend.FieldBody, promptappend.FieldStatus, promptappend.FieldDispatchedProcessRunID:
 			values[i] = new(sql.NullString)
@@ -106,6 +108,14 @@ func (_m *PromptAppend) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.FileReferences); err != nil {
 					return fmt.Errorf("unmarshal field file_references: %w", err)
+				}
+			}
+		case promptappend.FieldAnnotations:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field annotations", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Annotations); err != nil {
+					return fmt.Errorf("unmarshal field annotations: %w", err)
 				}
 			}
 		case promptappend.FieldStatus:
@@ -183,6 +193,9 @@ func (_m *PromptAppend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("file_references=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FileReferences))
+	builder.WriteString(", ")
+	builder.WriteString("annotations=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Annotations))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

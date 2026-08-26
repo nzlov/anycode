@@ -21,6 +21,7 @@ func (PromptAppend) Fields() []ent.Field {
 		field.JSON("mentions", []domainsession.PromptMention{}).Optional(),
 		field.JSON("artifact_ids", []string{}).Default([]string{}),
 		field.JSON("file_references", []domainsession.PromptFileReference{}).Optional(),
+		field.JSON("annotations", []domainsession.PromptAnnotation{}).Optional(),
 		field.String("status").Default(string(domainsession.PromptAppendPending)),
 		field.Time("dispatched_at").Optional().Nillable(),
 		field.String("dispatched_process_run_id").Default(""),

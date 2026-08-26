@@ -106,6 +106,24 @@ func (_u *PromptAppendUpdate) ClearFileReferences() *PromptAppendUpdate {
 	return _u
 }
 
+// SetAnnotations sets the "annotations" field.
+func (_u *PromptAppendUpdate) SetAnnotations(v []session.PromptAnnotation) *PromptAppendUpdate {
+	_u.mutation.SetAnnotations(v)
+	return _u
+}
+
+// AppendAnnotations appends value to the "annotations" field.
+func (_u *PromptAppendUpdate) AppendAnnotations(v []session.PromptAnnotation) *PromptAppendUpdate {
+	_u.mutation.AppendAnnotations(v)
+	return _u
+}
+
+// ClearAnnotations clears the value of the "annotations" field.
+func (_u *PromptAppendUpdate) ClearAnnotations() *PromptAppendUpdate {
+	_u.mutation.ClearAnnotations()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *PromptAppendUpdate) SetStatus(v string) *PromptAppendUpdate {
 	_u.mutation.SetStatus(v)
@@ -244,6 +262,17 @@ func (_u *PromptAppendUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.FileReferencesCleared() {
 		_spec.ClearField(promptappend.FieldFileReferences, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.Annotations(); ok {
+		_spec.SetField(promptappend.FieldAnnotations, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAnnotations(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldAnnotations, value)
+		})
+	}
+	if _u.mutation.AnnotationsCleared() {
+		_spec.ClearField(promptappend.FieldAnnotations, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
 	}
@@ -349,6 +378,24 @@ func (_u *PromptAppendUpdateOne) AppendFileReferences(v []session.PromptFileRefe
 // ClearFileReferences clears the value of the "file_references" field.
 func (_u *PromptAppendUpdateOne) ClearFileReferences() *PromptAppendUpdateOne {
 	_u.mutation.ClearFileReferences()
+	return _u
+}
+
+// SetAnnotations sets the "annotations" field.
+func (_u *PromptAppendUpdateOne) SetAnnotations(v []session.PromptAnnotation) *PromptAppendUpdateOne {
+	_u.mutation.SetAnnotations(v)
+	return _u
+}
+
+// AppendAnnotations appends value to the "annotations" field.
+func (_u *PromptAppendUpdateOne) AppendAnnotations(v []session.PromptAnnotation) *PromptAppendUpdateOne {
+	_u.mutation.AppendAnnotations(v)
+	return _u
+}
+
+// ClearAnnotations clears the value of the "annotations" field.
+func (_u *PromptAppendUpdateOne) ClearAnnotations() *PromptAppendUpdateOne {
+	_u.mutation.ClearAnnotations()
 	return _u
 }
 
@@ -519,6 +566,17 @@ func (_u *PromptAppendUpdateOne) sqlSave(ctx context.Context) (_node *PromptAppe
 	}
 	if _u.mutation.FileReferencesCleared() {
 		_spec.ClearField(promptappend.FieldFileReferences, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Annotations(); ok {
+		_spec.SetField(promptappend.FieldAnnotations, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAnnotations(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldAnnotations, value)
+		})
+	}
+	if _u.mutation.AnnotationsCleared() {
+		_spec.ClearField(promptappend.FieldAnnotations, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

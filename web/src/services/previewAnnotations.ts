@@ -38,6 +38,7 @@ export interface PreviewAnnotationAttachment {
   id: string;
   source: string;
   content: string;
+  marks: PreviewAnnotation[];
   fileReferences?: PreviewFileReference[];
 }
 

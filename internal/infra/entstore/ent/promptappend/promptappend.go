@@ -23,6 +23,8 @@ const (
 	FieldArtifactIds = "artifact_ids"
 	// FieldFileReferences holds the string denoting the file_references field in the database.
 	FieldFileReferences = "file_references"
+	// FieldAnnotations holds the string denoting the annotations field in the database.
+	FieldAnnotations = "annotations"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldDispatchedAt holds the string denoting the dispatched_at field in the database.
@@ -43,6 +45,7 @@ var Columns = []string{
 	FieldMentions,
 	FieldArtifactIds,
 	FieldFileReferences,
+	FieldAnnotations,
 	FieldStatus,
 	FieldDispatchedAt,
 	FieldDispatchedProcessRunID,

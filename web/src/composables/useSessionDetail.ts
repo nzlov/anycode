@@ -32,6 +32,7 @@ import {
   type SessionDetailData,
   type SessionUpdateEvent,
 } from '@/services/sessions';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import {
   getSessionTranscriptPage,
@@ -140,6 +141,7 @@ export function useSessionDetail(sessionId: string) {
     stagedAttachmentIds: string[] = [],
     artifactIds: string[] = [],
     fileReferences: PromptFileReference[] = [],
+    annotations: PreviewAnnotationAttachment[] = [],
     mentions: PromptMention[] = [],
   ) {
     const text = body.trim() || 'continue';
@@ -153,6 +155,7 @@ export function useSessionDetail(sessionId: string) {
         stagedAttachmentIds,
         artifactIds,
         fileReferences,
+        annotations,
         mentions,
       );
       await loadSessionState();

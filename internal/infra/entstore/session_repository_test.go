@@ -363,6 +363,11 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 			{Kind: session.PromptFileReferenceSessionFile, SessionFileID: "file-1"},
 			{Kind: session.PromptFileReferenceDiff, FilePath: "media/demo.mp4", Version: "old"},
 		},
+		Annotations: []session.PromptAnnotation{{
+			ID: "annotation-1", Source: "临时文件 design.png", Content: "图片标注",
+			Marks:          []session.PromptAnnotationMark{{ID: "mark-1", Kind: "image", Shape: "rectangle", X: 0.1, Y: 0.2, Width: 0.3, Height: 0.4}},
+			FileReferences: []session.PromptFileReference{{Kind: session.PromptFileReferenceSessionFile, SessionFileID: "file-1"}},
+		}},
 		Status:    session.PromptAppendPending,
 		CreatedAt: appendAt,
 	}); err != nil {
@@ -383,6 +388,9 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	}
 	if len(appends[0].FileReferences) != 2 || appends[0].FileReferences[0].SessionFileID != "file-1" || appends[0].FileReferences[1].Version != "old" {
 		t.Fatalf("prompt append file references = %#v", appends[0].FileReferences)
+	}
+	if len(appends[0].Annotations) != 1 || len(appends[0].Annotations[0].Marks) != 1 || appends[0].Annotations[0].FileReferences[0].SessionFileID != "file-1" {
+		t.Fatalf("prompt append annotations = %#v", appends[0].Annotations)
 	}
 	pending, err := repo.ListPendingPromptAppends(ctx, input.ID)
 	if err != nil {

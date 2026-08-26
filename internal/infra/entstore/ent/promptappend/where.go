@@ -244,6 +244,16 @@ func FileReferencesNotNil() predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldNotNull(FieldFileReferences))
 }
 
+// AnnotationsIsNil applies the IsNil predicate on the "annotations" field.
+func AnnotationsIsNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIsNull(FieldAnnotations))
+}
+
+// AnnotationsNotNil applies the NotNil predicate on the "annotations" field.
+func AnnotationsNotNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotNull(FieldAnnotations))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldEQ(FieldStatus, v))

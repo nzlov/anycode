@@ -133,6 +133,7 @@ type AppendPromptInput struct {
 	StagedAttachmentIDs []domain.StagedAttachmentID
 	ArtifactIDs         []domain.SessionFileID
 	FileReferences      []domain.PromptFileReference
+	Annotations         []domain.PromptAnnotation
 	Mentions            []domain.PromptMention
 }
 
@@ -247,6 +248,7 @@ type PromptAppendDTO struct {
 	CreatedAt   time.Time
 	Attachments []domain.SessionAttachment
 	Artifacts   []domain.SessionFile
+	Annotations []domain.PromptAnnotation
 }
 
 type WorkflowRunDTO struct {
@@ -4395,7 +4397,7 @@ func (s *Service) pendingPromptInput(ctx context.Context, session domain.Session
 			return "", nil, nil, nil, nil, err
 		}
 		currentFiles = appendUniqueSessionFiles(currentFiles, referencedFiles...)
-		body := strings.TrimSpace(promptAppend.Body)
+		body := promptAppendText(promptAppend)
 		if body == "" && len(currentFiles) == 0 && len(promptAppend.Mentions) == 0 {
 			cancelledIDs = append(cancelledIDs, promptAppend.ID)
 			continue
@@ -4406,6 +4408,15 @@ func (s *Service) pendingPromptInput(ctx context.Context, session domain.Session
 		ids = append(ids, promptAppend.ID)
 	}
 	return strings.Join(parts, "\n\n"), ids, inputFiles, mentions, cancelledIDs, nil
+}
+
+func promptAppendText(promptAppend domain.PromptAppend) string {
+	parts := make([]string, 0, len(promptAppend.Annotations)+1)
+	parts = append(parts, promptAppend.Body)
+	for _, annotation := range promptAppend.Annotations {
+		parts = append(parts, annotation.Content)
+	}
+	return joinPromptParts(parts...)
 }
 
 func joinPromptParts(parts ...string) string {
@@ -4444,7 +4455,7 @@ func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfter
 	nodePrompt = strings.TrimSpace(nodePrompt)
 	bodies := make([]string, 0, len(appends))
 	for _, promptAppend := range appends {
-		body := strings.TrimSpace(promptAppend.Body)
+		body := promptAppendText(promptAppend)
 		if body == "" {
 			continue
 		}
@@ -7567,7 +7578,15 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
-	fileReferences, err := normalizePromptFileReferences(input.FileReferences)
+	annotations, err := normalizePromptAnnotations(input.Annotations)
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
+	annotationReferences := append([]domain.PromptFileReference(nil), input.FileReferences...)
+	for _, annotation := range annotations {
+		annotationReferences = append(annotationReferences, annotation.FileReferences...)
+	}
+	fileReferences, err := normalizePromptFileReferences(annotationReferences)
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
@@ -7580,7 +7599,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	if body == "" {
-		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(fileReferences) == 0 && len(mentions) == 0 {
+		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(annotations) == 0 && len(fileReferences) == 0 && len(mentions) == 0 {
 			return PromptAppendDTO{}, errors.New("prompt append body is required")
 		}
 	}
@@ -7635,6 +7654,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			ArtifactIDs:    artifactIDs,
 			Artifacts:      artifacts,
 			FileReferences: fileReferences,
+			Annotations:    annotations,
 		}
 		if session.Mode == domain.ModeChat && session.Status == domain.StatusStopped {
 			options := codexStartOptions{queueKind: domain.QueueKindPromptAppend}
@@ -7670,7 +7690,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 				files = appendUniqueSessionFiles(files, referencedFiles...)
 				if err := s.codex.Steer(ctx, processdomain.CodexSteerInput{
 					ProcessRunID: active.ID,
-					Input:        codexInput(body, files, mentions),
+					Input:        codexInput(promptAppendText(append), files, mentions),
 				}); err != nil {
 					releaseErr := s.repo.ReleasePromptAppends(ctx, string(active.ID))
 					append.Status = domain.PromptAppendPending
@@ -7743,6 +7763,49 @@ func normalizePromptFileReferences(references []domain.PromptFileReference) ([]d
 		normalized = append(normalized, reference)
 	}
 	return normalized, nil
+}
+
+func normalizePromptAnnotations(annotations []domain.PromptAnnotation) ([]domain.PromptAnnotation, error) {
+	normalized := make([]domain.PromptAnnotation, 0, len(annotations))
+	for _, annotation := range annotations {
+		annotation.ID = strings.TrimSpace(annotation.ID)
+		annotation.Source = strings.TrimSpace(annotation.Source)
+		annotation.Content = strings.TrimSpace(annotation.Content)
+		if annotation.ID == "" || annotation.Source == "" || annotation.Content == "" || len(annotation.Marks) == 0 {
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "prompt annotation is invalid")
+		}
+		references, err := normalizePromptFileReferences(annotation.FileReferences)
+		if err != nil {
+			return nil, err
+		}
+		annotation.FileReferences = references
+		for index := range annotation.Marks {
+			mark := &annotation.Marks[index]
+			mark.ID = strings.TrimSpace(mark.ID)
+			mark.Kind = strings.TrimSpace(mark.Kind)
+			mark.Note = strings.TrimSpace(mark.Note)
+			switch mark.Kind {
+			case "image":
+				mark.Shape = strings.TrimSpace(mark.Shape)
+				if mark.ID == "" || (mark.Shape != "rectangle" && mark.Shape != "ellipse") || mark.Width <= 0 || mark.Height <= 0 || mark.X < 0 || mark.Y < 0 || mark.X+mark.Width > 1 || mark.Y+mark.Height > 1 {
+					return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "image annotation mark is invalid")
+				}
+			case "text":
+				mark.Quote = strings.TrimSpace(mark.Quote)
+				if mark.ID == "" || mark.Start == nil || mark.End == nil || mark.Quote == "" || !validPromptAnnotationPosition(*mark.Start) || !validPromptAnnotationPosition(*mark.End) {
+					return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "text annotation mark is invalid")
+				}
+			default:
+				return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "prompt annotation mark kind is invalid")
+			}
+		}
+		normalized = append(normalized, annotation)
+	}
+	return normalized, nil
+}
+
+func validPromptAnnotationPosition(position domain.PromptAnnotationPosition) bool {
+	return position.Line > 0 && position.Column > 0 && (position.Revision == "" || position.Revision == "old" || position.Revision == "new")
 }
 
 func (s *Service) resolvePromptFiles(ctx context.Context, session domain.Session, references []domain.PromptFileReference, allowMissing bool) ([]domain.SessionFile, error) {
@@ -8948,6 +9011,7 @@ func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 		CreatedAt:   append.CreatedAt,
 		Attachments: append.Attachments,
 		Artifacts:   append.Artifacts,
+		Annotations: append.Annotations,
 	}
 }
 

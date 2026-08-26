@@ -525,7 +525,43 @@ type PromptAppend {
   body: String!
   attachments: [SessionAttachment!]!
   artifacts: [SessionFile!]!
+  annotations: [PromptAnnotation!]!
   createdAt: Time!
+}
+
+type PromptAnnotation {
+  id: ID!
+  source: String!
+  content: String!
+  marks: [PromptAnnotationMark!]!
+  fileReferences: [PromptFileReference!]!
+}
+
+type PromptAnnotationMark {
+  id: ID!
+  kind: String!
+  shape: String
+  x: Float
+  y: Float
+  width: Float
+  height: Float
+  start: PromptAnnotationPosition
+  end: PromptAnnotationPosition
+  quote: String
+  note: String!
+}
+
+type PromptAnnotationPosition {
+  line: Int!
+  column: Int!
+  revision: String
+}
+
+type PromptFileReference {
+  kind: String!
+  sessionFileId: ID
+  filePath: String
+  version: String
 }
 
 type TranscriptPage {
@@ -1071,7 +1107,36 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
   fileReferences: [PromptFileReferenceInput!]
+  annotations: [PromptAnnotationInput!]
   mentions: [PromptMentionInput!]
+}
+
+input PromptAnnotationInput {
+  id: ID!
+  source: String!
+  content: String!
+  marks: [PromptAnnotationMarkInput!]!
+  fileReferences: [PromptFileReferenceInput!]
+}
+
+input PromptAnnotationMarkInput {
+  id: ID!
+  kind: String!
+  shape: String
+  x: Float
+  y: Float
+  width: Float
+  height: Float
+  start: PromptAnnotationPositionInput
+  end: PromptAnnotationPositionInput
+  quote: String
+  note: String
+}
+
+input PromptAnnotationPositionInput {
+  line: Int!
+  column: Int!
+  revision: String
 }
 
 input PromptFileReferenceInput {

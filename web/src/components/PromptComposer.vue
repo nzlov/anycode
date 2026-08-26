@@ -96,9 +96,11 @@
           :key="annotation.id"
           removable
           square
+          clickable
           :disable="disabled"
           class="attachment-chip annotation-attachment-chip"
           icon="rate_review"
+          @click="emit('preview-annotation', annotation)"
           @remove="removeAnnotation(annotation)"
         >
           <span class="ellipsis">
@@ -424,6 +426,7 @@ const emit = defineEmits<{
   'update:permission': [value: string];
   'update:fast': [value: boolean];
   'update:collapsed': [value: boolean];
+  'preview-annotation': [annotation: PreviewAnnotationAttachment];
   submit: [];
 }>();
 

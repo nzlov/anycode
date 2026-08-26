@@ -16,9 +16,10 @@ const diffViewer = readSource('../src/components/DiffViewer.vue');
 const diffMedia = readSource('../src/components/DiffMediaPreview.vue');
 const filePreview = readSource('../src/components/SessionFilePreview.vue');
 const detail = readSource('../src/components/SessionDetailView.vue');
+const promptEdit = readSource('../src/components/PromptAppendEditPanel.vue');
+const promptEditPage = readSource('../src/pages/PromptAppendEditPage.vue');
 const layout = readSource('../src/layouts/MainLayout.vue');
 const composer = readSource('../src/components/PromptComposer.vue');
-const attachments = readSource('../src/services/attachments.ts');
 const sessions = readSource('../src/services/sessions.ts');
 const artifactsPanel = readSource('../src/components/SessionArtifactsPanel.vue');
 const artifactEvent = readSource('../src/components/SessionArtifactEvent.vue');
@@ -128,6 +129,9 @@ test('preview dialogs keep their close action available with annotation tools', 
   assert.doesNotMatch(detail, /#toolbar-(?:leading|actions)/);
   assert.match(filePreview, /v-if="file\?\.previewKind === 'image'"/);
   assert.doesNotMatch(filePreview, /previewKind === 'image' && imageURL/);
+  assert.match(annotator, /\.preview-annotator__toolbar\s*{[^}]*position:\s*sticky/s);
+  assert.match(filePreview, /\.session-file-preview__zoom-surface\s*{[^}]*overflow:\s*clip/s);
+  assert.match(diffViewer, /\.diff-file-card--headerless\s*{[^}]*overflow:\s*clip/s);
   assert.match(
     filePreview,
     /v-else-if="file\?\.previewKind === 'text'"[\s\S]*?<q-banner v-if="error"[\s\S]*?v-else-if="loading"/,
@@ -148,11 +152,13 @@ test('multi-line comments include only annotation text and exclude diff line num
   assert.doesNotMatch(annotator, /editorQuote\.value = range\.toString\(\)/);
 });
 
-test('inject adds every new annotation as a typed composer attachment then clears it', () => {
+test('inject preserves structured marks and sends annotations without markdown attachments', () => {
   assert.match(annotator, /formatPreviewAnnotationDraft\(props\.source, annotations\.value\)/);
+  assert.match(annotator, /marks: annotations\.value/);
   assert.match(annotator, /injector\.inject[\s\S]*clearAnnotations\(\)/);
   assert.match(detail, /appendAnnotations\.value = \[\.\.\.appendAnnotations\.value, attachment\]/);
-  assert.match(detail, /await stageAnnotation\(annotation\)/);
+  assert.doesNotMatch(detail, /stageAnnotation/);
+  assert.match(detail, /selectedAnnotations,[\s\S]*appendMentions\.value/);
   assert.match(detail, /composerCollapsed\.value = false/);
   assert.match(layout, /state: \{ annotationAttachment: JSON\.stringify\(attachment\) \}/);
   assert.match(detail, /consumeNavigationAnnotationAttachment\(\)/);
@@ -160,8 +166,7 @@ test('inject adds every new annotation as a typed composer attachment then clear
     composer,
     /v-for="annotation in annotations"[\s\S]*批注 · \{\{ annotation\.source[\s\S]*含原文件/,
   );
-  assert.match(attachments, /mutation StageAnnotation\(\$input: StageAnnotationInput!\)/);
-  assert.match(detail, /attachment\.kind === 'annotation' \? '批注' : '上传'/);
+  assert.match(sessions, /annotations\?: PreviewAnnotationAttachment\[\]/);
 });
 
 test('annotation source files use generic zero-copy references across file kinds', () => {
@@ -175,14 +180,28 @@ test('annotation source files use generic zero-copy references across file kinds
   assert.match(diffMedia, /kind: 'diff', filePath, version/);
   assert.match(diffViewer, /kind: 'diff', filePath: file\.path, version: 'old'/);
   assert.match(diffViewer, /kind: 'diff', filePath: file\.path, version: 'new'/);
-  assert.match(
-    detail,
-    /selectedAnnotations\.flatMap\(\(annotation\) => annotation\.fileReferences \?\? \[\]\)/,
-  );
+  assert.match(detail, /openPromptAnnotation\(annotation: PreviewAnnotationAttachment\)/);
+  assert.match(detail, /reference\.kind === 'session_file'/);
+  assert.match(detail, /reference\.kind === 'diff'/);
+});
+
+test('persisted annotations replay original previews with numbered positions', () => {
+  assert.match(detail, /批注 · \$\{annotation\.source\}/);
+  assert.match(detail, /display-annotations="eventResourceAnnotation\?\.marks \?\? \[\]"/);
+  assert.match(filePreview, /:display-annotations="displayAnnotations"/);
+  assert.match(diffViewer, /:display-annotations="displayAnnotation\?\.marks \?\? \[\]"/);
+  assert.match(diffMedia, /displayAnnotationsFor\(version\)/);
+  assert.match(annotator, /preview-annotator__marker-index/);
+  assert.match(annotator, /annotationTextPoint\(annotation\.start\)/);
+  assert.match(promptEdit, /批注 · \$\{annotation\.source\}/);
+  assert.match(promptEdit, /emit\('preview-annotation', annotation\)/);
+  assert.match(promptEditPage, /@preview-annotation="previewAnnotation"/);
+  assert.match(promptEditPage, /state: \{ promptAnnotationId: annotation\.id \}/);
+  assert.match(detail, /consumeNavigationPromptAnnotationId/);
 });
 
 test('one-time annotations reset when the preview content changes', () => {
-  assert.match(annotator, /watch\(\(\) => props\.contentKey, clearAnnotations\)/);
+  assert.match(annotator, /watch\(\s*\(\) => props\.contentKey/);
   assert.match(filePreview, /:content-key="file\.id"/);
   assert.match(diffViewer, /:content-key="fileDiffFor\(file\.path\)"/);
   assert.match(diffMedia, /:content-key="states\[version\]\.url"/);

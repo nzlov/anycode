@@ -85,7 +85,7 @@
 
       <template v-if="mode === 'image'">
         <div
-          v-for="annotation in imageAnnotations"
+          v-for="(annotation, index) in renderedImageAnnotations"
           :key="annotation.id"
           class="preview-annotator__shape"
           :class="{
@@ -94,9 +94,11 @@
           }"
           :style="imageAnnotationStyle(annotation)"
           @pointerdown.stop="selectAnnotation(annotation.id)"
-          @dblclick.stop="openImageEditor(annotation)"
+          @dblclick.stop="editImageAnnotation(annotation)"
         >
+          <span class="preview-annotator__marker-index">{{ index + 1 }}</span>
           <q-btn
+            v-if="!isDisplayAnnotation(annotation.id)"
             round
             dense
             size="xs"
@@ -105,7 +107,7 @@
             aria-label="编辑备注"
             @click.stop="openImageEditor(annotation)"
           />
-          <template v-if="selectedId === annotation.id">
+          <template v-if="selectedId === annotation.id && !isDisplayAnnotation(annotation.id)">
             <button
               v-for="corner in resizeCorners"
               :key="corner"
@@ -127,8 +129,10 @@
           class="preview-annotator__highlight"
           :style="highlight.style"
           :aria-label="`编辑批注：${highlight.annotation.note || highlight.annotation.quote}`"
-          @click="openTextAnnotationEditor(highlight.annotation)"
-        />
+          @click="editTextAnnotation(highlight.annotation)"
+        >
+          <span class="preview-annotator__marker-index">{{ highlight.index }}</span>
+        </button>
       </template>
     </div>
 
@@ -196,6 +200,7 @@ interface Highlight {
   key: string;
   annotation: StoredTextAnnotation;
   style: Record<string, string>;
+  index: number;
 }
 
 type ResizeCorner = 'nw' | 'ne' | 'sw' | 'se';
@@ -207,9 +212,10 @@ const props = withDefaults(
     sessionId?: string;
     contentKey?: unknown;
     fileReferences?: PreviewFileReference[];
+    displayAnnotations?: PreviewAnnotation[];
     enabled?: boolean;
   }>(),
-  { sessionId: '', fileReferences: () => [], enabled: true },
+  { sessionId: '', fileReferences: () => [], displayAnnotations: () => [], enabled: true },
 );
 
 const injector = useAnnotationDraftInjector();
@@ -217,6 +223,7 @@ const surfaceElement = ref<HTMLElement | null>(null);
 const imageBounds = ref<Bounds>({ left: 0, top: 0, width: 0, height: 0 });
 const imageAnnotations = ref<ImagePreviewAnnotation[]>([]);
 const textAnnotations = ref<StoredTextAnnotation[]>([]);
+const displayTextAnnotations = ref<StoredTextAnnotation[]>([]);
 const textHighlights = ref<Highlight[]>([]);
 const shape = ref<ImageAnnotationShape>('rectangle');
 const armed = ref(false);
@@ -255,6 +262,15 @@ const annotations = computed<PreviewAnnotation[]>(() => [
     quote: annotation.quote,
     note: annotation.note,
   })),
+]);
+const displayAnnotationIDs = computed(
+  () => new Set(props.displayAnnotations.map((annotation) => annotation.id)),
+);
+const renderedImageAnnotations = computed(() => [
+  ...imageAnnotations.value,
+  ...props.displayAnnotations.filter(
+    (annotation): annotation is ImagePreviewAnnotation => annotation.kind === 'image',
+  ),
 ]);
 const shapeLabel = computed(() => (shape.value === 'ellipse' ? '圆形' : '矩形'));
 const canInject = computed(() => injector?.canInject(props.sessionId) ?? false);
@@ -370,7 +386,20 @@ function imageAnnotationStyle(annotation: ImagePreviewAnnotation) {
 }
 
 function selectAnnotation(id: string) {
+  if (isDisplayAnnotation(id)) return;
   selectedId.value = id;
+}
+
+function isDisplayAnnotation(id: string) {
+  return displayAnnotationIDs.value.has(id);
+}
+
+function editImageAnnotation(annotation: ImagePreviewAnnotation) {
+  if (!isDisplayAnnotation(annotation.id)) openImageEditor(annotation);
+}
+
+function editTextAnnotation(annotation: StoredTextAnnotation) {
+  if (!isDisplayAnnotation(annotation.id)) openTextAnnotationEditor(annotation);
 }
 
 function startResize(
@@ -596,10 +625,12 @@ function syncTextHighlights() {
   const surface = surfaceElement.value;
   if (!surface) return;
   const surfaceRect = surface.getBoundingClientRect();
-  textHighlights.value = textAnnotations.value.flatMap((annotation) =>
+  const visibleAnnotations = [...textAnnotations.value, ...displayTextAnnotations.value];
+  textHighlights.value = visibleAnnotations.flatMap((annotation, annotationIndex) =>
     [...annotation.range.getClientRects()].map((rect, index) => ({
       key: `${annotation.id}:${index}`,
       annotation,
+      index: annotationIndex + 1,
       style: {
         left: `${rect.left - surfaceRect.left}px`,
         top: `${rect.top - surfaceRect.top}px`,
@@ -610,9 +641,65 @@ function syncTextHighlights() {
   );
 }
 
+function syncDisplayTextAnnotations() {
+  if (props.mode !== 'text') return;
+  displayTextAnnotations.value = props.displayAnnotations.flatMap((annotation) => {
+    if (annotation.kind !== 'text') return [];
+    const range = annotationRange(annotation);
+    return range ? [{ ...annotation, range }] : [];
+  });
+  syncTextHighlights();
+}
+
+function annotationRange(annotation: TextPreviewAnnotation) {
+  const start = annotationTextPoint(annotation.start);
+  const end = annotationTextPoint(annotation.end);
+  if (!start || !end) return null;
+  const range = document.createRange();
+  try {
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+function annotationTextPoint(position: TextAnnotationPosition) {
+  const surface = surfaceElement.value;
+  if (!surface) return null;
+  for (const root of surface.querySelectorAll<HTMLElement>('[data-annotation-text]')) {
+    if (position.revision && root.dataset.annotationRevision !== position.revision) continue;
+    const firstLine = Number(root.dataset.annotationLine);
+    const lines = (root.textContent ?? '').split('\n');
+    const lineOffset = position.line - firstLine;
+    if (!Number.isInteger(firstLine) || lineOffset < 0 || lineOffset >= lines.length) continue;
+    let offset = Math.min(Math.max(position.column - 1, 0), lines[lineOffset]?.length ?? 0);
+    for (let index = 0; index < lineOffset; index++) offset += (lines[index]?.length ?? 0) + 1;
+    const point = textNodePoint(root, offset);
+    if (point) return point;
+  }
+  return null;
+}
+
+function textNodePoint(root: HTMLElement, offset: number) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let remaining = offset;
+  let last: Text | null = null;
+  while (node) {
+    const textNode = node as Text;
+    last = textNode;
+    if (remaining <= textNode.data.length) return { node: textNode, offset: remaining };
+    remaining -= textNode.data.length;
+    node = walker.nextNode();
+  }
+  return last ? { node: last, offset: last.data.length } : null;
+}
+
 function syncOverlay() {
   if (props.mode === 'image') syncImageBounds();
-  else syncTextHighlights();
+  else syncDisplayTextAnnotations();
 }
 
 function injectAnnotations() {
@@ -623,6 +710,7 @@ function injectAnnotations() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       source: props.source.trim() || '当前内容',
       content: formatPreviewAnnotationDraft(props.source, annotations.value),
+      marks: annotations.value,
       ...(fileReferences.length > 0 ? { fileReferences } : {}),
     },
     props.sessionId,
@@ -669,7 +757,18 @@ function cornerLabel(corner: ResizeCorner) {
   return labels[corner];
 }
 
-watch(() => props.contentKey, clearAnnotations);
+watch(
+  () => props.contentKey,
+  () => {
+    clearAnnotations();
+    void nextTick(syncOverlay);
+  },
+);
+watch(
+  () => props.displayAnnotations,
+  () => void nextTick(syncOverlay),
+  { deep: true },
+);
 
 onMounted(() => {
   const surface = surfaceElement.value;
@@ -682,9 +781,27 @@ onMounted(() => {
     if (image) resizeObserver.observe(image);
   }
   const image = surface.querySelector('img');
-  if (image && typeof MutationObserver !== 'undefined') {
-    mutationObserver = new MutationObserver(syncOverlay);
-    mutationObserver.observe(image, { attributes: true, attributeFilter: ['style'] });
+  if (typeof MutationObserver !== 'undefined') {
+    mutationObserver = new MutationObserver((mutations) => {
+      const textChanged = mutations.some((mutation) => {
+        const element =
+          mutation.target.nodeType === Node.ELEMENT_NODE
+            ? (mutation.target as Element)
+            : mutation.target.parentElement;
+        return Boolean(
+          element?.closest('[data-annotation-text]') ||
+          [...mutation.addedNodes].some(
+            (node) =>
+              node.nodeType === Node.ELEMENT_NODE &&
+              ((node as Element).matches('[data-annotation-text]') ||
+                Boolean((node as Element).querySelector('[data-annotation-text]'))),
+          ),
+        );
+      });
+      if (image || textChanged) syncOverlay();
+    });
+    if (image) mutationObserver.observe(image, { attributes: true, attributeFilter: ['style'] });
+    else mutationObserver.observe(surface, { childList: true, characterData: true, subtree: true });
   }
   surface.addEventListener('scroll', syncOverlay, true);
   document.addEventListener('selectionchange', captureTextSelection);
@@ -789,6 +906,29 @@ onBeforeUnmount(() => {
 
 .preview-annotator__shape--selected {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 28%, transparent);
+}
+
+.preview-annotator__marker-index {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  color: var(--ac-on-primary-container);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  background: var(--ac-primary-container);
+  border-radius: 999px;
+}
+
+.preview-annotator__highlight .preview-annotator__marker-index {
+  top: -18px;
+  left: 0;
 }
 
 .preview-annotator__shape-note {

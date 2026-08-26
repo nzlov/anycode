@@ -125,6 +125,7 @@
               :quick-command-project-id="session?.projectId ?? ''"
               :completion-session-id="sessionId"
               :completion-has-thread="Boolean(session?.codexSessionId)"
+              @preview-annotation="openPromptAnnotation"
               @submit="sendAppend"
             >
               <template #actions>
@@ -433,8 +434,26 @@
                             :icon="attachment.kind === 'annotation' ? 'rate_review' : 'attach_file'"
                             color="primary"
                             text-color="primary"
-                            :label="`${attachment.kind === 'annotation' ? '批注' : '上传'} · ${attachment.filename}`"
+                            :label="attachmentLabel(attachment)"
                           />
+                        </div>
+                        <div v-if="item.annotations.length" class="append-history__attachments">
+                          <q-chip
+                            v-for="annotation in item.annotations"
+                            :key="annotation.id"
+                            dense
+                            square
+                            outline
+                            clickable
+                            icon="rate_review"
+                            color="primary"
+                            text-color="primary"
+                            :label="`批注 · ${annotation.source}`"
+                            @click.stop="openPromptAnnotation(annotation)"
+                          >
+                            <q-icon name="visibility" class="q-ml-xs" />
+                            <q-tooltip>预览原文件及批注位置</q-tooltip>
+                          </q-chip>
                         </div>
                         <div v-if="item.artifacts.length" class="append-history__attachments">
                           <q-chip
@@ -533,6 +552,7 @@
         :can-save="canSavePromptAppendEdit"
         @cancel="promptEditDialogOpen = false"
         @save="savePromptAppendEdit"
+        @preview-annotation="openPromptAnnotation"
       />
     </q-dialog>
 
@@ -602,14 +622,17 @@
             :show-file-navigation="false"
             :show-file-headers="false"
             :show-refresh="false"
+            :display-annotation="eventResourceAnnotation"
           />
           <SessionFilePreview
             v-else
             :file="eventResourceFile"
             :zoomable="isMobileLayout"
             :annotatable="eventResourceFile?.sourceType !== 'workspace'"
+            :annotation-read-only="Boolean(eventResourceAnnotation)"
             :annotation-session-id="sessionId"
             :annotation-source="`临时文件 ${eventResourceTitle}`"
+            :display-annotations="eventResourceAnnotation?.marks ?? []"
           />
         </q-card-section>
       </q-card>
@@ -636,10 +659,11 @@ import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
-import { deleteStagedAttachment, stageAnnotation, stageAttachment } from '@/services/attachments';
+import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import { provideAnnotationDraftInjector } from '@/services/annotationDraftInjection';
 import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
+import type { SessionAttachment } from '@/services/sessions';
 import type { DiffFile, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import { getSessionDiffFiles } from '@/services/diff';
 import {
@@ -752,6 +776,7 @@ const eventDiffFile = ref<DiffFile | null>(null);
 const eventResourceDialogOpen = ref(false);
 const eventResourceKind = ref<'diff' | 'file'>('file');
 const eventResourceFile = ref<SessionFile | null>(null);
+const eventResourceAnnotation = ref<PreviewAnnotationAttachment | null>(null);
 const eventResourceDownloading = ref(false);
 let eventResourceRequest = 0;
 let mounted = false;
@@ -895,14 +920,60 @@ function openEventDiff(file: DiffFile) {
   eventDiffFile.value = file;
   eventResourceFile.value = null;
   eventResourceKind.value = 'diff';
+  eventResourceAnnotation.value = null;
   eventResourceDialogOpen.value = true;
+}
+
+function openAnnotatedEventDiff(file: DiffFile, annotation: PreviewAnnotationAttachment) {
+  openEventDiff(file);
+  eventResourceAnnotation.value = annotation;
 }
 
 function focusEventArtifact(file: SessionFile) {
   eventDiffFile.value = null;
   eventResourceFile.value = file;
   eventResourceKind.value = 'file';
+  eventResourceAnnotation.value = null;
   eventResourceDialogOpen.value = true;
+}
+
+function focusAnnotatedEventArtifact(file: SessionFile, annotation: PreviewAnnotationAttachment) {
+  focusEventArtifact(file);
+  eventResourceAnnotation.value = annotation;
+}
+
+async function openPromptAnnotation(annotation: PreviewAnnotationAttachment) {
+  const request = ++eventResourceRequest;
+  try {
+    const fileReference = annotation.fileReferences?.find(
+      (reference) => reference.kind === 'session_file' && reference.sessionFileId,
+    );
+    if (fileReference?.sessionFileId) {
+      const files = await listSessionFiles({ sessionId });
+      if (request !== eventResourceRequest) return;
+      const file = files.find((item) => item.id === fileReference.sessionFileId);
+      if (file) return focusAnnotatedEventArtifact(file, annotation);
+    }
+    const diffReference = annotation.fileReferences?.find(
+      (reference) => reference.kind === 'diff' && reference.filePath,
+    );
+    if (diffReference?.filePath) {
+      const result = await getSessionDiffFiles({ sessionId });
+      if (request !== eventResourceRequest) return;
+      const file = result.files.find((item) => item.path === diffReference.filePath);
+      if (file) return openAnnotatedEventDiff(file, annotation);
+    }
+    throw new Error('批注原文件已不存在');
+  } catch (err) {
+    if (request !== eventResourceRequest) return;
+    Notify.create({ type: 'negative', message: errorMessage(err) || '读取批注原文件失败' });
+  }
+}
+
+function attachmentLabel(attachment: SessionAttachment) {
+  if (attachment.kind !== 'annotation') return `上传 · ${attachment.filename}`;
+  const source = attachment.filename.replace(/^批注-/, '').replace(/\.md$/i, '');
+  return `旧版批注 · ${source || '无法回放位置'}`;
 }
 
 const eventResourceTitle = computed(() =>
@@ -941,6 +1012,7 @@ function clearEventResource() {
   eventResourceRequest++;
   eventDiffFile.value = null;
   eventResourceFile.value = null;
+  eventResourceAnnotation.value = null;
 }
 
 // GLUE: Persisted prompt text disambiguates user-authored copies of injected guidance.
@@ -1227,17 +1299,12 @@ async function sendAppend() {
   const selectedAnnotations = [...appendAnnotations.value];
   const selectedArtifacts = [...appendArtifacts.value];
   const stagedAttachmentIds: string[] = [];
-  let phase: 'upload' | 'append' =
-    selectedFiles.length > 0 || selectedAnnotations.length > 0 ? 'upload' : 'append';
-  appendUploading.value = selectedFiles.length > 0 || selectedAnnotations.length > 0;
+  let phase: 'upload' | 'append' = selectedFiles.length > 0 ? 'upload' : 'append';
+  appendUploading.value = selectedFiles.length > 0;
   try {
     await saveComposerConfig();
     for (const file of selectedFiles) {
       const attachment = await stageAttachment(file);
-      stagedAttachmentIds.push(attachment.id);
-    }
-    for (const annotation of selectedAnnotations) {
-      const attachment = await stageAnnotation(annotation);
       stagedAttachmentIds.push(attachment.id);
     }
     appendUploading.value = false;
@@ -1247,7 +1314,8 @@ async function sendAppend() {
       text,
       stagedAttachmentIds,
       selectedArtifacts.map((artifact) => artifact.id),
-      selectedAnnotations.flatMap((annotation) => annotation.fileReferences ?? []),
+      [],
+      selectedAnnotations,
       appendMentions.value,
     );
     appendText.value = '';
@@ -1294,6 +1362,18 @@ function consumeNavigationAnnotationAttachment() {
   const nextState = { ...state };
   delete nextState.annotationAttachment;
   window.history.replaceState(nextState, '');
+}
+
+function consumeNavigationPromptAnnotationId() {
+  const state = window.history.state as Record<string, unknown> | null;
+  const annotationId = state?.promptAnnotationId;
+  if (typeof annotationId !== 'string' || !annotationId) return '';
+  // GLUE: the mobile full-page editor returns a stable ID to this shared preview owner;
+  // remove this handoff when the editor and resource preview share one route-level shell.
+  const nextState = { ...state };
+  delete nextState.promptAnnotationId;
+  window.history.replaceState(nextState, '');
+  return annotationId;
 }
 
 function handleArtifactDeleted(artifact: SessionFile) {
@@ -1379,7 +1459,14 @@ watch(
 onMounted(() => {
   mounted = true;
   consumeNavigationAnnotationAttachment();
-  void initializeSessionDetail();
+  const promptAnnotationId = consumeNavigationPromptAnnotationId();
+  void initializeSessionDetail().then(() => {
+    if (!promptAnnotationId || !mounted) return;
+    const annotation = session.value?.promptAppends
+      .flatMap((prompt) => prompt.annotations)
+      .find((item) => item.id === promptAnnotationId);
+    if (annotation) void openPromptAnnotation(annotation);
+  });
 });
 
 onUnmounted(() => {

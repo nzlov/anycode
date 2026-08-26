@@ -181,6 +181,7 @@
           :loading-paths="fileLoadingPaths"
           :media-previews="mediaPreviews"
           :annotation-session-ids="annotationSessionIds"
+          :display-annotation="displayAnnotation"
           @expand="expandDiff"
           @toggle-collapse="toggleFileCollapsed"
         >
@@ -240,6 +241,7 @@ import type {
   SessionDiff,
 } from '@/services/diff';
 import { listSessions } from '@/services/sessions';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import { diffMediaKind } from '@/services/diffMediaModel';
 import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
 
@@ -254,12 +256,14 @@ const props = withDefaults(
     refreshKey?: string | number;
     toolbarTarget?: string;
     toolbarTitle?: string;
+    displayAnnotation?: PreviewAnnotationAttachment | null;
   }>(),
   {
     showFileNavigation: true,
     showFileHeaders: true,
     showRefresh: true,
     allFilesLoading: 'eager',
+    displayAnnotation: null,
   },
 );
 

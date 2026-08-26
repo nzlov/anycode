@@ -405,6 +405,7 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 		SetMentions(append.Mentions).
 		SetArtifactIds(sessionFileIDsToStrings(append.ArtifactIDs)).
 		SetFileReferences(append.FileReferences).
+		SetAnnotations(append.Annotations).
 		SetStatus(string(append.Status)).
 		SetDispatchedProcessRunID(append.DispatchedProcessRunID)
 	if append.DispatchedAt != nil {
@@ -549,6 +550,7 @@ func promptAppendFromRow(row *ent.PromptAppend) domainsession.PromptAppend {
 		CreatedAt:              row.CreatedAt,
 		ArtifactIDs:            artifactIDs,
 		FileReferences:         row.FileReferences,
+		Annotations:            row.Annotations,
 	}
 }
 

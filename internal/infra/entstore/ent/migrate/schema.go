@@ -410,6 +410,7 @@ var (
 		{Name: "mentions", Type: field.TypeJSON, Nullable: true},
 		{Name: "artifact_ids", Type: field.TypeJSON},
 		{Name: "file_references", Type: field.TypeJSON, Nullable: true},
+		{Name: "annotations", Type: field.TypeJSON, Nullable: true},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "dispatched_at", Type: field.TypeTime, Nullable: true},
 		{Name: "dispatched_process_run_id", Type: field.TypeString, Default: ""},
@@ -424,12 +425,12 @@ var (
 			{
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[9]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[10]},
 			},
 			{
 				Name:    "promptappend_session_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[6], PromptAppendsColumns[9]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[7], PromptAppendsColumns[10]},
 			},
 		},
 	}

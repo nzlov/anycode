@@ -10930,6 +10930,8 @@ type PromptAppendMutation struct {
 	appendartifact_ids        []string
 	file_references           *[]session.PromptFileReference
 	appendfile_references     []session.PromptFileReference
+	annotations               *[]session.PromptAnnotation
+	appendannotations         []session.PromptAnnotation
 	status                    *string
 	dispatched_at             *time.Time
 	dispatched_process_run_id *string
@@ -11297,6 +11299,71 @@ func (m *PromptAppendMutation) ResetFileReferences() {
 	delete(m.clearedFields, promptappend.FieldFileReferences)
 }
 
+// SetAnnotations sets the "annotations" field.
+func (m *PromptAppendMutation) SetAnnotations(sa []session.PromptAnnotation) {
+	m.annotations = &sa
+	m.appendannotations = nil
+}
+
+// Annotations returns the value of the "annotations" field in the mutation.
+func (m *PromptAppendMutation) Annotations() (r []session.PromptAnnotation, exists bool) {
+	v := m.annotations
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnnotations returns the old "annotations" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldAnnotations(ctx context.Context) (v []session.PromptAnnotation, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnnotations is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnnotations requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnnotations: %w", err)
+	}
+	return oldValue.Annotations, nil
+}
+
+// AppendAnnotations adds sa to the "annotations" field.
+func (m *PromptAppendMutation) AppendAnnotations(sa []session.PromptAnnotation) {
+	m.appendannotations = append(m.appendannotations, sa...)
+}
+
+// AppendedAnnotations returns the list of values that were appended to the "annotations" field in this mutation.
+func (m *PromptAppendMutation) AppendedAnnotations() ([]session.PromptAnnotation, bool) {
+	if len(m.appendannotations) == 0 {
+		return nil, false
+	}
+	return m.appendannotations, true
+}
+
+// ClearAnnotations clears the value of the "annotations" field.
+func (m *PromptAppendMutation) ClearAnnotations() {
+	m.annotations = nil
+	m.appendannotations = nil
+	m.clearedFields[promptappend.FieldAnnotations] = struct{}{}
+}
+
+// AnnotationsCleared returns if the "annotations" field was cleared in this mutation.
+func (m *PromptAppendMutation) AnnotationsCleared() bool {
+	_, ok := m.clearedFields[promptappend.FieldAnnotations]
+	return ok
+}
+
+// ResetAnnotations resets all changes to the "annotations" field.
+func (m *PromptAppendMutation) ResetAnnotations() {
+	m.annotations = nil
+	m.appendannotations = nil
+	delete(m.clearedFields, promptappend.FieldAnnotations)
+}
+
 // SetStatus sets the "status" field.
 func (m *PromptAppendMutation) SetStatus(s string) {
 	m.status = &s
@@ -11488,7 +11555,7 @@ func (m *PromptAppendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptAppendMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.session_id != nil {
 		fields = append(fields, promptappend.FieldSessionID)
 	}
@@ -11503,6 +11570,9 @@ func (m *PromptAppendMutation) Fields() []string {
 	}
 	if m.file_references != nil {
 		fields = append(fields, promptappend.FieldFileReferences)
+	}
+	if m.annotations != nil {
+		fields = append(fields, promptappend.FieldAnnotations)
 	}
 	if m.status != nil {
 		fields = append(fields, promptappend.FieldStatus)
@@ -11534,6 +11604,8 @@ func (m *PromptAppendMutation) Field(name string) (ent.Value, bool) {
 		return m.ArtifactIds()
 	case promptappend.FieldFileReferences:
 		return m.FileReferences()
+	case promptappend.FieldAnnotations:
+		return m.Annotations()
 	case promptappend.FieldStatus:
 		return m.Status()
 	case promptappend.FieldDispatchedAt:
@@ -11561,6 +11633,8 @@ func (m *PromptAppendMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldArtifactIds(ctx)
 	case promptappend.FieldFileReferences:
 		return m.OldFileReferences(ctx)
+	case promptappend.FieldAnnotations:
+		return m.OldAnnotations(ctx)
 	case promptappend.FieldStatus:
 		return m.OldStatus(ctx)
 	case promptappend.FieldDispatchedAt:
@@ -11612,6 +11686,13 @@ func (m *PromptAppendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFileReferences(v)
+		return nil
+	case promptappend.FieldAnnotations:
+		v, ok := value.([]session.PromptAnnotation)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnnotations(v)
 		return nil
 	case promptappend.FieldStatus:
 		v, ok := value.(string)
@@ -11677,6 +11758,9 @@ func (m *PromptAppendMutation) ClearedFields() []string {
 	if m.FieldCleared(promptappend.FieldFileReferences) {
 		fields = append(fields, promptappend.FieldFileReferences)
 	}
+	if m.FieldCleared(promptappend.FieldAnnotations) {
+		fields = append(fields, promptappend.FieldAnnotations)
+	}
 	if m.FieldCleared(promptappend.FieldDispatchedAt) {
 		fields = append(fields, promptappend.FieldDispatchedAt)
 	}
@@ -11699,6 +11783,9 @@ func (m *PromptAppendMutation) ClearField(name string) error {
 		return nil
 	case promptappend.FieldFileReferences:
 		m.ClearFileReferences()
+		return nil
+	case promptappend.FieldAnnotations:
+		m.ClearAnnotations()
 		return nil
 	case promptappend.FieldDispatchedAt:
 		m.ClearDispatchedAt()
@@ -11725,6 +11812,9 @@ func (m *PromptAppendMutation) ResetField(name string) error {
 		return nil
 	case promptappend.FieldFileReferences:
 		m.ResetFileReferences()
+		return nil
+	case promptappend.FieldAnnotations:
+		m.ResetAnnotations()
 		return nil
 	case promptappend.FieldStatus:
 		m.ResetStatus()

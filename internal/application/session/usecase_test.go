@@ -4688,6 +4688,38 @@ func TestAppendPromptValidatesAndPersists(t *testing.T) {
 	}
 }
 
+func TestAppendPromptPersistsStructuredAnnotations(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusWaitingApproval}
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["image-1"] = domain.SessionFile{ID: "image-1", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/design.png", MimeType: "image/png"}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	annotation := domain.PromptAnnotation{
+		ID: "annotation-1", Source: "临时文件 design.png", Content: "图片标注\n标记文件：临时文件 design.png",
+		Marks:          []domain.PromptAnnotationMark{{ID: "mark-1", Kind: "image", Shape: "rectangle", X: 0.1, Y: 0.2, Width: 0.3, Height: 0.4}},
+		FileReferences: []domain.PromptFileReference{{Kind: domain.PromptFileReferenceSessionFile, SessionFileID: "image-1"}},
+	}
+	got, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Annotations: []domain.PromptAnnotation{annotation}})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if len(got.Annotations) != 1 || len(repo.appends[0].Annotations) != 1 || repo.appends[0].Annotations[0].Marks[0].Width != 0.3 {
+		t.Fatalf("persisted annotations = %#v, DTO = %#v", repo.appends[0].Annotations, got.Annotations)
+	}
+	if len(repo.appends[0].FileReferences) != 1 || repo.appends[0].FileReferences[0].SessionFileID != "image-1" {
+		t.Fatalf("derived file references = %#v", repo.appends[0].FileReferences)
+	}
+	if len(repo.appends[0].Attachments) != 0 {
+		t.Fatalf("structured annotation created markdown attachment: %#v", repo.appends[0].Attachments)
+	}
+	if prompt := promptAppendText(repo.appends[0]); !strings.Contains(prompt, annotation.Content) {
+		t.Fatalf("agent prompt lacks annotation content: %q", prompt)
+	}
+}
+
 func TestAppendPromptPersistsOrderedArtifactIDsWithoutCopying(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -7890,6 +7922,20 @@ func TestResolvePromptFilesReusesSessionFileAndReadsDiffVersion(t *testing.T) {
 	}
 	if len(reader.references) != 1 || reader.references[0].FilePath != "media/demo.mp4" || reader.references[0].Version != "old" {
 		t.Fatalf("reader references = %#v", reader.references)
+	}
+}
+
+func TestNormalizePromptAnnotationsPreservesReplayData(t *testing.T) {
+	annotations, err := normalizePromptAnnotations([]domain.PromptAnnotation{{
+		ID: " annotation-1 ", Source: " 临时文件 design.png ", Content: " 图片标注 ",
+		Marks:          []domain.PromptAnnotationMark{{ID: "mark-1", Kind: "image", Shape: "rectangle", X: 0.1, Y: 0.2, Width: 0.3, Height: 0.4}},
+		FileReferences: []domain.PromptFileReference{{Kind: domain.PromptFileReferenceSessionFile, SessionFileID: "file-1"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(annotations) != 1 || annotations[0].ID != "annotation-1" || annotations[0].Source != "临时文件 design.png" || annotations[0].Marks[0].Width != 0.3 || annotations[0].FileReferences[0].SessionFileID != "file-1" {
+		t.Fatalf("normalized annotations = %#v", annotations)
 	}
 }
 

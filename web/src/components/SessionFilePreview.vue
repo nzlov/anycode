@@ -12,11 +12,12 @@
     >
       <PreviewAnnotator
         mode="image"
-        :enabled="annotatable"
+        :enabled="annotatable && !annotationReadOnly"
         :source="annotationSource || `临时文件 ${file.filename}`"
         :session-id="annotationSessionId"
         :content-key="file.id"
         :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+        :display-annotations="displayAnnotations"
       >
         <template #toolbar-leading><slot name="toolbar-leading" /></template>
         <template #toolbar-actions><slot name="toolbar-actions" /></template>
@@ -42,11 +43,12 @@
     <PreviewAnnotator
       v-else-if="file?.previewKind === 'text'"
       mode="text"
-      :enabled="annotatable"
+      :enabled="annotatable && !annotationReadOnly"
       :source="annotationSource || `临时文件 ${file.filename}`"
       :session-id="annotationSessionId"
       :content-key="file.id"
       :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+      :display-annotations="displayAnnotations"
     >
       <template #toolbar-leading><slot name="toolbar-leading" /></template>
       <template #toolbar-actions><slot name="toolbar-actions" /></template>
@@ -110,6 +112,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
+import type { PreviewAnnotation } from '@/services/previewAnnotations';
 import {
   fetchSessionFile,
   requestSessionFilePreviewURL,
@@ -125,8 +128,17 @@ const props = withDefaults(
     annotationSource?: string;
     annotationSessionId?: string;
     annotatable?: boolean;
+    annotationReadOnly?: boolean;
+    displayAnnotations?: PreviewAnnotation[];
   }>(),
-  { zoomable: false, annotationSource: '', annotationSessionId: '', annotatable: true },
+  {
+    zoomable: false,
+    annotationSource: '',
+    annotationSessionId: '',
+    annotatable: true,
+    annotationReadOnly: false,
+    displayAnnotations: () => [],
+  },
 );
 const loading = ref(false);
 const error = ref('');
@@ -346,7 +358,7 @@ onBeforeUnmount(clear);
   width: 100%;
   height: 100%;
   place-items: center;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .session-file-preview__zoom-surface :deep(.preview-annotator) {

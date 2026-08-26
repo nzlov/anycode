@@ -5,6 +5,7 @@ import {
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
 import type { SessionFile, SessionFilePreviewData } from '@/services/sessionFiles';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import {
   normalizeTranscriptEvent,
   transcriptEventFields,
@@ -130,6 +131,7 @@ export interface PromptAppend {
   body: string;
   attachments: SessionAttachment[];
   artifacts: SessionFile[];
+  annotations: PreviewAnnotationAttachment[];
   createdAt: string;
   time: string;
 }
@@ -352,6 +354,7 @@ interface GraphQLPromptAppend {
   body: string;
   attachments?: GraphQLSessionAttachment[];
   artifacts?: SessionFile[];
+  annotations?: PreviewAnnotationAttachment[];
   createdAt: string;
 }
 
@@ -539,6 +542,17 @@ const sessionDetailFields = `
       id sessionId role sourceType artifactKind logicalPath filename mimeType size
       previewKind previewUrl downloadUrl createdAt
     }
+	annotations {
+	  id
+	  source
+	  content
+	  marks {
+		id kind shape x y width height quote note
+		start { line column revision }
+		end { line column revision }
+	  }
+	  fileReferences { kind sessionFileId filePath version }
+	}
     createdAt
   }
   availableActions
@@ -774,6 +788,7 @@ export async function appendPrompt(
   stagedAttachmentIds?: string[],
   artifactIds?: string[],
   fileReferences?: PromptFileReference[],
+  annotations?: PreviewAnnotationAttachment[],
   mentions?: PromptMention[],
 ) {
   const input: {
@@ -782,6 +797,7 @@ export async function appendPrompt(
     stagedAttachmentIds?: string[];
     artifactIds?: string[];
     fileReferences?: PromptFileReference[];
+    annotations?: PreviewAnnotationAttachment[];
     mentions?: PromptMention[];
   } = {
     sessionId,
@@ -792,6 +808,7 @@ export async function appendPrompt(
   }
   if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
   if (fileReferences && fileReferences.length > 0) input.fileReferences = fileReferences;
+  if (annotations && annotations.length > 0) input.annotations = annotations;
   if (mentions && mentions.length > 0) input.mentions = mentions;
   return graphqlFetch<
     { appendPrompt: GraphQLPromptAppend },
@@ -802,6 +819,7 @@ export async function appendPrompt(
         stagedAttachmentIds?: string[];
         artifactIds?: string[];
         fileReferences?: PromptFileReference[];
+        annotations?: PreviewAnnotationAttachment[];
         mentions?: PromptMention[];
       };
     }
@@ -826,6 +844,17 @@ export async function appendPrompt(
             id sessionId role sourceType artifactKind logicalPath filename mimeType size
             previewKind previewUrl downloadUrl createdAt
           }
+		  annotations {
+			id
+			source
+			content
+			marks {
+			  id kind shape x y width height quote note
+			  start { line column revision }
+			  end { line column revision }
+			}
+			fileReferences { kind sessionFileId filePath version }
+		  }
           createdAt
         }
       }
@@ -863,6 +892,17 @@ export async function updatePromptAppend(
             id sessionId role sourceType artifactKind logicalPath filename mimeType size
             previewKind previewUrl downloadUrl createdAt
           }
+		  annotations {
+			id
+			source
+			content
+			marks {
+			  id kind shape x y width height quote note
+			  start { line column revision }
+			  end { line column revision }
+			}
+			fileReferences { kind sessionFileId filePath version }
+		  }
           createdAt
         }
       }
@@ -1254,6 +1294,7 @@ function normalizePromptAppend(promptAppend: GraphQLPromptAppend): PromptAppend 
     body: promptAppend.body,
     attachments: (promptAppend.attachments ?? []).map(normalizeAttachment),
     artifacts: promptAppend.artifacts ?? [],
+    annotations: promptAppend.annotations ?? [],
     createdAt: promptAppend.createdAt,
     time: formatEventTime(promptAppend.createdAt),
   };

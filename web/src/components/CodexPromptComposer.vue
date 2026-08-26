@@ -31,6 +31,7 @@
     @update:permission="emit('update:permission', $event)"
     @update:fast="emit('update:fast', $event)"
     @update:collapsed="emit('update:collapsed', $event)"
+    @preview-annotation="emit('preview-annotation', $event)"
     @submit="emit('submit')"
   >
     <template #quick-actions>
@@ -173,6 +174,7 @@ const emit = defineEmits<{
   'update:permission': [value: string];
   'update:fast': [value: boolean];
   'update:collapsed': [value: boolean];
+  'preview-annotation': [annotation: PreviewAnnotationAttachment];
   submit: [];
 }>();
 

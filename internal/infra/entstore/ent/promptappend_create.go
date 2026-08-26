@@ -59,6 +59,12 @@ func (_c *PromptAppendCreate) SetFileReferences(v []session.PromptFileReference)
 	return _c
 }
 
+// SetAnnotations sets the "annotations" field.
+func (_c *PromptAppendCreate) SetAnnotations(v []session.PromptAnnotation) *PromptAppendCreate {
+	_c.mutation.SetAnnotations(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *PromptAppendCreate) SetStatus(v string) *PromptAppendCreate {
 	_c.mutation.SetStatus(v)
@@ -257,6 +263,10 @@ func (_c *PromptAppendCreate) createSpec() (*PromptAppend, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.FileReferences(); ok {
 		_spec.SetField(promptappend.FieldFileReferences, field.TypeJSON, value)
 		_node.FileReferences = value
+	}
+	if value, ok := _c.mutation.Annotations(); ok {
+		_spec.SetField(promptappend.FieldAnnotations, field.TypeJSON, value)
+		_node.Annotations = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

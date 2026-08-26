@@ -29,6 +29,7 @@ type AppendPromptInput struct {
 	StagedAttachmentIds []string                    `json:"stagedAttachmentIds,omitempty"`
 	ArtifactIds         []string                    `json:"artifactIds,omitempty"`
 	FileReferences      []*PromptFileReferenceInput `json:"fileReferences,omitempty"`
+	Annotations         []*PromptAnnotationInput    `json:"annotations,omitempty"`
 	Mentions            []*PromptMentionInput       `json:"mentions,omitempty"`
 }
 
@@ -388,12 +389,69 @@ type Project struct {
 	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
+type PromptAnnotation struct {
+	ID             string                  `json:"id"`
+	Source         string                  `json:"source"`
+	Content        string                  `json:"content"`
+	Marks          []*PromptAnnotationMark `json:"marks"`
+	FileReferences []*PromptFileReference  `json:"fileReferences"`
+}
+
+type PromptAnnotationInput struct {
+	ID             string                       `json:"id"`
+	Source         string                       `json:"source"`
+	Content        string                       `json:"content"`
+	Marks          []*PromptAnnotationMarkInput `json:"marks"`
+	FileReferences []*PromptFileReferenceInput  `json:"fileReferences,omitempty"`
+}
+
+type PromptAnnotationMark struct {
+	ID     string                    `json:"id"`
+	Kind   string                    `json:"kind"`
+	Shape  *string                   `json:"shape,omitempty"`
+	X      *float64                  `json:"x,omitempty"`
+	Y      *float64                  `json:"y,omitempty"`
+	Width  *float64                  `json:"width,omitempty"`
+	Height *float64                  `json:"height,omitempty"`
+	Start  *PromptAnnotationPosition `json:"start,omitempty"`
+	End    *PromptAnnotationPosition `json:"end,omitempty"`
+	Quote  *string                   `json:"quote,omitempty"`
+	Note   string                    `json:"note"`
+}
+
+type PromptAnnotationMarkInput struct {
+	ID     string                         `json:"id"`
+	Kind   string                         `json:"kind"`
+	Shape  *string                        `json:"shape,omitempty"`
+	X      *float64                       `json:"x,omitempty"`
+	Y      *float64                       `json:"y,omitempty"`
+	Width  *float64                       `json:"width,omitempty"`
+	Height *float64                       `json:"height,omitempty"`
+	Start  *PromptAnnotationPositionInput `json:"start,omitempty"`
+	End    *PromptAnnotationPositionInput `json:"end,omitempty"`
+	Quote  *string                        `json:"quote,omitempty"`
+	Note   *string                        `json:"note,omitempty"`
+}
+
+type PromptAnnotationPosition struct {
+	Line     int     `json:"line"`
+	Column   int     `json:"column"`
+	Revision *string `json:"revision,omitempty"`
+}
+
+type PromptAnnotationPositionInput struct {
+	Line     int     `json:"line"`
+	Column   int     `json:"column"`
+	Revision *string `json:"revision,omitempty"`
+}
+
 type PromptAppend struct {
 	ID          string               `json:"id"`
 	SessionID   string               `json:"sessionId"`
 	Body        string               `json:"body"`
 	Attachments []*SessionAttachment `json:"attachments"`
 	Artifacts   []*SessionFile       `json:"artifacts"`
+	Annotations []*PromptAnnotation  `json:"annotations"`
 	CreatedAt   time.Time            `json:"createdAt"`
 }
 
@@ -407,6 +465,13 @@ type PromptFileMatchInput struct {
 	ProjectID *string `json:"projectId,omitempty"`
 	SessionID *string `json:"sessionId,omitempty"`
 	Query     string  `json:"query"`
+}
+
+type PromptFileReference struct {
+	Kind          string  `json:"kind"`
+	SessionFileID *string `json:"sessionFileId,omitempty"`
+	FilePath      *string `json:"filePath,omitempty"`
+	Version       *string `json:"version,omitempty"`
 }
 
 type PromptFileReferenceInput struct {

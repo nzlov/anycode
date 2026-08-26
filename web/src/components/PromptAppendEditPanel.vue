@@ -33,7 +33,7 @@
         @update:model-value="emit('update:body', String($event ?? ''))"
       />
       <div
-        v-if="target?.attachments.length || target?.artifacts.length"
+        v-if="target?.attachments.length || target?.annotations.length || target?.artifacts.length"
         class="prompt-edit-dialog__attachments"
       >
         <div class="text-caption text-muted">附件保持不变</div>
@@ -44,11 +44,27 @@
             dense
             square
             outline
-            icon="attach_file"
+            :icon="attachment.kind === 'annotation' ? 'rate_review' : 'attach_file'"
             color="primary"
             text-color="primary"
-            :label="attachment.filename"
+            :label="attachmentLabel(attachment)"
           />
+          <q-chip
+            v-for="annotation in target.annotations"
+            :key="annotation.id"
+            dense
+            square
+            outline
+            clickable
+            icon="rate_review"
+            color="primary"
+            text-color="primary"
+            :label="`批注 · ${annotation.source}`"
+            @click="emit('preview-annotation', annotation)"
+          >
+            <q-icon name="visibility" class="q-ml-xs" />
+            <q-tooltip>预览原文件及批注位置</q-tooltip>
+          </q-chip>
           <q-chip
             v-for="artifact in target.artifacts"
             :key="artifact.id"
@@ -82,6 +98,8 @@
 
 <script setup lang="ts">
 import type { PromptAppend } from '@/services/sessions';
+import type { SessionAttachment } from '@/services/sessions';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 defineProps<{
   target: PromptAppend | null;
@@ -95,5 +113,12 @@ const emit = defineEmits<{
   'update:body': [value: string];
   cancel: [];
   save: [];
+  'preview-annotation': [annotation: PreviewAnnotationAttachment];
 }>();
+
+function attachmentLabel(attachment: SessionAttachment) {
+  if (attachment.kind !== 'annotation') return attachment.filename;
+  const source = attachment.filename.replace(/^批注-/, '').replace(/\.md$/i, '');
+  return `旧版批注 · ${source || '无法回放位置'}`;
+}
 </script>

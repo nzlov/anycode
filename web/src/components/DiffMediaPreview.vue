@@ -17,6 +17,8 @@
         :session-id="sessionId"
         :content-key="states[version].url"
         :file-references="[{ kind: 'diff', filePath, version }]"
+        :enabled="!displayAnnotation"
+        :display-annotations="displayAnnotationsFor(version)"
       >
         <img
           :src="states[version].url"
@@ -61,6 +63,7 @@ import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import { fetchDiffMedia } from '@/services/diffMedia';
 import { diffMediaVersions } from '@/services/diffMediaModel';
 import type { DiffMediaKind, DiffMediaVersion } from '@/services/diffMediaModel';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
@@ -69,6 +72,7 @@ const props = defineProps<{
   filePath: string;
   status: string;
   kind: DiffMediaKind;
+  displayAnnotation?: PreviewAnnotationAttachment | null;
 }>();
 
 interface VersionState {
@@ -83,6 +87,19 @@ const states = reactive<Record<DiffMediaVersion, VersionState>>({
 });
 let controller: AbortController | null = null;
 const versions = computed(() => diffMediaVersions(props.status));
+
+function displayAnnotationsFor(version: DiffMediaVersion) {
+  const annotation = props.displayAnnotation;
+  if (!annotation) return [];
+  return annotation.fileReferences?.some(
+    (reference) =>
+      reference.kind === 'diff' &&
+      reference.filePath === props.filePath &&
+      (!reference.version || reference.version === version),
+  )
+    ? annotation.marks
+    : [];
+}
 
 function clear() {
   controller?.abort();

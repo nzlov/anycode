@@ -51,6 +51,7 @@
           :file-path="mediaPreviewFor(file.path)!.filePath"
           :status="file.status"
           :kind="mediaPreviewFor(file.path)!.kind"
+          :display-annotation="displayAnnotation"
         />
       </q-card-section>
       <PreviewAnnotator
@@ -63,6 +64,8 @@
           { kind: 'diff', filePath: file.path, version: 'old' },
           { kind: 'diff', filePath: file.path, version: 'new' },
         ]"
+        :enabled="!displayAnnotation"
+        :display-annotations="displayAnnotation?.marks ?? []"
       >
         <q-card-section class="diff-code">
           <template
@@ -119,6 +122,7 @@ import DiffMediaPreview from '@/components/DiffMediaPreview.vue';
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
 import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 const props = withDefaults(
   defineProps<{
@@ -130,6 +134,7 @@ const props = withDefaults(
     loadingPaths?: string[];
     mediaPreviews?: Record<string, DiffMediaPreviewTarget>;
     annotationSessionIds?: Record<string, string>;
+    displayAnnotation?: PreviewAnnotationAttachment | null;
   }>(),
   {
     files: () => [],
@@ -139,6 +144,7 @@ const props = withDefaults(
     loadingPaths: () => [],
     mediaPreviews: () => ({}),
     annotationSessionIds: () => ({}),
+    displayAnnotation: null,
   },
 );
 
@@ -218,7 +224,7 @@ function lineClass(kind: DiffLineKind) {
 }
 
 .diff-file-card--headerless {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .diff-file-header {

@@ -46,6 +46,50 @@ func promptFileReferencesFromInput(input []*model.PromptFileReferenceInput) []se
 	return references
 }
 
+func promptAnnotationsFromInput(input []*model.PromptAnnotationInput) []sessiondomain.PromptAnnotation {
+	annotations := make([]sessiondomain.PromptAnnotation, 0, len(input))
+	for _, annotation := range input {
+		if annotation == nil {
+			continue
+		}
+		marks := make([]sessiondomain.PromptAnnotationMark, 0, len(annotation.Marks))
+		for _, mark := range annotation.Marks {
+			if mark == nil {
+				continue
+			}
+			marks = append(marks, sessiondomain.PromptAnnotationMark{
+				ID: mark.ID, Kind: mark.Kind, Shape: stringValue(mark.Shape, ""),
+				X: floatValue(mark.X, 0), Y: floatValue(mark.Y, 0),
+				Width: floatValue(mark.Width, 0), Height: floatValue(mark.Height, 0),
+				Start: promptAnnotationPositionFromInput(mark.Start),
+				End:   promptAnnotationPositionFromInput(mark.End),
+				Quote: stringValue(mark.Quote, ""), Note: stringValue(mark.Note, ""),
+			})
+		}
+		annotations = append(annotations, sessiondomain.PromptAnnotation{
+			ID: annotation.ID, Source: annotation.Source, Content: annotation.Content,
+			Marks: marks, FileReferences: promptFileReferencesFromInput(annotation.FileReferences),
+		})
+	}
+	return annotations
+}
+
+func promptAnnotationPositionFromInput(input *model.PromptAnnotationPositionInput) *sessiondomain.PromptAnnotationPosition {
+	if input == nil {
+		return nil
+	}
+	return &sessiondomain.PromptAnnotationPosition{
+		Line: input.Line, Column: input.Column, Revision: stringValue(input.Revision, ""),
+	}
+}
+
+func floatValue(value *float64, fallback float64) float64 {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
 func buildListSessionsInput(input *model.ListSessionsInput) sessionapp.ListSessionsInput {
 	if input == nil {
 		return sessionapp.ListSessionsInput{}

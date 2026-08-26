@@ -8,6 +8,7 @@
       :can-save="canSave"
       @cancel="close"
       @save="save"
+      @preview-annotation="previewAnnotation"
     />
   </q-page>
 </template>
@@ -17,6 +18,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
+import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 import { getSession, updatePromptAppend, type PromptAppend } from '@/services/sessions';
 
 const route = useRoute();
@@ -62,5 +64,13 @@ async function save() {
 
 function close() {
   void router.push({ name: 'session-detail', params: { id: sessionId.value } });
+}
+
+function previewAnnotation(annotation: PreviewAnnotationAttachment) {
+  void router.push({
+    name: 'session-detail',
+    params: { id: sessionId.value },
+    state: { promptAnnotationId: annotation.id },
+  });
 }
 </script>
