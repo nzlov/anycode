@@ -1,5 +1,8 @@
 <template>
-  <div class="session-file-preview">
+  <div
+    class="session-file-preview"
+    :class="{ 'session-file-preview--text': file?.previewKind === 'text' }"
+  >
     <div
       v-if="file?.previewKind === 'image'"
       ref="zoomSurface"
@@ -330,6 +333,10 @@ onBeforeUnmount(clear);
   background: var(--ac-surface-muted);
 }
 
+.session-file-preview--text {
+  align-items: start;
+}
+
 .session-file-preview__error {
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
@@ -394,7 +401,6 @@ onBeforeUnmount(clear);
 .session-file-preview__text {
   width: 100%;
   margin: 0;
-  align-self: start;
   overflow: auto;
   color: var(--ac-text);
   white-space: pre-wrap;

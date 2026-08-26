@@ -85,7 +85,6 @@ test('images use short-lived direct preview URLs while other previews keep authe
   assert.match(preview, /:src="imageURL"/);
   assert.match(preview, /@load="finishImageLoad\(\$event\)"/);
   assert.match(preview, /file\.size > 1 << 20/);
-  assert.match(preview, /\.session-file-preview__text \{[\s\S]*?align-self: start;/);
   assert.match(event, /<SessionFilePreview/);
   assert.doesNotMatch(event, /fetchSessionFile|objectUrl|previewController/);
   assert.match(preview, /file\?\.previewKind === 'image'/);
@@ -103,6 +102,14 @@ test('images use short-lived direct preview URLs while other previews keep authe
   assert.match(modelPreview, /ResizeObserver/);
   assert.match(modelPreview, /setURLModifier/);
   assert.match(modelPreview, /模型引用了不支持的外部资源/);
+});
+
+test('text previews align the outer grid item to the top so long files remain reachable', () => {
+  assert.match(
+    preview,
+    /:class="\{ 'session-file-preview--text': file\?\.previewKind === 'text' \}"/,
+  );
+  assert.match(preview, /\.session-file-preview--text\s*\{[^}]*align-items:\s*start;/s);
 });
 
 test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
