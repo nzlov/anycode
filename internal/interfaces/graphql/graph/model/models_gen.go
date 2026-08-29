@@ -116,6 +116,12 @@ type CommitRecordPage struct {
 	PageInfo *PageInfo       `json:"pageInfo"`
 }
 
+type ContinueSessionSideInput struct {
+	SessionID      string `json:"sessionId"`
+	CodexSessionID string `json:"codexSessionId"`
+	Prompt         string `json:"prompt"`
+}
+
 type CreateProjectInput struct {
 	Path string `json:"path"`
 	Name string `json:"name"`
@@ -731,6 +737,12 @@ type SessionFile struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type SessionSideRun struct {
+	CodexSessionID string `json:"codexSessionId"`
+	ProcessRunID   string `json:"processRunId"`
+	TurnID         string `json:"turnId"`
+}
+
 type SessionStatusUpdate struct {
 	Status           string    `json:"status"`
 	CurrentNodeTitle string    `json:"currentNodeTitle"`
@@ -773,6 +785,11 @@ type SetSessionPriorityInput struct {
 type StageAnnotationInput struct {
 	Filename string `json:"filename"`
 	Content  string `json:"content"`
+}
+
+type StartSessionSideInput struct {
+	SessionID string `json:"sessionId"`
+	Prompt    string `json:"prompt"`
 }
 
 type StatisticsDashboard struct {

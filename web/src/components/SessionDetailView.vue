@@ -128,6 +128,19 @@
               @preview-annotation="openPromptAnnotation"
               @submit="sendAppend"
             >
+              <template #before-quick-actions>
+                <q-btn
+                  flat
+                  round
+                  class="app-icon-btn"
+                  icon="call_split"
+                  aria-label="Side 临时提问"
+                  :disable="!session?.codexSessionId || isClosed"
+                  @click="sideDialogOpen = true"
+                >
+                  <q-tooltip>Side 临时提问</q-tooltip>
+                </q-btn>
+              </template>
               <template #actions>
                 <q-btn
                   v-if="canCancelQueue"
@@ -637,6 +650,7 @@
         </q-card-section>
       </q-card>
     </q-dialog>
+    <SessionSideDialog v-model="sideDialogOpen" :session-id="sessionId" />
   </component>
 </template>
 
@@ -655,6 +669,7 @@ import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import SessionForkButton from '@/components/SessionForkButton.vue';
+import SessionSideDialog from '@/components/SessionSideDialog.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -756,6 +771,7 @@ const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerFast = ref(false);
 const composerCollapsed = ref(true);
+const sideDialogOpen = ref(false);
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes' | 'artifacts'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.

@@ -24,21 +24,36 @@ func (c *Client) SlashCommands() []process.CodexSlashCommand {
 }
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
-	return c.start(ctx, input.ProcessRunID, input.SessionID, "", "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools, false)
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	if strings.TrimSpace(input.CodexSessionID) == "" {
 		return process.CodexHandle{}, process.ErrThreadUnavailable
 	}
-	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools, false)
 }
 
 func (c *Client) Fork(ctx context.Context, input process.CodexForkInput) (process.CodexHandle, error) {
 	if strings.TrimSpace(input.SourceCodexSessionID) == "" {
 		return process.CodexHandle{}, process.ErrThreadUnavailable
 	}
-	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.SourceCodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.SourceCodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode, input.DynamicTools, input.Ephemeral)
+}
+
+func (c *Client) ContinueLoaded(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
+	threadID := strings.TrimSpace(input.CodexSessionID)
+	if threadID == "" {
+		return process.CodexHandle{}, process.ErrThreadUnavailable
+	}
+	if input.ProcessRunID == "" || input.SessionID == "" {
+		return process.CodexHandle{}, errors.New("process run id and session id are required")
+	}
+	runtime, err := c.appServer(ctx)
+	if err != nil {
+		return process.CodexHandle{}, err
+	}
+	return runtime.beginTurn(ctx, input.ProcessRunID, input.SessionID, threadID, input.Workdir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, newWorkspaceWriteSettings(input.PermissionMode, input.WritableRoots, input.ArtifactDir), true, "", 0)
 }
 
 func (c *Client) start(
@@ -59,6 +74,7 @@ func (c *Client) start(
 	writableRoots []string,
 	fastMode bool,
 	dynamicTools []process.DynamicToolName,
+	ephemeral bool,
 ) (process.CodexHandle, error) {
 	if runID == "" || sessionID == "" {
 		return process.CodexHandle{}, errors.New("process run id and session id are required")
@@ -76,7 +92,10 @@ func (c *Client) start(
 	}
 	if forking {
 		params["threadId"] = strings.TrimSpace(forkFromThreadID)
-		params["ephemeral"] = false
+		params["ephemeral"] = ephemeral
+		if ephemeral {
+			params["excludeTurns"] = true
+		}
 		var response struct {
 			Thread struct {
 				ID string `json:"id"`
@@ -123,7 +142,7 @@ func (c *Client) start(
 	}
 	transcriptPath := ""
 	transcriptOffset := int64(0)
-	if resuming || forking {
+	if !ephemeral && (resuming || forking) {
 		transcriptPath, err = waitForSessionLog(ctx, c.CodexHome(), threadID)
 		if err != nil {
 			return process.CodexHandle{}, fmt.Errorf("find codex session log: %w", err)
@@ -134,17 +153,40 @@ func (c *Client) start(
 		}
 		transcriptOffset = info.Size()
 	}
+	return runtime.beginTurn(ctx, runID, sessionID, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, ephemeral, transcriptPath, transcriptOffset)
+}
+
+func (r *appServerRuntime) beginTurn(
+	ctx context.Context,
+	runID process.RunID,
+	sessionID process.SessionID,
+	threadID string,
+	workdir string,
+	input []process.CodexInputItem,
+	action process.CodexAction,
+	actionArgument string,
+	developerInstructions string,
+	model string,
+	reasoningEffort string,
+	permissionMode string,
+	workspaceWrite *workspaceWriteSettings,
+	directEvents bool,
+	transcriptPath string,
+	transcriptOffset int64,
+) (process.CodexHandle, error) {
 	handle := process.CodexHandle{ProcessRunID: runID, CodexSessionID: threadID}
 	routeCtx, routeCancel := context.WithCancel(context.Background())
 	route := &appServerRun{
 		handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel,
-		events: make(chan process.CodexEvent, 1024), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
+		directEvents: directEvents, events: make(chan process.CodexEvent, 1024), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
 	}
-	runtime.register(route)
-	go runtime.followSessionLog(route, transcriptPath, transcriptOffset)
-	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, route.retainInputCleanup)
+	r.register(route)
+	if !directEvents {
+		go r.followSessionLog(route, transcriptPath, transcriptOffset)
+	}
+	turnID, active, err := r.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, route.retainInputCleanup)
 	if err != nil {
-		runtime.removeRoute(route)
+		r.removeRoute(route)
 		return process.CodexHandle{}, err
 	}
 	route.setTurnID(turnID)
@@ -152,7 +194,7 @@ func (c *Client) start(
 	if !active {
 		finished := process.ExitResult{FinishedAt: nowUTC()}
 		route.emit(process.CodexEvent{Type: process.CodexEventProcessExit, Content: finished, CreatedAt: finished.FinishedAt})
-		runtime.completeRoute(route)
+		r.completeRoute(route)
 	}
 	return handle, nil
 }
@@ -614,6 +656,34 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 		return nil, process.ErrProcessNotFound
 	}
 	return events, nil
+}
+
+func (c *Client) EphemeralEvents(_ context.Context, runID process.RunID) (<-chan process.CodexEvent, error) {
+	c.mu.Lock()
+	runtime := c.runtime
+	c.mu.Unlock()
+	if runtime == nil {
+		return nil, process.ErrProcessNotFound
+	}
+	events, ok := runtime.claimEphemeralEvents(runID)
+	if !ok {
+		return nil, process.ErrProcessNotFound
+	}
+	return events, nil
+}
+
+func (c *Client) StopEphemeral(ctx context.Context, runID process.RunID) error {
+	c.mu.Lock()
+	runtime := c.runtime
+	c.mu.Unlock()
+	if runtime == nil || !runtime.alive() {
+		return process.ErrProcessNotFound
+	}
+	route := runtime.routeForRun(runID)
+	if route == nil || !route.directEvents {
+		return process.ErrProcessNotFound
+	}
+	return c.Stop(ctx, runID)
 }
 
 func (c *Client) Stop(ctx context.Context, runID process.RunID) error {

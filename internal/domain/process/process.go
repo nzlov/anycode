@@ -197,6 +197,7 @@ type CodexResumeInput struct {
 
 type CodexForkInput struct {
 	SourceCodexSessionID string
+	Ephemeral            bool
 	CodexStartInput
 }
 
@@ -275,6 +276,12 @@ type CodexProcess interface {
 	Steer(ctx context.Context, input CodexSteerInput) error
 	Stop(ctx context.Context, processRunID RunID) error
 	Events(ctx context.Context, handle CodexHandle) (<-chan CodexEvent, error)
+}
+
+type CodexEphemeralThread interface {
+	ContinueLoaded(ctx context.Context, input CodexResumeInput) (CodexHandle, error)
+	StopEphemeral(ctx context.Context, processRunID RunID) error
+	EphemeralEvents(ctx context.Context, processRunID RunID) (<-chan CodexEvent, error)
 }
 
 type CodexSessionCleaner interface {

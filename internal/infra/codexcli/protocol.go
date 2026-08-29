@@ -30,6 +30,11 @@ func (r *appServerRuntime) handleNotification(method string, raw json.RawMessage
 	if route.activeTurnID() == "" && identity.TurnID != "" {
 		route.setTurnID(identity.TurnID)
 	}
+	if route.directEvents {
+		if event, ok := directCodexEvent(method, raw); ok {
+			route.emit(event)
+		}
+	}
 	if method == "turn/completed" {
 		r.completeTurn(route, raw)
 	}
@@ -56,6 +61,10 @@ func (r *appServerRuntime) completeTurn(route *appServerRun, raw json.RawMessage
 		}
 	case "interrupted":
 		result.FailureCode = "turn_interrupted"
+	}
+	if route.directEvents {
+		r.finishRouteFromTranscript(route, result)
+		return
 	}
 	route.finish(result)
 }

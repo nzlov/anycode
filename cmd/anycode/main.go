@@ -243,6 +243,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
 		Sessions:         sessionService,
+		SessionSides:     sessionService,
 		Timeline:         timelineService,
 		SessionEvents:    sessionEventService,
 		Attachments:      attachmentapp.New(attachments, files),

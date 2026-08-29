@@ -67,24 +67,25 @@ type appServerRuntime struct {
 }
 
 type appServerRun struct {
-	handle      process.CodexHandle
-	sessionID   process.SessionID
-	workdir     string
-	ctx         context.Context
-	cancel      context.CancelFunc
-	events      chan process.CodexEvent
-	eventsMu    sync.RWMutex
-	sequence    atomic.Int64
-	turnMu      sync.RWMutex
-	turnID      string
-	cleanupMu   sync.Mutex
-	cleanups    []func()
-	cleanupDone bool
-	claimed     bool
-	closed      chan struct{}
-	closeOnce   sync.Once
-	finished    chan process.ExitResult
-	finishOnce  sync.Once
+	handle       process.CodexHandle
+	sessionID    process.SessionID
+	workdir      string
+	directEvents bool
+	ctx          context.Context
+	cancel       context.CancelFunc
+	events       chan process.CodexEvent
+	eventsMu     sync.RWMutex
+	sequence     atomic.Int64
+	turnMu       sync.RWMutex
+	turnID       string
+	cleanupMu    sync.Mutex
+	cleanups     []func()
+	cleanupDone  bool
+	claimed      bool
+	closed       chan struct{}
+	closeOnce    sync.Once
+	finished     chan process.ExitResult
+	finishOnce   sync.Once
 }
 
 func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRuntime, error) {
@@ -263,6 +264,10 @@ func (r *appServerRuntime) handleServerRequest(envelope appServerEnvelope) {
 		_ = r.write(map[string]any{"id": envelope.ID, "error": map[string]any{"code": -32000, "message": "dynamic tool thread is not active"}})
 		return
 	}
+	if route.directEvents {
+		_ = r.write(map[string]any{"id": envelope.ID, "result": dynamicToolFailure("dynamic tools are unavailable in temporary Side questions")})
+		return
+	}
 	handler := r.client.dynamicToolHandler()
 	if handler == nil {
 		_ = r.write(map[string]any{"id": envelope.ID, "result": dynamicToolFailure("dynamic tool handler is unavailable")})
@@ -413,6 +418,21 @@ func (r *appServerRuntime) claimEvents(runID process.RunID) (<-chan process.Code
 	r.routesMu.Lock()
 	route := r.routes[runID]
 	if route == nil || route.claimed {
+		r.routesMu.Unlock()
+		return nil, false
+	}
+	route.claimed = true
+	if route.isClosed() {
+		delete(r.routes, runID)
+	}
+	r.routesMu.Unlock()
+	return route.events, true
+}
+
+func (r *appServerRuntime) claimEphemeralEvents(runID process.RunID) (<-chan process.CodexEvent, bool) {
+	r.routesMu.Lock()
+	route := r.routes[runID]
+	if route == nil || !route.directEvents || route.claimed {
 		r.routesMu.Unlock()
 		return nil, false
 	}

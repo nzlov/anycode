@@ -35,6 +35,7 @@
     @submit="emit('submit')"
   >
     <template #quick-actions>
+      <slot name="before-quick-actions" />
       <q-btn
         flat
         :round="compact"

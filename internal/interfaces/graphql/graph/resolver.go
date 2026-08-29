@@ -34,6 +34,7 @@ type UseCases struct {
 	Projects         projectapp.UseCase
 	MindMaps         mindmapapp.UseCase
 	Sessions         sessionapp.UseCase
+	SessionSides     sessionapp.SideUseCase
 	Timeline         timelineapp.UseCase
 	SessionEvents    sessioneventapp.UseCase
 	Attachments      attachmentapp.UseCase

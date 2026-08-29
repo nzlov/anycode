@@ -245,6 +245,7 @@ type ComplexityRoot struct {
 		CloneProject                func(childComplexity int, input model.CloneProjectInput) int
 		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
 		CloseTunnel                 func(childComplexity int, id string) int
+		ContinueSessionSide         func(childComplexity int, input model.ContinueSessionSideInput) int
 		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
 		CreateQuickCommand          func(childComplexity int, input model.CreateQuickCommandInput) int
 		CreateSession               func(childComplexity int, input model.CreateSessionInput) int
@@ -267,7 +268,9 @@ type ComplexityRoot struct {
 		StageAnnotation             func(childComplexity int, input model.StageAnnotationInput) int
 		StageAttachment             func(childComplexity int, file graphql.Upload) int
 		StartSession                func(childComplexity int, id string, force *bool) int
+		StartSessionSide            func(childComplexity int, input model.StartSessionSideInput) int
 		StopSession                 func(childComplexity int, id string) int
+		StopSessionSide             func(childComplexity int, processRunID string) int
 		SubmitQuestionRequest       func(childComplexity int, input model.SubmitQuestionRequestInput) int
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
 		UnregisterPushSubscription  func(childComplexity int, id string) int
@@ -583,6 +586,12 @@ type ComplexityRoot struct {
 		SourceType   func(childComplexity int) int
 	}
 
+	SessionSideRun struct {
+		CodexSessionID func(childComplexity int) int
+		ProcessRunID   func(childComplexity int) int
+		TurnID         func(childComplexity int) int
+	}
+
 	SessionStatusUpdate struct {
 		AvailableActions func(childComplexity int) int
 		CurrentNodeTitle func(childComplexity int) int
@@ -632,10 +641,11 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		MindMapUpdates func(childComplexity int, projectID string, sessionID *string) int
-		SessionEvents  func(childComplexity int, sessionID string) int
-		SessionUpdates func(childComplexity int) int
-		TunnelUpdates  func(childComplexity int) int
+		MindMapUpdates    func(childComplexity int, projectID string, sessionID *string) int
+		SessionEvents     func(childComplexity int, sessionID string) int
+		SessionSideEvents func(childComplexity int, processRunID string) int
+		SessionUpdates    func(childComplexity int) int
+		TunnelUpdates     func(childComplexity int) int
 	}
 
 	TerminalSummary struct {
@@ -892,6 +902,9 @@ type MutationResolver interface {
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
 	ForkSession(ctx context.Context, input model.ForkSessionInput) (*model.Session, error)
+	StartSessionSide(ctx context.Context, input model.StartSessionSideInput) (*model.SessionSideRun, error)
+	ContinueSessionSide(ctx context.Context, input model.ContinueSessionSideInput) (*model.SessionSideRun, error)
+	StopSessionSide(ctx context.Context, processRunID string) (bool, error)
 	OpenSessionTerminal(ctx context.Context, sessionID string) (*model.Session, error)
 	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
 	UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error)
@@ -949,6 +962,7 @@ type QueryResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.TranscriptEvent, error)
+	SessionSideEvents(ctx context.Context, processRunID string) (<-chan *model.TranscriptEvent, error)
 	SessionUpdates(ctx context.Context) (<-chan *model.SessionUpdateEvent, error)
 	MindMapUpdates(ctx context.Context, projectID string, sessionID *string) (<-chan *model.MindMapUpdateEvent, error)
 	TunnelUpdates(ctx context.Context) (<-chan *model.TunnelCountEvent, error)
@@ -1764,6 +1778,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CloseTunnel(childComplexity, args["id"].(string)), true
+	case "Mutation.continueSessionSide":
+		if e.ComplexityRoot.Mutation.ContinueSessionSide == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_continueSessionSide_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ContinueSessionSide(childComplexity, args["input"].(model.ContinueSessionSideInput)), true
 	case "Mutation.createProject":
 		if e.ComplexityRoot.Mutation.CreateProject == nil {
 			break
@@ -2006,6 +2031,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.StartSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.startSessionSide":
+		if e.ComplexityRoot.Mutation.StartSessionSide == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_startSessionSide_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StartSessionSide(childComplexity, args["input"].(model.StartSessionSideInput)), true
 	case "Mutation.stopSession":
 		if e.ComplexityRoot.Mutation.StopSession == nil {
 			break
@@ -2017,6 +2053,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.StopSession(childComplexity, args["id"].(string)), true
+	case "Mutation.stopSessionSide":
+		if e.ComplexityRoot.Mutation.StopSessionSide == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_stopSessionSide_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StopSessionSide(childComplexity, args["processRunId"].(string)), true
 	case "Mutation.submitQuestionRequest":
 		if e.ComplexityRoot.Mutation.SubmitQuestionRequest == nil {
 			break
@@ -3591,6 +3638,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionFile.SourceType(childComplexity), true
 
+	case "SessionSideRun.codexSessionId":
+		if e.ComplexityRoot.SessionSideRun.CodexSessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.CodexSessionID(childComplexity), true
+	case "SessionSideRun.processRunId":
+		if e.ComplexityRoot.SessionSideRun.ProcessRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.ProcessRunID(childComplexity), true
+	case "SessionSideRun.turnId":
+		if e.ComplexityRoot.SessionSideRun.TurnID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.TurnID(childComplexity), true
+
 	case "SessionStatusUpdate.availableActions":
 		if e.ComplexityRoot.SessionStatusUpdate.AvailableActions == nil {
 			break
@@ -3799,6 +3865,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionEvents(childComplexity, args["sessionId"].(string)), true
+	case "Subscription.sessionSideEvents":
+		if e.ComplexityRoot.Subscription.SessionSideEvents == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_sessionSideEvents_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.SessionSideEvents(childComplexity, args["processRunId"].(string)), true
 	case "Subscription.sessionUpdates":
 		if e.ComplexityRoot.Subscription.SessionUpdates == nil {
 			break
@@ -4670,6 +4747,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCleanupSessionsInput,
 		ec.unmarshalInputCloneProjectInput,
 		ec.unmarshalInputCloseSessionInput,
+		ec.unmarshalInputContinueSessionSideInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateQuickCommandInput,
 		ec.unmarshalInputCreateSessionInput,
@@ -4702,6 +4780,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputStageAnnotationInput,
+		ec.unmarshalInputStartSessionSideInput,
 		ec.unmarshalInputStatisticsQueryInput,
 		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
@@ -4916,6 +4995,9 @@ type Mutation {
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   forkSession(input: ForkSessionInput!): Session!
+  startSessionSide(input: StartSessionSideInput!): SessionSideRun!
+  continueSessionSide(input: ContinueSessionSideInput!): SessionSideRun!
+  stopSessionSide(processRunId: ID!): Boolean!
   openSessionTerminal(sessionId: ID!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
@@ -4955,9 +5037,27 @@ type Tunnel {
 
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
+  sessionSideEvents(processRunId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
   mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+}
+
+type SessionSideRun {
+  codexSessionId: ID!
+  processRunId: ID!
+  turnId: ID!
+}
+
+input StartSessionSideInput {
+  sessionId: ID!
+  prompt: String!
+}
+
+input ContinueSessionSideInput {
+  sessionId: ID!
+  codexSessionId: ID!
+  prompt: String!
 }
 
 type MindMapUpdateEvent {
@@ -6151,6 +6251,17 @@ func (ec *executionContext) field_Mutation_closeTunnel_args(ctx context.Context,
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_continueSessionSide_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNContinueSessionSideInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐContinueSessionSideInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6392,6 +6503,17 @@ func (ec *executionContext) field_Mutation_stageAttachment_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_startSessionSide_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNStartSessionSideInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStartSessionSideInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_startSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6405,6 +6527,17 @@ func (ec *executionContext) field_Mutation_startSession_args(ctx context.Context
 		return nil, err
 	}
 	args["force"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_stopSessionSide_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "processRunId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["processRunId"] = arg0
 	return args, nil
 }
 
@@ -6833,6 +6966,17 @@ func (ec *executionContext) field_Subscription_sessionEvents_args(ctx context.Co
 		return nil, err
 	}
 	args["sessionId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_sessionSideEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "processRunId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["processRunId"] = arg0
 	return args, nil
 }
 
@@ -11417,6 +11561,145 @@ func (ec *executionContext) fieldContext_Mutation_forkSession(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_forkSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_startSessionSide(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_startSessionSide,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StartSessionSide(ctx, fc.Args["input"].(model.StartSessionSideInput))
+		},
+		nil,
+		ec.marshalNSessionSideRun2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_startSessionSide(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "codexSessionId":
+				return ec.fieldContext_SessionSideRun_codexSessionId(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionSideRun_processRunId(ctx, field)
+			case "turnId":
+				return ec.fieldContext_SessionSideRun_turnId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionSideRun", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_startSessionSide_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_continueSessionSide(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_continueSessionSide,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ContinueSessionSide(ctx, fc.Args["input"].(model.ContinueSessionSideInput))
+		},
+		nil,
+		ec.marshalNSessionSideRun2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_continueSessionSide(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "codexSessionId":
+				return ec.fieldContext_SessionSideRun_codexSessionId(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionSideRun_processRunId(ctx, field)
+			case "turnId":
+				return ec.fieldContext_SessionSideRun_turnId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionSideRun", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_continueSessionSide_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_stopSessionSide(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_stopSessionSide,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StopSessionSide(ctx, fc.Args["processRunId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_stopSessionSide(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_stopSessionSide_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -20393,6 +20676,93 @@ func (ec *executionContext) fieldContext_SessionFile_createdAt(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionSideRun_codexSessionId(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_codexSessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.CodexSessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_codexSessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_processRunId(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_processRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProcessRunID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_processRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_turnId(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_turnId,
+		func(ctx context.Context) (any, error) {
+			return obj.TurnID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_turnId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionStatusUpdate_status(ctx context.Context, field graphql.CollectedField, obj *model.SessionStatusUpdate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21428,6 +21798,65 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_sessionEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_sessionSideEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_sessionSideEvents,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().SessionSideEvents(ctx, fc.Args["processRunId"].(string))
+		},
+		nil,
+		ec.marshalNTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_sessionSideEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_sessionSideEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -27593,6 +28022,50 @@ func (ec *executionContext) unmarshalInputCloseSessionInput(ctx context.Context,
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputContinueSessionSideInput(ctx context.Context, obj any) (model.ContinueSessionSideInput, error) {
+	var it model.ContinueSessionSideInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "codexSessionId", "prompt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "codexSessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexSessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexSessionID = data
+		case "prompt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("prompt"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Prompt = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context, obj any) (model.CreateProjectInput, error) {
 	var it model.CreateProjectInput
 	if obj == nil {
@@ -29179,6 +29652,43 @@ func (ec *executionContext) unmarshalInputStageAnnotationInput(ctx context.Conte
 				return it, err
 			}
 			it.Content = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputStartSessionSideInput(ctx context.Context, obj any) (model.StartSessionSideInput, error) {
+	var it model.StartSessionSideInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "prompt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "prompt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("prompt"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Prompt = data
 		}
 	}
 	return it, nil
@@ -31713,6 +32223,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "forkSession":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_forkSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "startSessionSide":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_startSessionSide(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "continueSessionSide":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_continueSessionSide(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stopSessionSide":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_stopSessionSide(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -34351,6 +34882,55 @@ func (ec *executionContext) _SessionFile(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var sessionSideRunImplementors = []string{"SessionSideRun"}
+
+func (ec *executionContext) _SessionSideRun(ctx context.Context, sel ast.SelectionSet, obj *model.SessionSideRun) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionSideRunImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionSideRun")
+		case "codexSessionId":
+			out.Values[i] = ec._SessionSideRun_codexSessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "processRunId":
+			out.Values[i] = ec._SessionSideRun_processRunId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "turnId":
+			out.Values[i] = ec._SessionSideRun_turnId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var sessionStatusUpdateImplementors = []string{"SessionStatusUpdate"}
 
 func (ec *executionContext) _SessionStatusUpdate(ctx context.Context, sel ast.SelectionSet, obj *model.SessionStatusUpdate) graphql.Marshaler {
@@ -34687,6 +35267,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionEvents":
 		return ec._Subscription_sessionEvents(ctx, fields[0])
+	case "sessionSideEvents":
+		return ec._Subscription_sessionSideEvents(ctx, fields[0])
 	case "sessionUpdates":
 		return ec._Subscription_sessionUpdates(ctx, fields[0])
 	case "mindMapUpdates":
@@ -37003,6 +37585,11 @@ func (ec *executionContext) marshalNCommitRecordPage2ᚖgithubᚗcomᚋnzlovᚋa
 	return ec._CommitRecordPage(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNContinueSessionSideInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐContinueSessionSideInput(ctx context.Context, v any) (model.ContinueSessionSideInput, error) {
+	res, err := ec.unmarshalInputContinueSessionSideInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCreateProjectInput(ctx context.Context, v any) (model.CreateProjectInput, error) {
 	res, err := ec.unmarshalInputCreateProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -38235,6 +38822,20 @@ func (ec *executionContext) marshalNSessionFile2ᚖgithubᚗcomᚋnzlovᚋanycod
 	return ec._SessionFile(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNSessionSideRun2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun(ctx context.Context, sel ast.SelectionSet, v model.SessionSideRun) graphql.Marshaler {
+	return ec._SessionSideRun(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionSideRun2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun(ctx context.Context, sel ast.SelectionSet, v *model.SessionSideRun) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionSideRun(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNSessionTranscriptEventInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTranscriptEventInput(ctx context.Context, v any) (model.SessionTranscriptEventInput, error) {
 	res, err := ec.unmarshalInputSessionTranscriptEventInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -38266,6 +38867,11 @@ func (ec *executionContext) unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzl
 
 func (ec *executionContext) unmarshalNStageAnnotationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStageAnnotationInput(ctx context.Context, v any) (model.StageAnnotationInput, error) {
 	res, err := ec.unmarshalInputStageAnnotationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNStartSessionSideInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStartSessionSideInput(ctx context.Context, v any) (model.StartSessionSideInput, error) {
+	res, err := ec.unmarshalInputStartSessionSideInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

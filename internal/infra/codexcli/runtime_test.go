@@ -163,6 +163,12 @@ cat >/dev/null
 	if handle.CodexSessionID != "thread-1" || handle.TurnID != "turn-1" {
 		t.Fatalf("handle = %+v", handle)
 	}
+	if _, ephemeralErr := client.EphemeralEvents(context.Background(), handle.ProcessRunID); !errors.Is(ephemeralErr, process.ErrProcessNotFound) {
+		t.Fatalf("durable run exposed as ephemeral: %v", ephemeralErr)
+	}
+	if ephemeralErr := client.StopEphemeral(context.Background(), handle.ProcessRunID); !errors.Is(ephemeralErr, process.ErrProcessNotFound) {
+		t.Fatalf("durable run stoppable through ephemeral API: %v", ephemeralErr)
+	}
 	content, err := os.ReadFile(startRequest)
 	if err != nil {
 		t.Fatal(err)
@@ -465,10 +471,74 @@ cat >/dev/null
 			ThreadID              string           `json:"threadId"`
 			DeveloperInstructions string           `json:"developerInstructions"`
 			DynamicTools          []map[string]any `json:"dynamicTools"`
+			Ephemeral             bool             `json:"ephemeral"`
+			ExcludeTurns          bool             `json:"excludeTurns"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &request) != nil || request.Method != "thread/fork" || request.Params.ThreadID != "thread-source" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.DynamicTools != nil {
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/fork" || request.Params.ThreadID != "thread-source" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.DynamicTools != nil || request.Params.Ephemeral || request.Params.ExcludeTurns {
 		t.Fatalf("fork request = %s", content)
+	}
+}
+
+func TestEphemeralForkStreamsAppServerItemsWithoutRollout(t *testing.T) {
+	forkRequest := filepath.Join(t.TempDir(), "fork-request")
+	t.Setenv("APP_SERVER_FORK_REQUEST", forkRequest)
+	bin := fakeCodex(t, `#!/bin/sh
+IFS= read -r request
+printf '%s\n' '{"id":1,"result":{"userAgent":"codex-test"}}'
+IFS= read -r request
+IFS= read -r request
+printf '%s\n' "$request" > "$APP_SERVER_FORK_REQUEST"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"side-thread"}}}'
+IFS= read -r request
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"side-turn","status":"inProgress","items":[]}}}'
+printf '%s\n' '{"method":"item/started","params":{"threadId":"side-thread","turnId":"side-turn","item":{"id":"user-1","type":"userMessage","content":[{"type":"text","text":"inspect this"}]}}}'
+printf '%s\n' '{"method":"item/completed","params":{"threadId":"side-thread","turnId":"side-turn","item":{"id":"agent-1","type":"agentMessage","text":"The parser is safe."}}}'
+printf '%s\n' '{"method":"turn/completed","params":{"threadId":"side-thread","turn":{"id":"side-turn","status":"completed","items":[]}}}'
+cat >/dev/null
+`)
+	client := New(bin, WithCodexHome(t.TempDir()))
+	t.Cleanup(func() { _ = client.Close() })
+	handle, err := client.Fork(context.Background(), process.CodexForkInput{
+		SourceCodexSessionID: "source-thread", Ephemeral: true,
+		CodexStartInput: process.CodexStartInput{
+			ProcessRunID: "side-run", SessionID: "session-1", Workdir: t.TempDir(),
+			Input: []process.CodexInputItem{{Type: "text", Text: "inspect this"}}, PermissionMode: "read-only",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []process.CodexEvent
+	for event := range events {
+		got = append(got, event)
+	}
+	if len(got) != 3 || got[0].Type != process.CodexEventMessage || got[1].Type != process.CodexEventMessage || got[2].Type != process.CodexEventProcessExit {
+		t.Fatalf("ephemeral events = %#v", got)
+	}
+	user := got[0].Content.(process.CodexMessageContent)
+	agent := got[1].Content.(process.CodexMessageContent)
+	if user.Role != "user" || user.Text != "inspect this" || agent.Role != "assistant" || agent.Text != "The parser is safe." {
+		t.Fatalf("ephemeral messages = %#v / %#v", user, agent)
+	}
+	content, err := os.ReadFile(forkRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request struct {
+		Method string `json:"method"`
+		Params struct {
+			ThreadID     string `json:"threadId"`
+			Ephemeral    bool   `json:"ephemeral"`
+			ExcludeTurns bool   `json:"excludeTurns"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/fork" || request.Params.ThreadID != "source-thread" || !request.Params.Ephemeral || !request.Params.ExcludeTurns {
+		t.Fatalf("ephemeral fork request = %s", content)
 	}
 }
 

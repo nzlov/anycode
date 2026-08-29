@@ -141,7 +141,7 @@ func (s *Service) GetSessionEvent(ctx context.Context, input GetSessionEventInpu
 		return DTO{}, fmt.Errorf("load codex transcript event: %w", err)
 	}
 	event.CodexSessionID = threadID
-	item, ok := fromCodexEvent(event)
+	item, ok := FromCodexEvent(event)
 	if !ok || string(item.ID) != input.EventID {
 		return DTO{}, errors.New("session transcript event reference does not match the source record")
 	}
@@ -171,7 +171,7 @@ func historyPageEvents(events []processdomain.CodexEvent, messageRole string) []
 		if _, ok := event.Content.(processdomain.CodexUsageContent); ok {
 			continue
 		}
-		item, ok := fromCodexEvent(event)
+		item, ok := FromCodexEvent(event)
 		if !ok {
 			continue
 		}
@@ -230,7 +230,7 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 				if _, ok := codexEvent.Content.(processdomain.CodexUsageContent); ok {
 					continue
 				}
-				item, ok := fromCodexEvent(codexEvent)
+				item, ok := FromCodexEvent(codexEvent)
 				if !ok {
 					continue
 				}
@@ -305,7 +305,7 @@ func normalizeLimit(limit int) int {
 	return limit
 }
 
-func fromCodexEvent(event processdomain.CodexEvent) (DTO, bool) {
+func FromCodexEvent(event processdomain.CodexEvent) (DTO, bool) {
 	if !visibleCodexTimelineEvent(event) {
 		return DTO{}, false
 	}

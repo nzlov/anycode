@@ -104,6 +104,9 @@ type Mutation {
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   forkSession(input: ForkSessionInput!): Session!
+  startSessionSide(input: StartSessionSideInput!): SessionSideRun!
+  continueSessionSide(input: ContinueSessionSideInput!): SessionSideRun!
+  stopSessionSide(processRunId: ID!): Boolean!
   openSessionTerminal(sessionId: ID!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
@@ -143,9 +146,27 @@ type Tunnel {
 
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
+  sessionSideEvents(processRunId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
   mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+}
+
+type SessionSideRun {
+  codexSessionId: ID!
+  processRunId: ID!
+  turnId: ID!
+}
+
+input StartSessionSideInput {
+  sessionId: ID!
+  prompt: String!
+}
+
+input ContinueSessionSideInput {
+  sessionId: ID!
+  codexSessionId: ID!
+  prompt: String!
 }
 
 type MindMapUpdateEvent {

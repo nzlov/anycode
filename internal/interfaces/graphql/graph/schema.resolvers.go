@@ -23,6 +23,7 @@ import (
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -341,6 +342,56 @@ func (r *mutationResolver) ForkSession(ctx context.Context, input model.ForkSess
 		return nil, err
 	}
 	return mapSession(dto), nil
+}
+
+// StartSessionSide is the resolver for the startSessionSide field.
+func (r *mutationResolver) StartSessionSide(ctx context.Context, input model.StartSessionSideInput) (*model.SessionSideRun, error) {
+	if r.UseCases.SessionSides == nil {
+		return nil, missingUseCase("session sides")
+	}
+	run, err := r.UseCases.SessionSides.StartSide(ctx, sessionapp.StartSideInput{
+		SessionID: sessiondomain.ID(input.SessionID),
+		Prompt:    input.Prompt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &model.SessionSideRun{
+		CodexSessionID: run.CodexSessionID,
+		ProcessRunID:   string(run.ProcessRunID),
+		TurnID:         run.TurnID,
+	}, nil
+}
+
+// ContinueSessionSide is the resolver for the continueSessionSide field.
+func (r *mutationResolver) ContinueSessionSide(ctx context.Context, input model.ContinueSessionSideInput) (*model.SessionSideRun, error) {
+	if r.UseCases.SessionSides == nil {
+		return nil, missingUseCase("session sides")
+	}
+	run, err := r.UseCases.SessionSides.ContinueSide(ctx, sessionapp.ContinueSideInput{
+		SessionID:      sessiondomain.ID(input.SessionID),
+		CodexSessionID: input.CodexSessionID,
+		Prompt:         input.Prompt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &model.SessionSideRun{
+		CodexSessionID: run.CodexSessionID,
+		ProcessRunID:   string(run.ProcessRunID),
+		TurnID:         run.TurnID,
+	}, nil
+}
+
+// StopSessionSide is the resolver for the stopSessionSide field.
+func (r *mutationResolver) StopSessionSide(ctx context.Context, processRunID string) (bool, error) {
+	if r.UseCases.SessionSides == nil {
+		return false, missingUseCase("session sides")
+	}
+	if err := r.UseCases.SessionSides.StopSide(ctx, processdomain.RunID(processRunID)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // OpenSessionTerminal is the resolver for the openSessionTerminal field.
@@ -1134,6 +1185,41 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 				case <-ctx.Done():
 					return
 				case out <- mapTranscriptEvent(event):
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
+// SessionSideEvents is the resolver for the sessionSideEvents field.
+func (r *subscriptionResolver) SessionSideEvents(ctx context.Context, processRunID string) (<-chan *model.TranscriptEvent, error) {
+	if r.UseCases.SessionSides == nil {
+		return nil, missingUseCase("session sides")
+	}
+	source, err := r.UseCases.SessionSides.SideEvents(ctx, processdomain.RunID(processRunID))
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.TranscriptEvent)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-source:
+				if !ok {
+					return
+				}
+				dto, visible := timelineapp.FromCodexEvent(event)
+				if !visible {
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case out <- mapTranscriptEvent(dto):
 				}
 			}
 		}

@@ -13831,6 +13831,10 @@ type fakeCodexProcess struct {
 	resumeInput     processdomain.CodexResumeInput
 	resumeHandle    processdomain.CodexHandle
 	resumeErr       error
+	loadedCalled    bool
+	loadedInput     processdomain.CodexResumeInput
+	loadedHandle    processdomain.CodexHandle
+	loadedErr       error
 	forkCalled      bool
 	forkInput       processdomain.CodexForkInput
 	forkHandle      processdomain.CodexHandle
@@ -13940,6 +13944,28 @@ func (p *fakeCodexProcess) Resume(_ context.Context, input processdomain.CodexRe
 		handle.CodexSessionID = input.CodexSessionID
 	}
 	return handle, nil
+}
+
+func (p *fakeCodexProcess) ContinueLoaded(_ context.Context, input processdomain.CodexResumeInput) (processdomain.CodexHandle, error) {
+	p.loadedCalled = true
+	p.loadedInput = input
+	if p.loadedErr != nil {
+		return processdomain.CodexHandle{}, p.loadedErr
+	}
+	handle := p.loadedHandle
+	handle.ProcessRunID = input.ProcessRunID
+	if handle.CodexSessionID == "" {
+		handle.CodexSessionID = input.CodexSessionID
+	}
+	return handle, nil
+}
+
+func (p *fakeCodexProcess) StopEphemeral(ctx context.Context, id processdomain.RunID) error {
+	return p.Stop(ctx, id)
+}
+
+func (p *fakeCodexProcess) EphemeralEvents(ctx context.Context, id processdomain.RunID) (<-chan processdomain.CodexEvent, error) {
+	return p.Events(ctx, processdomain.CodexHandle{ProcessRunID: id})
 }
 
 func (p *fakeCodexProcess) Fork(_ context.Context, input processdomain.CodexForkInput) (processdomain.CodexHandle, error) {
