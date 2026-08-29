@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionSidePromptInput from '@/components/SessionSidePromptInput.vue';
@@ -165,14 +165,14 @@ async function startSide() {
   submitting.value = true;
   try {
     const run = await startSessionSide(props.sessionId, prompt);
-    const side: SideRecord = {
+    const side = reactive<SideRecord>({
       ...run,
       prompt,
       events: [],
       status: 'running',
       error: '',
       followUps: [],
-    };
+    });
     sides.value.push(side);
     selectedSideId.value = side.codexSessionId;
     newPrompt.value = '';
@@ -247,8 +247,8 @@ onUnmounted(() => {
   display: flex;
   width: min(760px, calc(100vw - 24px)) !important;
   max-width: min(760px, calc(100vw - 24px)) !important;
-  height: min(760px, calc(100dvh - 24px));
-  max-height: min(760px, calc(100dvh - 24px)) !important;
+  height: min(760px, calc(100dvh - 48px));
+  max-height: min(760px, calc(100dvh - 48px)) !important;
   flex-direction: column;
   overflow: hidden;
 }
@@ -274,11 +274,14 @@ onUnmounted(() => {
 .side-dialog__detail {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto auto auto;
+  overflow: hidden;
 }
 
 .side-dialog__events,
 .side-dialog__list-wrap {
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .side-dialog__event-list {
@@ -296,6 +299,10 @@ onUnmounted(() => {
 
 .side-dialog__thinking {
   padding: 0 16px 8px;
+}
+
+.side-dialog__follow-up {
+  flex: 0 0 auto;
 }
 
 .side-dialog__error {
@@ -318,15 +325,19 @@ onUnmounted(() => {
 }
 
 .side-composer-dialog {
+  display: flex;
   width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 48px) !important;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 @media (max-width: 599px) {
   .side-dialog.app-content-dialog {
-    width: 100vw !important;
-    max-width: none !important;
-    height: 100dvh;
-    max-height: none !important;
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px) !important;
     border-radius: 0;
   }
 }

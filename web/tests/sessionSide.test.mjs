@@ -9,6 +9,7 @@ function readSource(path) {
 const serviceSource = readSource('../src/services/sessionSides.ts');
 const dialogSource = readSource('../src/components/SessionSideDialog.vue');
 const inputSource = readSource('../src/components/SessionSidePromptInput.vue');
+const promptComposerSource = readSource('../src/components/PromptComposer.vue');
 const composerSource = readSource('../src/components/CodexPromptComposer.vue');
 const detailSource = readSource('../src/components/SessionDetailView.vue');
 
@@ -39,6 +40,22 @@ test('Side dialog shows direct input when empty, a closeable list, and FAB compo
   assert.match(dialogSource, /v-else class="side-dialog__initial-prompt"/);
   assert.match(dialogSource, /stopSessionSide\(side\.processRunId\)/);
   assert.match(inputSource, /aria-label="发送 Side 提问"/);
+});
+
+test('Side uses the collapsible common composer without unsupported run controls', () => {
+  assert.match(inputSource, /<PromptComposer/);
+  assert.match(inputSource, /\bcollapsible\b/);
+  assert.match(inputSource, /:show-config="false"/);
+  assert.match(inputSource, /:allow-attachments="false"/);
+  assert.doesNotMatch(inputSource, /\b(model|effort|permission)=/);
+  assert.match(promptComposerSource, /showConfig\?: boolean/);
+  assert.match(promptComposerSource, /allowAttachments\?: boolean/);
+});
+
+test('Side dialog caps its height and keeps the composer outside the event scroller', () => {
+  assert.match(dialogSource, /max-height: min\(760px, calc\(100dvh - 48px\)\) !important/);
+  assert.match(dialogSource, /\.side-dialog__detail[\s\S]*overflow: hidden/);
+  assert.match(dialogSource, /\.side-dialog__events,[\s\S]*overflow-y: auto/);
 });
 
 test('Side history remains current-page memory only', () => {

@@ -48,7 +48,7 @@ test('attachment button opens the shared file picker', () => {
   );
   assert.match(
     composerSource,
-    /<q-file\s+ref="filePickerRef"[\s\S]*?v-model="filesModel"[\s\S]*?multiple[\s\S]*?append[\s\S]*?class="hidden"/,
+    /<q-file\s+v-if="allowAttachments"\s+ref="filePickerRef"[\s\S]*?v-model="filesModel"[\s\S]*?multiple[\s\S]*?append[\s\S]*?class="hidden"/,
   );
 });
 

@@ -218,6 +218,7 @@
         <q-tooltip>收起提示词</q-tooltip>
       </q-btn>
       <q-btn
+        v-if="allowAttachments"
         flat
         round
         icon="attach_file"
@@ -229,6 +230,7 @@
         <q-tooltip>添加附件</q-tooltip>
       </q-btn>
       <q-file
+        v-if="allowAttachments"
         ref="filePickerRef"
         v-model="filesModel"
         multiple
@@ -237,7 +239,7 @@
         :disable="disabled"
       />
       <PromptConfigControls
-        v-if="!forceConfigMenu && (!compact || !$q.screen.lt.md)"
+        v-if="showConfig && !forceConfigMenu && (!compact || !$q.screen.lt.md)"
         :model="model"
         :effort="effort"
         :permission="permission"
@@ -250,7 +252,7 @@
         @update:fast="emit('update:fast', $event)"
       />
       <q-btn
-        v-else
+        v-else-if="showConfig"
         flat
         round
         class="app-icon-btn prompt-config-trigger"
@@ -375,14 +377,14 @@ const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFi
 const props = withDefaults(
   defineProps<{
     prompt: string;
-    files: File[];
+    files?: File[];
     annotations?: PreviewAnnotationAttachment[];
     artifacts?: SessionFile[];
     mentions?: PromptMention[];
-    model: string;
-    effort: string;
-    permission: string;
-    fast: boolean;
+    model?: string;
+    effort?: string;
+    permission?: string;
+    fast?: boolean;
     title?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -390,6 +392,8 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
+    showConfig?: boolean;
+    allowAttachments?: boolean;
     collapsible?: boolean;
     collapsed?: boolean;
     completionProjectId?: string;
@@ -399,11 +403,18 @@ const props = withDefaults(
   {
     title: '',
     placeholder: '描述你希望 Codex 完成的任务',
+    files: () => [],
+    model: '',
+    effort: '',
+    permission: '',
+    fast: false,
     disabled: false,
     compact: false,
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    showConfig: true,
+    allowAttachments: true,
     collapsible: false,
     collapsed: false,
     completionProjectId: '',
@@ -475,7 +486,9 @@ const filesModel = computed({
 const attachmentCount = computed(
   () => props.files.length + props.annotations.length + props.artifacts.length,
 );
-const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
+const showAttachmentZone = computed(
+  () => props.allowAttachments && (attachmentCount.value > 0 || draggingFiles.value),
+);
 const isCollapsed = computed(() => props.collapsible && props.collapsed);
 const completionScopeReady = computed(
   () => Boolean(props.completionProjectId) !== Boolean(props.completionSessionId),
@@ -608,13 +621,13 @@ function removeArtifact(artifact: SessionFile) {
 }
 
 function onDragEnter(event: DragEvent) {
-  if (props.disabled || !hasDraggedFiles(event)) return;
+  if (!props.allowAttachments || props.disabled || !hasDraggedFiles(event)) return;
   dragDepth.value += 1;
   draggingFiles.value = true;
 }
 
 function onDragOver(event: DragEvent) {
-  if (props.disabled || !hasDraggedFiles(event)) return;
+  if (!props.allowAttachments || props.disabled || !hasDraggedFiles(event)) return;
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'copy';
   }
@@ -622,7 +635,7 @@ function onDragOver(event: DragEvent) {
 }
 
 function onDragLeave(event: DragEvent) {
-  if (props.disabled || !hasDraggedFiles(event)) return;
+  if (!props.allowAttachments || props.disabled || !hasDraggedFiles(event)) return;
   dragDepth.value = Math.max(0, dragDepth.value - 1);
   if (dragDepth.value === 0) {
     draggingFiles.value = false;
@@ -632,7 +645,7 @@ function onDragLeave(event: DragEvent) {
 function onDrop(event: DragEvent) {
   dragDepth.value = 0;
   draggingFiles.value = false;
-  if (props.disabled) return;
+  if (!props.allowAttachments || props.disabled) return;
   appendFiles(filesFromTransfer(event.dataTransfer));
 }
 
@@ -791,7 +804,7 @@ function fileMatchSegments(file: PromptFileMatch) {
   return promptMatchSegments(file.path, file.indices);
 }
 function onPaste(event: ClipboardEvent) {
-  if (props.disabled) return;
+  if (!props.allowAttachments || props.disabled) return;
   appendFiles(filesFromTransfer(event.clipboardData));
 }
 

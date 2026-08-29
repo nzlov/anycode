@@ -1,33 +1,41 @@
 <template>
-  <div class="side-prompt-input">
-    <q-input
-      :model-value="modelValue"
-      outlined
-      autogrow
-      autofocus
-      type="textarea"
-      :label="label"
-      :disable="disabled || loading"
-      @update:model-value="emit('update:modelValue', String($event ?? ''))"
-      @keydown.meta.enter.prevent="submit"
-      @keydown.ctrl.enter.prevent="submit"
-    />
-    <q-btn
-      unelevated
-      round
-      color="primary"
-      icon="send"
-      aria-label="发送 Side 提问"
-      :loading="loading"
-      :disable="disabled || !modelValue.trim()"
-      @click="submit"
-    >
-      <q-tooltip>发送 Side 提问</q-tooltip>
-    </q-btn>
-  </div>
+  <PromptComposer
+    class="side-prompt-input"
+    :prompt="modelValue"
+    :placeholder="label"
+    :disabled="disabled || loading"
+    compact
+    collapsible
+    :collapsed="collapsed"
+    :show-badge="false"
+    :show-config="false"
+    :allow-attachments="false"
+    @update:prompt="emit('update:modelValue', $event)"
+    @update:collapsed="collapsed = $event"
+    @submit="submit"
+  >
+    <template #actions>
+      <q-btn
+        unelevated
+        round
+        color="primary"
+        icon="send"
+        aria-label="发送 Side 提问"
+        :loading="loading"
+        :disable="disabled || !modelValue.trim()"
+        @click="submit"
+      >
+        <q-tooltip>发送 Side 提问</q-tooltip>
+      </q-btn>
+    </template>
+  </PromptComposer>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
+
+import PromptComposer from '@/components/PromptComposer.vue';
+
 const props = withDefaults(
   defineProps<{
     modelValue: string;
@@ -42,6 +50,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
   submit: [];
 }>();
+const collapsed = ref(false);
 
 function submit() {
   if (props.disabled || props.loading || !props.modelValue.trim()) return;
@@ -50,10 +59,8 @@ function submit() {
 </script>
 
 <style scoped>
-.side-prompt-input {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
+.side-prompt-input :deep(.prompt-input .q-field__native) {
+  max-height: min(220px, 30dvh);
+  overflow-y: auto !important;
 }
 </style>
