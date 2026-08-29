@@ -40,6 +40,7 @@ test('useSessionDetail loads older events with cursor input instead of page numb
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
+  assert.match(source, /const eventPageSize = 200;/);
   const match =
     /async function loadOlderEvents\(\)(?:: Promise<[^>]+>)? \{(?<body>[\s\S]*?)\n\s{2}\}/.exec(
       source,

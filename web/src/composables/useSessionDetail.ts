@@ -47,7 +47,7 @@ import {
   shouldReconnectSubscription,
 } from '@/services/sessionEventTimeline';
 
-const eventPageSize = 50;
+const eventPageSize = 200;
 const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
 
 export function useSessionDetail(sessionId: string) {
