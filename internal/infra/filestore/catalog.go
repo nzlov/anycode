@@ -30,6 +30,79 @@ type artifactReference struct {
 	legacyDigest string
 }
 
+func (s *Store) SnapshotArtifacts(ctx context.Context, sourceSessionID session.ID, targetSessionID session.ID) (int, error) {
+	if sourceSessionID == "" || targetSessionID == "" || sourceSessionID == targetSessionID {
+		return 0, &Error{Code: "invalid_artifact_snapshot"}
+	}
+	source, err := s.openArtifactRoot(ctx, sourceSessionID)
+	if err != nil && !errors.Is(err, session.ErrSessionFileNotFound) {
+		return 0, err
+	}
+	if source != nil {
+		defer source.Close()
+	}
+	target, err := s.createArtifactRoot(ctx, targetSessionID)
+	if err != nil {
+		return 0, err
+	}
+	defer target.Close()
+	entries, err := fs.ReadDir(target.FS(), ".")
+	if err != nil {
+		return 0, &Error{Code: classify(err), Path: s.ArtifactDir(targetSessionID), Err: err}
+	}
+	for _, entry := range entries {
+		if err := target.RemoveAll(entry.Name()); err != nil {
+			return 0, &Error{Code: classify(err), Path: filepath.Join(s.ArtifactDir(targetSessionID), entry.Name()), Err: err}
+		}
+	}
+	if source == nil {
+		return 0, nil
+	}
+
+	count := 0
+	err = walkArtifactRoot(ctx, source, func(logicalPath string, info os.FileInfo) error {
+		input, err := source.Open(logicalPath)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := target.MkdirAll(pathpkg.Dir(logicalPath), 0o755); err != nil {
+			_ = input.Close()
+			return err
+		}
+		partialPath := logicalPath + ".partial"
+		_ = target.Remove(partialPath)
+		output, err := target.OpenFile(partialPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		_, copyErr := io.Copy(output, readerWithContext{ctx: ctx, reader: input})
+		inputCloseErr := input.Close()
+		syncErr := output.Sync()
+		closeErr := output.Close()
+		if copyErr != nil || inputCloseErr != nil || syncErr != nil || closeErr != nil {
+			_ = target.Remove(partialPath)
+			return errors.Join(copyErr, inputCloseErr, syncErr, closeErr)
+		}
+		if err := target.Rename(partialPath, logicalPath); err != nil {
+			_ = target.Remove(partialPath)
+			return err
+		}
+		if err := target.Chtimes(logicalPath, info.ModTime(), info.ModTime()); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	if err != nil {
+		return 0, &Error{Code: classify(err), Path: s.ArtifactDir(targetSessionID), Err: err}
+	}
+	return count, nil
+}
+
 func (s *Store) InspectArtifact(ctx context.Context, input session.InspectArtifactInput) (session.SessionFile, error) {
 	if err := ctx.Err(); err != nil {
 		return session.SessionFile{}, &Error{Code: "canceled", Path: input.SourcePath, Err: err}

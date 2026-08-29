@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -316,6 +317,167 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 	return path, nil
 }
 
+func (c *Client) SnapshotChanges(ctx context.Context, sourcePath string, targetPath string) error {
+	sourcePath = absolutePath(strings.TrimSpace(sourcePath))
+	targetPath = absolutePath(strings.TrimSpace(targetPath))
+	if sourcePath == targetPath {
+		return errors.New("source and target worktrees must differ")
+	}
+	sourceCommonDir, err := c.commonGitDir(ctx, sourcePath)
+	if err != nil {
+		return fmt.Errorf("resolve source worktree repository: %w", err)
+	}
+	targetCommonDir, err := c.commonGitDir(ctx, targetPath)
+	if err != nil {
+		return fmt.Errorf("resolve target worktree repository: %w", err)
+	}
+	if sourceCommonDir != targetCommonDir {
+		return errors.New("source and target worktrees belong to different repositories")
+	}
+	targetHead, err := c.HeadCommit(ctx, targetPath, "")
+	if err != nil {
+		return err
+	}
+	if targetHead != "" {
+		if _, err := c.run(ctx, targetPath, "reset", "--hard", "--quiet", "HEAD"); err != nil {
+			return err
+		}
+	}
+	if _, err := c.run(ctx, targetPath, "clean", "-fdx"); err != nil {
+		return err
+	}
+	if targetHead != "" {
+		patch, err := c.run(ctx, sourcePath, "diff", "--binary", "--full-index", "--no-renames", targetHead, "--")
+		if err != nil {
+			return err
+		}
+		if patch != "" {
+			if _, err := c.runInput(ctx, targetPath, []byte(patch), "apply", "--binary", "--whitespace=nowarn", "-"); err != nil {
+				return err
+			}
+		}
+	}
+	untracked, err := c.run(ctx, sourcePath, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return err
+	}
+	if targetHead == "" {
+		tracked, err := c.run(ctx, sourcePath, "ls-files", "--cached", "-z")
+		if err != nil {
+			return err
+		}
+		untracked += tracked
+	}
+	sourceRoot, err := os.OpenRoot(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceRoot.Close()
+	targetRoot, err := os.OpenRoot(targetPath)
+	if err != nil {
+		return err
+	}
+	defer targetRoot.Close()
+	seen := map[string]bool{}
+	for _, path := range strings.Split(untracked, "\x00") {
+		path = filepath.FromSlash(path)
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		if err := copySnapshotEntry(ctx, sourceRoot, targetRoot, path); err != nil {
+			return fmt.Errorf("copy untracked worktree file %q: %w", filepath.ToSlash(path), err)
+		}
+	}
+	return nil
+}
+
+func copySnapshotEntry(ctx context.Context, source *os.Root, target *os.Root, path string) error {
+	if !filepath.IsLocal(path) || path == "." {
+		return errors.New("worktree snapshot path is not local")
+	}
+	info, err := source.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := target.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := target.RemoveAll(path); err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		link, err := source.Readlink(path)
+		if err != nil {
+			return err
+		}
+		return target.Symlink(link, path)
+	}
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	input, err := source.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	partialPath := path + ".anycode-snapshot-partial"
+	_ = target.Remove(partialPath)
+	output, err := target.OpenFile(partialPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if err != nil {
+		_ = input.Close()
+		return err
+	}
+	_, copyErr := copyFileWithContext(ctx, output, input)
+	inputCloseErr := input.Close()
+	syncErr := output.Sync()
+	closeErr := output.Close()
+	if copyErr != nil || inputCloseErr != nil || syncErr != nil || closeErr != nil {
+		_ = target.Remove(partialPath)
+		return errors.Join(copyErr, inputCloseErr, syncErr, closeErr)
+	}
+	if err := target.Rename(partialPath, path); err != nil {
+		_ = target.Remove(partialPath)
+		return err
+	}
+	if err := target.Chmod(path, info.Mode().Perm()); err != nil {
+		return err
+	}
+	return target.Chtimes(path, info.ModTime(), info.ModTime())
+}
+
+func copyFileWithContext(ctx context.Context, target io.Writer, source io.Reader) (int64, error) {
+	buffer := make([]byte, 32*1024)
+	var written int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return written, err
+		}
+		read, readErr := source.Read(buffer)
+		if read > 0 {
+			count, writeErr := target.Write(buffer[:read])
+			written += int64(count)
+			if writeErr != nil {
+				return written, writeErr
+			}
+			if count != read {
+				return written, io.ErrShortWrite
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			return written, nil
+		}
+		if readErr != nil {
+			return written, readErr
+		}
+	}
+}
+
 func (c *Client) InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (session.WorktreeOwnership, error) {
 	path = absolutePath(strings.TrimSpace(path))
 	branch = strings.TrimSpace(branch)
@@ -565,6 +727,10 @@ func (c *Client) DeleteBranch(ctx context.Context, projectPath string, branch st
 }
 
 func (c *Client) run(ctx context.Context, path string, args ...string) (string, error) {
+	return c.runInput(ctx, path, nil, args...)
+}
+
+func (c *Client) runInput(ctx context.Context, path string, input []byte, args ...string) (string, error) {
 	gitBin := c.gitBin
 	if gitBin == "" {
 		gitBin = defaultGitBin
@@ -575,6 +741,9 @@ func (c *Client) run(ctx context.Context, path string, args ...string) (string, 
 	}
 	allArgs = append(allArgs, args...)
 	cmd := exec.CommandContext(ctx, gitBin, allArgs...)
+	if input != nil {
+		cmd.Stdin = bytes.NewReader(input)
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

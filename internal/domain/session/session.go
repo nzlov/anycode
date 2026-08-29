@@ -810,6 +810,7 @@ type WriteInlineArtifactInput struct {
 type ArtifactStore interface {
 	EnsureArtifactDir(ctx context.Context, sessionID ID) (string, error)
 	ArtifactDir(sessionID ID) string
+	SnapshotArtifacts(ctx context.Context, sourceSessionID ID, targetSessionID ID) (int, error)
 	InspectArtifact(ctx context.Context, input InspectArtifactInput) (SessionFile, error)
 	FindArtifactByContent(ctx context.Context, sessionID ID, data []byte) (SessionFile, bool, error)
 	WriteInlineArtifact(ctx context.Context, input WriteInlineArtifactInput) (SessionFile, error)
@@ -832,6 +833,7 @@ type ArtifactStore interface {
 type WorktreeManager interface {
 	BaseBranchExists(ctx context.Context, projectPath string, branch string) (bool, error)
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, branch string, baseBranch string, ownershipToken string) (string, error)
+	SnapshotChanges(ctx context.Context, sourcePath string, targetPath string) error
 	InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (WorktreeOwnership, error)
 	HeadCommit(ctx context.Context, path string, ref string) (string, error)
 	RetainCommit(ctx context.Context, projectPath string, sessionID ID, commit string) error

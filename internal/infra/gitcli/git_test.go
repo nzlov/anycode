@@ -1,6 +1,7 @@
 package gitcli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -683,6 +684,87 @@ func TestCreateWorktreeFromEmptyRepositoryCreatesOrphanBranch(t *testing.T) {
 	}
 }
 
+func TestSnapshotChangesCopiesTrackedAndUntrackedWorkspaceState(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	repo := t.TempDir()
+	dataDir := t.TempDir()
+	runGit(t, repo, "init", "-b", "main")
+	runGit(t, repo, "config", "user.name", "Tester")
+	runGit(t, repo, "config", "user.email", "tester@example.com")
+	for name, content := range map[string][]byte{
+		"modified.txt": []byte("base\n"),
+		"deleted.txt":  []byte("delete me\n"),
+		"binary.bin":   {0, 1, 2, 3},
+		".gitignore":   []byte("ignored.txt\n"),
+	} {
+		if err := os.WriteFile(filepath.Join(repo, name), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+
+	client := NewWorktrees(dataDir)
+	target, err := client.Create(ctx, repo, "project-1", "fork-session", "fork-session", "main", "owner-token")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "modified.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "modified.txt")
+	if err := os.WriteFile(filepath.Join(repo, "modified.txt"), []byte("staged\nand unstaged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "binary.bin"), []byte{9, 8, 7, 0, 6}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(repo, "deleted.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "staged-new.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "staged-new.txt")
+	if err := os.MkdirAll(filepath.Join(repo, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "notes", "draft.txt"), []byte("draft\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "ignored.txt"), []byte("ignored\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := client.SnapshotChanges(ctx, repo, target); err != nil {
+		t.Fatalf("SnapshotChanges() error = %v", err)
+	}
+	assertFileContent(t, filepath.Join(target, "modified.txt"), []byte("staged\nand unstaged\n"))
+	assertFileContent(t, filepath.Join(target, "binary.bin"), []byte{9, 8, 7, 0, 6})
+	assertFileContent(t, filepath.Join(target, "staged-new.txt"), []byte("new\n"))
+	assertFileContent(t, filepath.Join(target, "notes", "draft.txt"), []byte("draft\n"))
+	if _, err := os.Stat(filepath.Join(target, "deleted.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deleted file still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "ignored.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ignored file was copied: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(target, "target-only.txt"), []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.SnapshotChanges(ctx, repo, target); err != nil {
+		t.Fatalf("SnapshotChanges() retry error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "target-only.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left stale target file: %v", err)
+	}
+}
+
 func TestDeleteBranchPrunesMissingWorktreeMetadata(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")
@@ -725,6 +807,17 @@ func hasBranch(branches []project.GitBranch, name string) bool {
 		}
 	}
 	return false
+}
+
+func assertFileContent(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("%s content = %v, want %v", path, got, want)
+	}
 }
 
 func runGit(t *testing.T, dir string, args ...string) {

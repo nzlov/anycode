@@ -1932,9 +1932,22 @@ func (s *Service) initializeSession(ctx context.Context, id domain.ID, recovery 
 		if err != nil {
 			return s.failSessionInitialization(ctx, session, fmt.Errorf("find initialization project: %w", err), "project_lookup_failed")
 		}
+		var forkSource *domain.Session
+		if session.ForkedFromSessionID != "" {
+			source, err := s.repo.Find(ctx, session.ForkedFromSessionID)
+			if err != nil {
+				return s.failSessionInitialization(ctx, session, fmt.Errorf("find fork source session: %w", err), "fork_source_lookup_failed")
+			}
+			forkSource = &source
+		}
 		if project.IsGit && session.Mode != domain.ModeTerminal {
 			if err := s.provisionSessionWorktree(ctx, &session, project, recovery); err != nil {
 				return s.failSessionInitialization(ctx, session, err, "worktree_initialization_failed")
+			}
+			if forkSource != nil {
+				if err := s.worktrees.SnapshotChanges(ctx, forkSource.WorktreePath, session.WorktreePath); err != nil {
+					return s.failSessionInitialization(ctx, session, fmt.Errorf("snapshot fork worktree changes: %w", err), "fork_worktree_snapshot_failed")
+				}
 			}
 			if strings.TrimSpace(project.WorktreeInitCommand) != "" {
 				if err := s.initializeWorktree(ctx, session, project.WorktreeInitCommand); err != nil {
@@ -1953,6 +1966,13 @@ func (s *Service) initializeSession(ctx context.Context, id domain.ID, recovery 
 			if err := s.repo.Save(ctx, session); err != nil {
 				return s.failSessionInitialization(ctx, session, fmt.Errorf("save initialized session worktree: %w", err), "worktree_active_save_failed")
 			}
+		}
+		if forkSource != nil && s.artifacts != nil {
+			count, err := s.artifacts.SnapshotArtifacts(ctx, forkSource.ID, session.ID)
+			if err != nil {
+				return s.failSessionInitialization(ctx, session, fmt.Errorf("snapshot fork artifacts: %w", err), "fork_artifact_snapshot_failed")
+			}
+			session.ArtifactCount = count
 		}
 		if session.Mode == domain.ModeTerminal {
 			dto, err = s.startTerminalSession(ctx, session)
@@ -9039,7 +9059,12 @@ func availableActions(session domain.Session) []string {
 		return []string{"execute", "close"}
 	case domain.StatusQueued:
 		return []string{"execute", "stop", "close"}
-	case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
+	case domain.StatusRunning:
+		if canForkSession(session) {
+			return []string{"stop", "fork"}
+		}
+		return []string{"stop"}
+	case domain.StatusStarting, domain.StatusStopping:
 		return []string{"stop"}
 	case domain.StatusWaitingUser:
 		return []string{"stop", "close"}
@@ -9071,7 +9096,7 @@ func canForkSession(session domain.Session) bool {
 		return false
 	}
 	switch session.Status {
-	case domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted, domain.StatusResumeFailed:
+	case domain.StatusRunning, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted, domain.StatusResumeFailed:
 		return true
 	default:
 		return false

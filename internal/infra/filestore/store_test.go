@@ -47,6 +47,70 @@ func TestInspectArtifactKeepsOversizedImageDownloadableWithoutPreview(t *testing
 	}
 }
 
+func TestSnapshotArtifactsReplacesTargetWithSourceFiles(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	sourceDir, err := store.EnsureArtifactDir(ctx, "source-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetDir, err := store.EnsureArtifactDir(ctx, "target-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceDir, "reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "reports", "result.txt"), []byte("result\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "image.bin"), []byte{0, 1, 2}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "unfinished.partial"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "stale.txt"), []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	count, err := store.SnapshotArtifacts(ctx, "source-session", "target-session")
+	if err != nil {
+		t.Fatalf("SnapshotArtifacts() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("SnapshotArtifacts() count = %d, want 2", count)
+	}
+	assertStoredFile(t, filepath.Join(targetDir, "reports", "result.txt"), []byte("result\n"))
+	assertStoredFile(t, filepath.Join(targetDir, "image.bin"), []byte{0, 1, 2})
+	for _, name := range []string{"stale.txt", "unfinished.partial"} {
+		if _, err := os.Stat(filepath.Join(targetDir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("unexpected target artifact %s: %v", name, err)
+		}
+	}
+
+	if err := os.Remove(filepath.Join(sourceDir, "image.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SnapshotArtifacts(ctx, "source-session", "target-session"); err != nil {
+		t.Fatalf("SnapshotArtifacts() retry error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, "image.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retry left removed source artifact: %v", err)
+	}
+}
+
+func assertStoredFile(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("%s content = %v, want %v", path, got, want)
+	}
+}
+
 func oversizedPNGHeader(width, height uint32) []byte {
 	header := make([]byte, 33)
 	copy(header[0:8], "\x89PNG\r\n\x1a\n")

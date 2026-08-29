@@ -275,14 +275,14 @@ func TestOpenTerminalUsesSourceSessionWorktreeWithoutCreatingAnotherWorktree(t *
 	}
 }
 
-func TestForkSessionCreatesIndependentThreadFromSourceBranchHead(t *testing.T) {
+func TestForkSessionCreatesIndependentRunningThreadWithWorkspaceSnapshot(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["source-session"] = domain.Session{
 		ID:             "source-session",
 		ProjectID:      "project-1",
 		Requirement:    "original task",
 		Mode:           domain.ModeChat,
-		Status:         domain.StatusCompleted,
+		Status:         domain.StatusRunning,
 		Priority:       domain.PriorityHigh,
 		BaseBranch:     "main",
 		WorktreePath:   "/data/worktrees/project-1/source-session",
@@ -305,8 +305,10 @@ func TestForkSessionCreatesIndependentThreadFromSourceBranchHead(t *testing.T) {
 	projects.projects["project-1"] = project
 	worktrees := newFakeWorktreeManager()
 	worktrees.headCommit = "source-head"
+	artifacts := &fakeSessionArtifactStore{snapshotCount: 2}
 	codex := &fakeCodexProcess{forkHandle: processdomain.CodexHandle{CodexSessionID: "codex-fork", TurnID: "turn-fork"}}
 	service := New(repo, projects, WithWorktrees(worktrees), WithProcesses(newFakeProcessRepository(), codex))
+	service.artifacts = artifacts
 	t.Cleanup(service.Close)
 	service.generateID = func() (domain.ID, error) { return "fork-session", nil }
 
@@ -324,8 +326,11 @@ func TestForkSessionCreatesIndependentThreadFromSourceBranchHead(t *testing.T) {
 	if saved.ForkedFromSessionID != "source-session" || saved.ForkedFromCodexSessionID != "codex-source" || saved.Priority != domain.PriorityHigh || saved.Config != repo.sessions["source-session"].Config {
 		t.Fatalf("fork lineage/config = %#v", saved)
 	}
-	if worktrees.createBaseBranch != "source-session" || worktrees.headCommit != "source-head" {
+	if worktrees.createBaseBranch != "source-session" || worktrees.headCommit != "source-head" || worktrees.snapshotSourcePath != repo.sessions["source-session"].WorktreePath || worktrees.snapshotTargetPath != saved.WorktreePath {
 		t.Fatalf("fork worktree = base:%q head:%q", worktrees.createBaseBranch, worktrees.headCommit)
+	}
+	if artifacts.snapshotSource != "source-session" || artifacts.snapshotTarget != "fork-session" || saved.ArtifactCount != 2 {
+		t.Fatalf("fork artifacts = source:%q target:%q count:%d", artifacts.snapshotSource, artifacts.snapshotTarget, saved.ArtifactCount)
 	}
 
 	running, err := service.ExecuteSessionWithOptions(context.Background(), "fork-session", StartSessionOptions{Force: true})
@@ -340,16 +345,16 @@ func TestForkSessionCreatesIndependentThreadFromSourceBranchHead(t *testing.T) {
 	}
 }
 
-func TestForkSessionRejectsSourceWithoutCompletedChatThread(t *testing.T) {
+func TestForkSessionRejectsSourceBeforeCodexThreadIsRunning(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["source-session"] = domain.Session{
 		ID: "source-session", ProjectID: "project-1", Mode: domain.ModeChat,
-		Status: domain.StatusRunning, CodexSessionID: "codex-source",
+		Status: domain.StatusStarting, CodexSessionID: "",
 	}
 	service := New(repo, newFakeProjectRepository("project-1"))
 
 	if _, err := service.ForkSession(context.Background(), ForkSessionInput{SourceSessionID: "source-session", Requirement: "new task"}); err == nil {
-		t.Fatal("ForkSession() expected running source validation error")
+		t.Fatal("ForkSession() expected starting source validation error")
 	}
 }
 
@@ -11648,6 +11653,13 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"stop"},
 		},
 		{
+			name: "running chat with codex thread",
+			session: domain.Session{
+				Mode: domain.ModeChat, Status: domain.StatusRunning, CodexSessionID: "codex-1",
+			},
+			want: []string{"stop", "fork"},
+		},
+		{
 			name:    "waiting for user answer",
 			session: domain.Session{Status: domain.StatusWaitingUser},
 			want:    []string{"stop", "close"},
@@ -13006,6 +13018,10 @@ type fakeSessionArtifactStore struct {
 	restoredQuarantine string
 	deletedQuarantine  string
 	artifactCount      int
+	snapshotCount      int
+	snapshotSource     domain.ID
+	snapshotTarget     domain.ID
+	snapshotErr        error
 	watchCalls         int
 	artifacts          map[domain.SessionFileID]domain.SessionFile
 	beforeDelete       func()
@@ -13018,6 +13034,12 @@ func (s *fakeSessionArtifactStore) EnsureArtifactDir(context.Context, domain.ID)
 
 func (s *fakeSessionArtifactStore) ArtifactDir(domain.ID) string {
 	return "/outputs/session-1"
+}
+
+func (s *fakeSessionArtifactStore) SnapshotArtifacts(_ context.Context, sourceSessionID domain.ID, targetSessionID domain.ID) (int, error) {
+	s.snapshotSource = sourceSessionID
+	s.snapshotTarget = targetSessionID
+	return s.snapshotCount, s.snapshotErr
 }
 
 func (s *fakeSessionArtifactStore) InspectArtifact(context.Context, domain.InspectArtifactInput) (domain.SessionFile, error) {
@@ -13232,6 +13254,9 @@ type fakeWorktreeManager struct {
 	createProjectID       domain.ProjectID
 	createSessionID       domain.ID
 	createBaseBranch      string
+	snapshotSourcePath    string
+	snapshotTargetPath    string
+	snapshotErr           error
 	headCommitPath        string
 	headCommitRef         string
 	removed               []string
@@ -13307,6 +13332,12 @@ func (m *fakeWorktreeManager) Create(ctx context.Context, projectPath string, pr
 		return "", m.createErr
 	}
 	return m.PathForSession(projectID, sessionID), nil
+}
+
+func (m *fakeWorktreeManager) SnapshotChanges(_ context.Context, sourcePath string, targetPath string) error {
+	m.snapshotSourcePath = sourcePath
+	m.snapshotTargetPath = targetPath
+	return m.snapshotErr
 }
 
 func (m *fakeWorktreeManager) HeadCommit(_ context.Context, path string, ref string) (string, error) {
