@@ -500,6 +500,8 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 	params := map[string]any{"threadId": threadID, "input": items}
 	if collaborationMode != nil {
 		params["collaborationMode"] = collaborationMode
+	} else if reasoningEffort != "" {
+		params["effort"] = reasoningEffort
 	}
 	if sandboxPolicy := appServerSandboxPolicy(permissionMode, workspaceWrite); sandboxPolicy != nil {
 		params["sandboxPolicy"] = sandboxPolicy

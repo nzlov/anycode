@@ -135,8 +135,10 @@ func TestRuntimeCompletesDynamicToolOnOriginalTurn(t *testing.T) {
 	codexHome := t.TempDir()
 	responses := filepath.Join(t.TempDir(), "responses")
 	startRequest := filepath.Join(t.TempDir(), "start-request")
+	turnRequest := filepath.Join(t.TempDir(), "turn-request")
 	t.Setenv("APP_SERVER_RESPONSES", responses)
 	t.Setenv("APP_SERVER_START_REQUEST", startRequest)
+	t.Setenv("APP_SERVER_TURN_REQUEST", turnRequest)
 	bin := fakeCodex(t, `#!/bin/sh
 IFS= read -r request
 printf '%s\n' '{"id":1,"result":{"codexHome":"/tmp/codex","platformFamily":"unix","platformOs":"linux","userAgent":"codex-test"}}'
@@ -147,6 +149,7 @@ printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
 mkdir -p "$CODEX_HOME/sessions/2026/07/22"
 printf '%s\n' '{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"thread-1","cwd":"/workspace"}}' > "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 IFS= read -r request
+printf '%s\n' "$request" > "$APP_SERVER_TURN_REQUEST"
 printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}'
 printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-1","name":"questions","input":"{\"questions\":[{\"body\":\"Continue?\"}]}"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"id":90,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"questions","arguments":{"questions":[{"body":"Continue?"}]}}}'
@@ -163,8 +166,11 @@ cat >/dev/null
 	client.SetDynamicToolHandler(handler)
 
 	handle, err := client.Start(context.Background(), process.CodexStartInput{
-		ProcessRunID: "run-1", SessionID: "session-1", Workdir: t.TempDir(),
-		Input: []process.CodexInputItem{{Type: "text", Text: "ask"}},
+		ProcessRunID:    "run-1",
+		SessionID:       "session-1",
+		Workdir:         t.TempDir(),
+		Input:           []process.CodexInputItem{{Type: "text", Text: "ask"}},
+		ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -191,6 +197,19 @@ cat >/dev/null
 	}
 	if json.Unmarshal(content, &startEnvelope) != nil || startEnvelope.Method != "thread/start" || startEnvelope.Params.HistoryMode != "paginated" || startEnvelope.Params.ServiceTier != "default" {
 		t.Fatalf("start request = %s", content)
+	}
+	content, err = os.ReadFile(turnRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var turnEnvelope struct {
+		Method string `json:"method"`
+		Params struct {
+			Effort string `json:"effort"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(content, &turnEnvelope) != nil || turnEnvelope.Method != "turn/start" || turnEnvelope.Params.Effort != "high" {
+		t.Fatalf("turn request = %s", content)
 	}
 	events, err := client.Events(context.Background(), handle)
 	if err != nil {
