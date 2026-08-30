@@ -27,11 +27,21 @@
     <template v-if="expanded">
       <div class="tool-event__content">
         <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
-        <section v-if="content.input.text" class="tool-event__section">
+        <template v-if="isQuestionEvent">
+          <q-banner v-if="questionError" dense class="text-negative">
+            {{ questionError }}
+          </q-banner>
+          <QuestionsPanel
+            v-else
+            :requests="questionRequest ? [questionRequest] : []"
+            :loading="questionLoading || loading"
+          />
+        </template>
+        <section v-else-if="content.input.text" class="tool-event__section">
           <div class="tool-event__label">输入</div>
           <StructuredContent :content="content.input" />
         </section>
-        <section v-if="content.output.text" class="tool-event__section">
+        <section v-if="!isQuestionEvent && content.output.text" class="tool-event__section">
           <div class="tool-event__label">输出</div>
           <StructuredContent :content="content.output" />
         </section>
@@ -44,9 +54,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import QuestionsPanel from '@/components/QuestionsPanel.vue';
 import SessionEventImages from '@/components/SessionEventImages.vue';
 import StructuredContent from '@/components/StructuredContent.vue';
 import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
+import { getQuestionRequest, type QuestionRequest } from '@/services/sessions';
 import type { TranscriptItem, TranscriptToolContent } from '@/services/sessionTimeline';
 import {
   timelinePhaseColor,
@@ -68,10 +80,51 @@ const {
 } = useDeferredTranscriptEvent(() => props.event);
 const content = computed(() => resolvedEvent.value.content as TranscriptToolContent);
 const displayTitle = computed(() => toolLabel(content.value));
+const isQuestionEvent = computed(
+  () =>
+    content.value.qualifiedName === 'questions' ||
+    content.value.qualifiedName.endsWith('.questions'),
+);
+const questionRequest = ref<QuestionRequest | null>(null);
+const questionLoading = ref(false);
+const questionError = ref('');
 
-function toggleExpanded() {
+async function toggleExpanded() {
   expanded.value = !expanded.value;
-  if (expanded.value) void load();
+  if (!expanded.value) return;
+  await load();
+  if (isQuestionEvent.value) await loadQuestionRequest();
+}
+
+async function loadQuestionRequest() {
+  const requestId = questionRequestId(content.value.output.text);
+  if (!requestId) {
+    questionError.value =
+      resolvedEvent.value.phase === 'started' || resolvedEvent.value.phase === 'progress'
+        ? '问题正在等待回答，完成后将在此显示。'
+        : '无法识别问题请求。';
+    return;
+  }
+  if (questionRequest.value?.id === requestId || questionLoading.value) return;
+  questionLoading.value = true;
+  questionError.value = '';
+  try {
+    questionRequest.value = await getQuestionRequest(requestId);
+  } catch (err) {
+    questionError.value = err instanceof Error ? err.message : '加载问题和回答失败';
+  } finally {
+    questionLoading.value = false;
+  }
+}
+
+function questionRequestId(output: string): string {
+  // GLUE: Timeline tool output carries only the question request ID; remove when it is a typed field.
+  try {
+    const value = JSON.parse(output) as { requestId?: unknown };
+    return typeof value.requestId === 'string' ? value.requestId : '';
+  } catch {
+    return '';
+  }
 }
 </script>
 

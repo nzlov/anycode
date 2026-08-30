@@ -33,7 +33,10 @@ test('custom answer matches option rows and requires explicit selection before i
     /<q-radio[\s\S]*?val="__custom__"[\s\S]*?@update:model-value="setChoice\(question\.id, String\(\$event\)\)"/,
   );
   assert.match(customInput, /placeholder="输入自定义答案"/);
-  assert.match(customInput, /:disable="drafts\[question\.id\]\?\.choice !== '__custom__'"/);
+  assert.match(
+    customInput,
+    /:disable="readonly \|\| drafts\[question\.id\]\?\.choice !== '__custom__'"/,
+  );
   assert.doesNotMatch(customInput, /@focus=/);
   assert.match(
     customInput,

@@ -20,6 +20,7 @@
             :requests="requests"
             :loading="loading"
             :submitting="submitting"
+            :readonly="false"
             @submit="(requestId, answers) => emit('submit', requestId, answers)"
           />
         </q-tab-panel>

@@ -1054,6 +1054,23 @@ export async function getPendingQuestionRequests(sessionId: string): Promise<Que
   return data.pendingQuestionRequests.map(normalizeQuestionRequest);
 }
 
+export async function getQuestionRequest(requestId: string): Promise<QuestionRequest> {
+  const data = await graphqlFetch<
+    { questionRequest: GraphQLQuestionRequest },
+    { requestId: string }
+  >({
+    query: `
+      query QuestionRequest($requestId: ID!) {
+        questionRequest(id: $requestId) {
+          ${questionRequestFields}
+        }
+      }
+    `,
+    variables: { requestId },
+  });
+  return normalizeQuestionRequest(data.questionRequest);
+}
+
 export async function submitQuestionRequest(requestId: string, answers: QuestionAnswerInput[]) {
   const data = await graphqlFetch<
     { submitQuestionRequest: GraphQLQuestionRequest },

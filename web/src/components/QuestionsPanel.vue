@@ -6,7 +6,7 @@
 
     <q-card-section v-if="questions.length === 0" class="empty-state">
       <q-icon name="task_alt" size="32px" color="positive" />
-      <div class="text-body2">当前没有待回答问题</div>
+      <div class="text-body2">{{ readonly ? '没有可显示的问题' : '当前没有待回答问题' }}</div>
     </q-card-section>
 
     <template v-else>
@@ -71,19 +71,25 @@
             </div>
           </q-card>
 
-          <div class="text-body2 text-weight-bold q-mb-xs">选择答案</div>
+          <div class="text-body2 text-weight-bold q-mb-xs">
+            {{ readonly ? '用户回答' : '选择答案' }}
+          </div>
           <q-list class="option-list">
             <q-item
               v-for="option in question.options"
               :key="option.id"
               tag="label"
-              clickable
+              :clickable="!readonly"
               class="option-item"
+              :class="{
+                'option-item--selected': readonly && draftFor(question.id).choice === option.id,
+              }"
             >
               <q-item-section avatar>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"
                   :val="option.id"
+                  :disable="readonly"
                   @update:model-value="setChoice(question.id, String($event))"
                 />
               </q-item-section>
@@ -95,11 +101,16 @@
               </q-item-section>
             </q-item>
 
-            <q-item class="option-item option-item--custom">
+            <q-item
+              class="option-item option-item--custom"
+              v-if="!readonly || draftFor(question.id).choice === '__custom__'"
+              :class="{ 'option-item--selected': readonly }"
+            >
               <q-item-section avatar>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"
                   val="__custom__"
+                  :disable="readonly"
                   @update:model-value="setChoice(question.id, String($event))"
                 />
               </q-item-section>
@@ -111,9 +122,15 @@
                   autogrow
                   class="custom-answer-input"
                   placeholder="输入自定义答案"
-                  :disable="drafts[question.id]?.choice !== '__custom__'"
+                  :disable="readonly || drafts[question.id]?.choice !== '__custom__'"
                   @update:model-value="setCustomAnswer(question.id, String($event ?? ''))"
                 />
+              </q-item-section>
+            </q-item>
+
+            <q-item v-if="readonly && !draftFor(question.id).choice" class="option-item">
+              <q-item-section>
+                <q-item-label class="text-muted">未回答</q-item-label>
               </q-item-section>
             </q-item>
           </q-list>
@@ -121,8 +138,8 @@
       </q-tab-panels>
     </template>
 
-    <q-separator />
-    <q-card-actions class="questions-panel__actions">
+    <q-separator v-if="!readonly" />
+    <q-card-actions v-if="!readonly" class="questions-panel__actions">
       <q-btn
         unelevated
         color="primary"
@@ -186,11 +203,15 @@ import type {
   QuestionRequest,
 } from '@/services/sessions';
 
-const props = defineProps<{
-  requests: QuestionRequest[];
-  loading?: boolean;
-  submitting?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    requests: QuestionRequest[];
+    loading?: boolean;
+    submitting?: boolean;
+    readonly?: boolean;
+  }>(),
+  { readonly: true },
+);
 
 const emit = defineEmits<{
   submit: [requestId: string, answers: QuestionAnswerInput[]];
@@ -209,8 +230,10 @@ const annotationToolbarVisible = computed(() =>
   supportsPreviewAnnotations(selectedFile.value?.previewKind),
 );
 const hoveredFileId = ref('');
-const currentRequest = computed(
-  () => props.requests.find((request) => request.status === 'pending') ?? null,
+const currentRequest = computed(() =>
+  props.readonly
+    ? (props.requests[0] ?? null)
+    : (props.requests.find((request) => request.status === 'pending') ?? null),
 );
 const questions = computed<AgentQuestion[]>(() => currentRequest.value?.questions ?? []);
 const canSubmit = computed(() => questions.value.every(hasValidDraft));
@@ -220,7 +243,9 @@ watch(
   () => {
     const nextDrafts: Record<string, DraftAnswer> = {};
     for (const question of questions.value) {
-      nextDrafts[question.id] = drafts.value[question.id] ?? { choice: '', customAnswer: '' };
+      nextDrafts[question.id] = props.readonly
+        ? answerFromQuestion(question)
+        : (drafts.value[question.id] ?? { choice: '', customAnswer: '' });
     }
     drafts.value = nextDrafts;
     activeQuestionId.value = questions.value[0]?.id ?? '';
@@ -229,6 +254,7 @@ watch(
 );
 
 function setChoice(questionId: string, choice: string) {
+  if (props.readonly) return;
   drafts.value[questionId] = {
     ...draftFor(questionId),
     choice,
@@ -245,6 +271,7 @@ function setChoice(questionId: string, choice: string) {
 }
 
 function setCustomAnswer(questionId: string, customAnswer: string) {
+  if (props.readonly) return;
   drafts.value[questionId] = {
     ...draftFor(questionId),
     customAnswer,
@@ -253,6 +280,13 @@ function setCustomAnswer(questionId: string, customAnswer: string) {
 
 function draftFor(questionId: string): DraftAnswer {
   return drafts.value[questionId] ?? { choice: '', customAnswer: '' };
+}
+
+function answerFromQuestion(question: AgentQuestion): DraftAnswer {
+  return {
+    choice: question.selectedOptionId || (question.customAnswer ? '__custom__' : ''),
+    customAnswer: question.customAnswer,
+  };
 }
 
 function hasValidDraft(question: AgentQuestion): boolean {
@@ -282,6 +316,7 @@ function closeFilePreview() {
 }
 
 function submit() {
+  if (props.readonly) return;
   const request = currentRequest.value;
   if (!request || !canSubmit.value) return;
   const answers = questions.value.map((question) => {
@@ -472,6 +507,11 @@ function submit() {
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
   background: var(--ac-surface);
+}
+
+.option-item--selected {
+  border-color: color-mix(in srgb, var(--q-primary) 55%, var(--ac-border));
+  background: color-mix(in srgb, var(--q-primary) 8%, var(--ac-surface));
 }
 
 .custom-answer-input {

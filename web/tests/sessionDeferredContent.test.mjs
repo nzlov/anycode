@@ -28,7 +28,12 @@ test('large transcript bodies load only from expandable event controls', () => {
   ]) {
     const source = read(`src/components/${component}`);
     assert.match(source, /useDeferredTranscriptEvent/);
-    assert.match(source, /if \(expanded\.value\) void load\(\)/);
+    assert.match(
+      source,
+      component === 'SessionToolEvent.vue'
+        ? /if \(!expanded\.value\) return;[\s\S]*await load\(\)/
+        : /if \(expanded\.value\) void load\(\)/,
+    );
   }
   const message = read('src/components/SessionTextMessage.vue');
   assert.match(message, /event\.deferred && resolvedEvent\.deferred/);

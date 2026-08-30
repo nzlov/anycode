@@ -83,6 +83,7 @@
                 :requests="pendingQuestionRequests"
                 :loading="questionsLoading"
                 :submitting="questionsSubmitting"
+                :readonly="false"
                 @submit="submitAnswers"
               />
             </q-card>
