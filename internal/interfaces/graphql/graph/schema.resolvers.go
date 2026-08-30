@@ -54,6 +54,18 @@ func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input mode
 	return mapGeneralSettings(dto), nil
 }
 
+// UpdateCodexSettings is the resolver for the updateCodexSettings field.
+func (r *mutationResolver) UpdateCodexSettings(ctx context.Context, input model.UpdateCodexSettingsInput) (*model.CodexSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.UpdateCodexSettings(ctx, settingapp.UpdateCodexSettingsInput{ContextWindow: input.ContextWindow})
+	if err != nil {
+		return nil, err
+	}
+	return mapCodexSettings(dto), nil
+}
+
 // UpdateAppearanceSettings is the resolver for the updateAppearanceSettings field.
 func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error) {
 	if r.UseCases.Settings == nil {
@@ -771,6 +783,18 @@ func (r *queryResolver) GeneralSettings(ctx context.Context) (*model.GeneralSett
 		return nil, err
 	}
 	return mapGeneralSettings(dto), nil
+}
+
+// CodexSettings is the resolver for the codexSettings field.
+func (r *queryResolver) CodexSettings(ctx context.Context) (*model.CodexSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.GetCodexSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapCodexSettings(dto), nil
 }
 
 // AppearanceSettings is the resolver for the appearanceSettings field.

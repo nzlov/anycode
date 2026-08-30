@@ -732,68 +732,72 @@ func init() {
 	systemconfiguration.DefaultSendShortcut = systemconfigurationDescSendShortcut.Default.(string)
 	// systemconfiguration.SendShortcutValidator is a validator for the "send_shortcut" field. It is called by the builders before save.
 	systemconfiguration.SendShortcutValidator = systemconfigurationDescSendShortcut.Validators[0].(func(string) error)
+	// systemconfigurationDescCodexContextWindow is the schema descriptor for codex_context_window field.
+	systemconfigurationDescCodexContextWindow := systemconfigurationFields[4].Descriptor()
+	// systemconfiguration.DefaultCodexContextWindow holds the default value on creation for the codex_context_window field.
+	systemconfiguration.DefaultCodexContextWindow = systemconfigurationDescCodexContextWindow.Default.(int)
 	// systemconfigurationDescMindMapEnabled is the schema descriptor for mind_map_enabled field.
-	systemconfigurationDescMindMapEnabled := systemconfigurationFields[4].Descriptor()
+	systemconfigurationDescMindMapEnabled := systemconfigurationFields[5].Descriptor()
 	// systemconfiguration.DefaultMindMapEnabled holds the default value on creation for the mind_map_enabled field.
 	systemconfiguration.DefaultMindMapEnabled = systemconfigurationDescMindMapEnabled.Default.(bool)
 	// systemconfigurationDescMindMapMode is the schema descriptor for mind_map_mode field.
-	systemconfigurationDescMindMapMode := systemconfigurationFields[5].Descriptor()
+	systemconfigurationDescMindMapMode := systemconfigurationFields[6].Descriptor()
 	// systemconfiguration.DefaultMindMapMode holds the default value on creation for the mind_map_mode field.
 	systemconfiguration.DefaultMindMapMode = systemconfigurationDescMindMapMode.Default.(string)
 	// systemconfiguration.MindMapModeValidator is a validator for the "mind_map_mode" field. It is called by the builders before save.
 	systemconfiguration.MindMapModeValidator = systemconfigurationDescMindMapMode.Validators[0].(func(string) error)
 	// systemconfigurationDescMindMapLayout is the schema descriptor for mind_map_layout field.
-	systemconfigurationDescMindMapLayout := systemconfigurationFields[6].Descriptor()
+	systemconfigurationDescMindMapLayout := systemconfigurationFields[7].Descriptor()
 	// systemconfiguration.DefaultMindMapLayout holds the default value on creation for the mind_map_layout field.
 	systemconfiguration.DefaultMindMapLayout = systemconfigurationDescMindMapLayout.Default.(string)
 	// systemconfiguration.MindMapLayoutValidator is a validator for the "mind_map_layout" field. It is called by the builders before save.
 	systemconfiguration.MindMapLayoutValidator = systemconfigurationDescMindMapLayout.Validators[0].(func(string) error)
 	// systemconfigurationDescMindMapModel is the schema descriptor for mind_map_model field.
-	systemconfigurationDescMindMapModel := systemconfigurationFields[7].Descriptor()
+	systemconfigurationDescMindMapModel := systemconfigurationFields[8].Descriptor()
 	// systemconfiguration.DefaultMindMapModel holds the default value on creation for the mind_map_model field.
 	systemconfiguration.DefaultMindMapModel = systemconfigurationDescMindMapModel.Default.(string)
 	// systemconfigurationDescMindMapReasoningEffort is the schema descriptor for mind_map_reasoning_effort field.
-	systemconfigurationDescMindMapReasoningEffort := systemconfigurationFields[8].Descriptor()
+	systemconfigurationDescMindMapReasoningEffort := systemconfigurationFields[9].Descriptor()
 	// systemconfiguration.DefaultMindMapReasoningEffort holds the default value on creation for the mind_map_reasoning_effort field.
 	systemconfiguration.DefaultMindMapReasoningEffort = systemconfigurationDescMindMapReasoningEffort.Default.(string)
 	// systemconfigurationDescMindMapMaxConcurrent is the schema descriptor for mind_map_max_concurrent field.
-	systemconfigurationDescMindMapMaxConcurrent := systemconfigurationFields[9].Descriptor()
+	systemconfigurationDescMindMapMaxConcurrent := systemconfigurationFields[10].Descriptor()
 	// systemconfiguration.DefaultMindMapMaxConcurrent holds the default value on creation for the mind_map_max_concurrent field.
 	systemconfiguration.DefaultMindMapMaxConcurrent = systemconfigurationDescMindMapMaxConcurrent.Default.(int)
 	// systemconfigurationDescWallpaperColorScheme is the schema descriptor for wallpaper_color_scheme field.
-	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[10].Descriptor()
+	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[11].Descriptor()
 	// systemconfiguration.WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	systemconfiguration.WallpaperColorSchemeValidator = systemconfigurationDescWallpaperColorScheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundType is the schema descriptor for background_type field.
-	systemconfigurationDescBackgroundType := systemconfigurationFields[11].Descriptor()
+	systemconfigurationDescBackgroundType := systemconfigurationFields[12].Descriptor()
 	// systemconfiguration.DefaultBackgroundType holds the default value on creation for the background_type field.
 	systemconfiguration.DefaultBackgroundType = systemconfigurationDescBackgroundType.Default.(string)
 	// systemconfiguration.BackgroundTypeValidator is a validator for the "background_type" field. It is called by the builders before save.
 	systemconfiguration.BackgroundTypeValidator = systemconfigurationDescBackgroundType.Validators[0].(func(string) error)
 	// systemconfigurationDescSolidTheme is the schema descriptor for solid_theme field.
-	systemconfigurationDescSolidTheme := systemconfigurationFields[12].Descriptor()
+	systemconfigurationDescSolidTheme := systemconfigurationFields[13].Descriptor()
 	// systemconfiguration.DefaultSolidTheme holds the default value on creation for the solid_theme field.
 	systemconfiguration.DefaultSolidTheme = systemconfigurationDescSolidTheme.Default.(string)
 	// systemconfiguration.SolidThemeValidator is a validator for the "solid_theme" field. It is called by the builders before save.
 	systemconfiguration.SolidThemeValidator = systemconfigurationDescSolidTheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundMask is the schema descriptor for background_mask field.
-	systemconfigurationDescBackgroundMask := systemconfigurationFields[13].Descriptor()
+	systemconfigurationDescBackgroundMask := systemconfigurationFields[14].Descriptor()
 	// systemconfiguration.DefaultBackgroundMask holds the default value on creation for the background_mask field.
 	systemconfiguration.DefaultBackgroundMask = systemconfigurationDescBackgroundMask.Default.(int)
 	// systemconfigurationDescWallpaperID is the schema descriptor for wallpaper_id field.
-	systemconfigurationDescWallpaperID := systemconfigurationFields[14].Descriptor()
+	systemconfigurationDescWallpaperID := systemconfigurationFields[15].Descriptor()
 	// systemconfiguration.DefaultWallpaperID holds the default value on creation for the wallpaper_id field.
 	systemconfiguration.DefaultWallpaperID = systemconfigurationDescWallpaperID.Default.(string)
 	// systemconfigurationDescWallpaperFilename is the schema descriptor for wallpaper_filename field.
-	systemconfigurationDescWallpaperFilename := systemconfigurationFields[15].Descriptor()
+	systemconfigurationDescWallpaperFilename := systemconfigurationFields[16].Descriptor()
 	// systemconfiguration.DefaultWallpaperFilename holds the default value on creation for the wallpaper_filename field.
 	systemconfiguration.DefaultWallpaperFilename = systemconfigurationDescWallpaperFilename.Default.(string)
 	// systemconfigurationDescWallpaperMimeType is the schema descriptor for wallpaper_mime_type field.
-	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[16].Descriptor()
+	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[17].Descriptor()
 	// systemconfiguration.DefaultWallpaperMimeType holds the default value on creation for the wallpaper_mime_type field.
 	systemconfiguration.DefaultWallpaperMimeType = systemconfigurationDescWallpaperMimeType.Default.(string)
 	// systemconfigurationDescUpdatedAt is the schema descriptor for updated_at field.
-	systemconfigurationDescUpdatedAt := systemconfigurationFields[17].Descriptor()
+	systemconfigurationDescUpdatedAt := systemconfigurationFields[18].Descriptor()
 	// systemconfiguration.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	systemconfiguration.DefaultUpdatedAt = systemconfigurationDescUpdatedAt.Default.(func() time.Time)
 	// systemconfiguration.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

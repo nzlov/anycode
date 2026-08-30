@@ -198,7 +198,12 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	attachments := store.Attachments()
 	artifacts := artifactapp.New(files, store.Sessions())
 	artifacts.SetLimits(artifactapp.Limits{MaxFileBytes: cfg.ArtifactMaxFileBytes, MaxSessionBytes: cfg.ArtifactMaxSessionBytes})
-	codex := codexcli.New(cfg.CodexBin, codexcli.WithObserver(codexMetricLogger{}))
+	settings := store.Settings()
+	systemConfiguration, err := settings.GetSystemConfiguration(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("load Codex system configuration: %w", err)
+	}
+	codex := codexcli.New(cfg.CodexBin, codexcli.WithObserver(codexMetricLogger{}), codexcli.WithContextWindow(systemConfiguration.Codex.ContextWindow))
 	capabilities, err := ensureCodexReady(context.Background(), codex)
 	if err != nil {
 		_ = codex.Close()
@@ -210,7 +215,6 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, timelineapp.WithHistory(events))
 	questions := store.Questions()
-	settings := store.Settings()
 	questionService := questionapp.New(questions, questionapp.WithObserver(questionMetricLogger{}))
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
@@ -239,6 +243,16 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
 	projectGit := gitcli.New("")
+	// GLUE: saving a global Codex setting crosses the setting, session, and process-runtime boundaries;
+	// remove this callback when application-level setting changes use a shared command bus.
+	applyCodexContextWindow := func(ctx context.Context, contextWindow int) error {
+		if _, err := sessionService.PrepareCodexRuntimeRestart(ctx); err != nil {
+			return err
+		}
+		restartErr := codex.Restart(contextWindow)
+		sessionService.ScheduleQueueDrain()
+		return restartErr
+	}
 	useCases := graph.UseCases{
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
@@ -255,7 +269,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		Statistics:       statisticsapp.New(store.Statistics()),
 		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
-		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule)),
+		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule), settingapp.WithCodexSettingsChanged(applyCodexContextWindow)),
 		Tunnels:      tunnelService,
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,

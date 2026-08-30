@@ -18301,6 +18301,8 @@ type SystemConfigurationMutation struct {
 	agent_writable_roots       *[]string
 	appendagent_writable_roots []string
 	send_shortcut              *string
+	codex_context_window       *int
+	addcodex_context_window    *int
 	mind_map_enabled           *bool
 	mind_map_mode              *string
 	mind_map_layout            *string
@@ -18568,6 +18570,62 @@ func (m *SystemConfigurationMutation) OldSendShortcut(ctx context.Context) (v st
 // ResetSendShortcut resets all changes to the "send_shortcut" field.
 func (m *SystemConfigurationMutation) ResetSendShortcut() {
 	m.send_shortcut = nil
+}
+
+// SetCodexContextWindow sets the "codex_context_window" field.
+func (m *SystemConfigurationMutation) SetCodexContextWindow(i int) {
+	m.codex_context_window = &i
+	m.addcodex_context_window = nil
+}
+
+// CodexContextWindow returns the value of the "codex_context_window" field in the mutation.
+func (m *SystemConfigurationMutation) CodexContextWindow() (r int, exists bool) {
+	v := m.codex_context_window
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexContextWindow returns the old "codex_context_window" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldCodexContextWindow(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexContextWindow is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexContextWindow requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexContextWindow: %w", err)
+	}
+	return oldValue.CodexContextWindow, nil
+}
+
+// AddCodexContextWindow adds i to the "codex_context_window" field.
+func (m *SystemConfigurationMutation) AddCodexContextWindow(i int) {
+	if m.addcodex_context_window != nil {
+		*m.addcodex_context_window += i
+	} else {
+		m.addcodex_context_window = &i
+	}
+}
+
+// AddedCodexContextWindow returns the value that was added to the "codex_context_window" field in this mutation.
+func (m *SystemConfigurationMutation) AddedCodexContextWindow() (r int, exists bool) {
+	v := m.addcodex_context_window
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCodexContextWindow resets all changes to the "codex_context_window" field.
+func (m *SystemConfigurationMutation) ResetCodexContextWindow() {
+	m.codex_context_window = nil
+	m.addcodex_context_window = nil
 }
 
 // SetMindMapEnabled sets the "mind_map_enabled" field.
@@ -19148,7 +19206,7 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
@@ -19157,6 +19215,9 @@ func (m *SystemConfigurationMutation) Fields() []string {
 	}
 	if m.send_shortcut != nil {
 		fields = append(fields, systemconfiguration.FieldSendShortcut)
+	}
+	if m.codex_context_window != nil {
+		fields = append(fields, systemconfiguration.FieldCodexContextWindow)
 	}
 	if m.mind_map_enabled != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapEnabled)
@@ -19214,6 +19275,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 		return m.AgentWritableRoots()
 	case systemconfiguration.FieldSendShortcut:
 		return m.SendShortcut()
+	case systemconfiguration.FieldCodexContextWindow:
+		return m.CodexContextWindow()
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.MindMapEnabled()
 	case systemconfiguration.FieldMindMapMode:
@@ -19257,6 +19320,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 		return m.OldAgentWritableRoots(ctx)
 	case systemconfiguration.FieldSendShortcut:
 		return m.OldSendShortcut(ctx)
+	case systemconfiguration.FieldCodexContextWindow:
+		return m.OldCodexContextWindow(ctx)
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.OldMindMapEnabled(ctx)
 	case systemconfiguration.FieldMindMapMode:
@@ -19314,6 +19379,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSendShortcut(v)
+		return nil
+	case systemconfiguration.FieldCodexContextWindow:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexContextWindow(v)
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		v, ok := value.(bool)
@@ -19424,6 +19496,9 @@ func (m *SystemConfigurationMutation) AddedFields() []string {
 	if m.addagent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
+	if m.addcodex_context_window != nil {
+		fields = append(fields, systemconfiguration.FieldCodexContextWindow)
+	}
 	if m.addmind_map_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapMaxConcurrent)
 	}
@@ -19440,6 +19515,8 @@ func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) 
 	switch name {
 	case systemconfiguration.FieldAgentMaxConcurrent:
 		return m.AddedAgentMaxConcurrent()
+	case systemconfiguration.FieldCodexContextWindow:
+		return m.AddedCodexContextWindow()
 	case systemconfiguration.FieldMindMapMaxConcurrent:
 		return m.AddedMindMapMaxConcurrent()
 	case systemconfiguration.FieldBackgroundMask:
@@ -19459,6 +19536,13 @@ func (m *SystemConfigurationMutation) AddField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddAgentMaxConcurrent(v)
+		return nil
+	case systemconfiguration.FieldCodexContextWindow:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCodexContextWindow(v)
 		return nil
 	case systemconfiguration.FieldMindMapMaxConcurrent:
 		v, ok := value.(int)
@@ -19509,6 +19593,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 		return nil
 	case systemconfiguration.FieldSendShortcut:
 		m.ResetSendShortcut()
+		return nil
+	case systemconfiguration.FieldCodexContextWindow:
+		m.ResetCodexContextWindow()
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		m.ResetMindMapEnabled()

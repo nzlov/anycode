@@ -106,6 +106,10 @@ func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSetting
 	}
 }
 
+func mapCodexSettings(dto settingapp.CodexSettingsDTO) *model.CodexSettings {
+	return &model.CodexSettings{ContextWindow: dto.ContextWindow}
+}
+
 func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {
 	return &model.AppearanceSettings{
 		BackgroundType:       model.AppearanceBackgroundType(strings.ToUpper(string(dto.BackgroundType))),

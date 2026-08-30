@@ -19,6 +19,8 @@ const (
 	FieldAgentWritableRoots = "agent_writable_roots"
 	// FieldSendShortcut holds the string denoting the send_shortcut field in the database.
 	FieldSendShortcut = "send_shortcut"
+	// FieldCodexContextWindow holds the string denoting the codex_context_window field in the database.
+	FieldCodexContextWindow = "codex_context_window"
 	// FieldMindMapEnabled holds the string denoting the mind_map_enabled field in the database.
 	FieldMindMapEnabled = "mind_map_enabled"
 	// FieldMindMapMode holds the string denoting the mind_map_mode field in the database.
@@ -57,6 +59,7 @@ var Columns = []string{
 	FieldAgentMaxConcurrent,
 	FieldAgentWritableRoots,
 	FieldSendShortcut,
+	FieldCodexContextWindow,
 	FieldMindMapEnabled,
 	FieldMindMapMode,
 	FieldMindMapLayout,
@@ -92,6 +95,8 @@ var (
 	DefaultSendShortcut string
 	// SendShortcutValidator is a validator for the "send_shortcut" field. It is called by the builders before save.
 	SendShortcutValidator func(string) error
+	// DefaultCodexContextWindow holds the default value on creation for the "codex_context_window" field.
+	DefaultCodexContextWindow int
 	// DefaultMindMapEnabled holds the default value on creation for the "mind_map_enabled" field.
 	DefaultMindMapEnabled bool
 	// DefaultMindMapMode holds the default value on creation for the "mind_map_mode" field.
@@ -148,6 +153,11 @@ func ByAgentMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
 // BySendShortcut orders the results by the send_shortcut field.
 func BySendShortcut(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSendShortcut, opts...).ToFunc()
+}
+
+// ByCodexContextWindow orders the results by the codex_context_window field.
+func ByCodexContextWindow(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexContextWindow, opts...).ToFunc()
 }
 
 // ByMindMapEnabled orders the results by the mind_map_enabled field.

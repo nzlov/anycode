@@ -21,6 +21,15 @@ type testToolHandler struct {
 	calls chan process.DynamicToolCall
 }
 
+func TestAppServerArgsApplyOptionalContextWindow(t *testing.T) {
+	if got := appServerArgs(0); !slices.Equal(got, []string{"app-server", "--stdio"}) {
+		t.Fatalf("default app-server args = %#v", got)
+	}
+	if got := appServerArgs(200_000); !slices.Equal(got, []string{"-c", "model_context_window=200000", "app-server", "--stdio"}) {
+		t.Fatalf("configured app-server args = %#v", got)
+	}
+}
+
 func (h *testToolHandler) HandleDynamicTool(_ context.Context, call process.DynamicToolCall) (process.DynamicToolResult, error) {
 	h.calls <- call
 	return process.DynamicToolResult{Success: true, Content: []process.DynamicToolContent{{Type: "inputText", Text: `{"answer":"yes"}`}}}, nil

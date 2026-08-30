@@ -24,6 +24,8 @@ import (
 type UseCase interface {
 	GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, error)
 	UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error)
+	GetCodexSettings(ctx context.Context) (CodexSettingsDTO, error)
+	UpdateCodexSettings(ctx context.Context, input UpdateCodexSettingsInput) (CodexSettingsDTO, error)
 	GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error)
 	UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error)
 	UploadAppearanceWallpaper(ctx context.Context, input UploadAppearanceWallpaperInput) (AppearanceSettingsDTO, error)
@@ -57,6 +59,14 @@ type GeneralSettingsDTO struct {
 	MindMapModel           string
 	MindMapReasoningEffort string
 	MindMapMaxConcurrent   int
+}
+
+type UpdateCodexSettingsInput struct {
+	ContextWindow *int
+}
+
+type CodexSettingsDTO struct {
+	ContextWindow *int
 }
 
 type UpdateAppearanceSettingsInput struct {
@@ -124,6 +134,7 @@ type Service struct {
 	onConcurrencyLimitChanged func()
 	codexModels               []processdomain.CodexModel
 	onMindMapSettingsChanged  func()
+	onCodexSettingsChanged    func(context.Context, int) error
 }
 
 type Option func(*Service)
@@ -156,6 +167,12 @@ func WithMindMapSettings(models []processdomain.CodexModel, callback func()) Opt
 	return func(service *Service) {
 		service.codexModels = append([]processdomain.CodexModel(nil), models...)
 		service.onMindMapSettingsChanged = callback
+	}
+}
+
+func WithCodexSettingsChanged(callback func(context.Context, int) error) Option {
+	return func(service *Service) {
+		service.onCodexSettingsChanged = callback
 	}
 }
 
@@ -199,6 +216,55 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 		MindMapReasoningEffort: configuration.MindMap.ReasoningEffort,
 		MindMapMaxConcurrent:   configuration.MindMap.MaxConcurrent,
 	}, nil
+}
+
+func (s *Service) GetCodexSettings(ctx context.Context) (CodexSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return CodexSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get Codex settings failed").WithRetryable(true)
+	}
+	return codexSettingsDTO(configuration.Codex), nil
+}
+
+func (s *Service) UpdateCodexSettings(ctx context.Context, input UpdateCodexSettingsInput) (CodexSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return CodexSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	contextWindow := 0
+	if input.ContextWindow != nil {
+		contextWindow = *input.ContextWindow
+		if contextWindow <= 0 {
+			return CodexSettingsDTO{}, validationError("contextWindow", "Codex context window must be positive")
+		}
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get Codex settings failed").WithRetryable(true)
+	}
+	if configuration.Codex.ContextWindow == contextWindow {
+		return codexSettingsDTO(configuration.Codex), nil
+	}
+	configuration.Codex.ContextWindow = contextWindow
+	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
+		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update Codex settings failed").WithRetryable(true)
+	}
+	if s.onCodexSettingsChanged != nil {
+		if err := s.onCodexSettingsChanged(ctx, contextWindow); err != nil {
+			return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeCodexStartFailed, apperror.CategoryCodexError, "restart Codex sessions failed").WithRetryable(true)
+		}
+	}
+	return codexSettingsDTO(configuration.Codex), nil
+}
+
+func codexSettingsDTO(configuration domain.CodexConfiguration) CodexSettingsDTO {
+	if configuration.ContextWindow <= 0 {
+		return CodexSettingsDTO{}
+	}
+	contextWindow := configuration.ContextWindow
+	return CodexSettingsDTO{ContextWindow: &contextWindow}
 }
 
 func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error) {

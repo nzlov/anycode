@@ -95,6 +95,10 @@ type CodexReasoningEffortOption struct {
 	Description string `json:"description"`
 }
 
+type CodexSettings struct {
+	ContextWindow *int `json:"contextWindow,omitempty"`
+}
+
 type CodexSlashCommand struct {
 	Name           string `json:"name"`
 	Description    string `json:"description"`
@@ -1008,6 +1012,10 @@ type UpdateAppearanceSettingsInput struct {
 	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`
 	BackgroundMask       int                      `json:"backgroundMask"`
 	WallpaperColorScheme WallpaperColorScheme     `json:"wallpaperColorScheme"`
+}
+
+type UpdateCodexSettingsInput struct {
+	ContextWindow *int `json:"contextWindow,omitempty"`
 }
 
 type UpdateGeneralSettingsInput struct {

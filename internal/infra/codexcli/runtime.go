@@ -89,7 +89,7 @@ type appServerRun struct {
 }
 
 func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRuntime, error) {
-	cmd := exec.Command(client.Bin(), "app-server", "--stdio")
+	cmd := exec.Command(client.Bin(), appServerArgs(client.contextWindow)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	env := os.Environ()
 	if codexHome := client.CodexHome(); codexHome != "" {
@@ -130,6 +130,14 @@ func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRunti
 		return nil, fmt.Errorf("acknowledge codex app-server initialization: %w", err)
 	}
 	return runtime, nil
+}
+
+func appServerArgs(contextWindow int) []string {
+	args := []string{"app-server", "--stdio"}
+	if contextWindow > 0 {
+		args = append([]string{"-c", fmt.Sprintf("model_context_window=%d", contextWindow)}, args...)
+	}
+	return args
 }
 
 func (r *appServerRuntime) alive() bool {

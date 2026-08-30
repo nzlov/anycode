@@ -73,6 +73,10 @@ type ComplexityRoot struct {
 		Value       func(childComplexity int) int
 	}
 
+	CodexSettings struct {
+		ContextWindow func(childComplexity int) int
+	}
+
 	CodexSlashCommand struct {
 		AcceptsArgs    func(childComplexity int) int
 		Description    func(childComplexity int) int
@@ -275,6 +279,7 @@ type ComplexityRoot struct {
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
 		UnregisterPushSubscription  func(childComplexity int, id string) int
 		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
+		UpdateCodexSettings         func(childComplexity int, input model.UpdateCodexSettingsInput) int
 		UpdateGeneralSettings       func(childComplexity int, input model.UpdateGeneralSettingsInput) int
 		UpdateProjectMindMap        func(childComplexity int, input model.UpdateMindMapInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
@@ -374,6 +379,7 @@ type ComplexityRoot struct {
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
+		CodexSettings           func(childComplexity int) int
 		CodexSlashCommands      func(childComplexity int) int
 		GeneralSettings         func(childComplexity int) int
 		PendingQuestionRequests func(childComplexity int, sessionID string) int
@@ -885,6 +891,7 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	UpdateGeneralSettings(ctx context.Context, input model.UpdateGeneralSettingsInput) (*model.GeneralSettings, error)
+	UpdateCodexSettings(ctx context.Context, input model.UpdateCodexSettingsInput) (*model.CodexSettings, error)
 	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
 	UploadAppearanceWallpaper(ctx context.Context, file graphql.Upload) (*model.AppearanceSettings, error)
 	UpdateWebPushProxy(ctx context.Context, proxyURL string) (*model.WebPushConfig, error)
@@ -934,6 +941,7 @@ type QueryResolver interface {
 	CodexSlashCommands(ctx context.Context) ([]*model.CodexSlashCommand, error)
 	PromptFileMatches(ctx context.Context, input model.PromptFileMatchInput) ([]*model.PromptFileMatch, error)
 	GeneralSettings(ctx context.Context) (*model.GeneralSettings, error)
+	CodexSettings(ctx context.Context) (*model.CodexSettings, error)
 	AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error)
 	WebPushConfig(ctx context.Context) (*model.WebPushConfig, error)
 	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
@@ -1112,6 +1120,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CodexReasoningEffortOption.Value(childComplexity), true
+
+	case "CodexSettings.contextWindow":
+		if e.ComplexityRoot.CodexSettings.ContextWindow == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSettings.ContextWindow(childComplexity), true
 
 	case "CodexSlashCommand.acceptsArgs":
 		if e.ComplexityRoot.CodexSlashCommand.AcceptsArgs == nil {
@@ -2108,6 +2123,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateAppearanceSettings(childComplexity, args["input"].(model.UpdateAppearanceSettingsInput)), true
+	case "Mutation.updateCodexSettings":
+		if e.ComplexityRoot.Mutation.UpdateCodexSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateCodexSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateCodexSettings(childComplexity, args["input"].(model.UpdateCodexSettingsInput)), true
 	case "Mutation.updateGeneralSettings":
 		if e.ComplexityRoot.Mutation.UpdateGeneralSettings == nil {
 			break
@@ -2565,6 +2591,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.CodexModelOptions(childComplexity), true
+	case "Query.codexSettings":
+		if e.ComplexityRoot.Query.CodexSettings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.CodexSettings(childComplexity), true
 	case "Query.codexSlashCommands":
 		if e.ComplexityRoot.Query.CodexSlashCommands == nil {
 			break
@@ -4785,6 +4817,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
+		ec.unmarshalInputUpdateCodexSettingsInput,
 		ec.unmarshalInputUpdateGeneralSettingsInput,
 		ec.unmarshalInputUpdateMindMapInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
@@ -4900,6 +4933,7 @@ type Query {
   codexSlashCommands: [CodexSlashCommand!]!
   promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
   generalSettings: GeneralSettings!
+  codexSettings: CodexSettings!
   appearanceSettings: AppearanceSettings!
   webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
@@ -4978,6 +5012,7 @@ input PromptFileMatchInput {
 
 type Mutation {
   updateGeneralSettings(input: UpdateGeneralSettingsInput!): GeneralSettings!
+  updateCodexSettings(input: UpdateCodexSettingsInput!): CodexSettings!
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
   uploadAppearanceWallpaper(file: Upload!): AppearanceSettings!
   updateWebPushProxy(proxyUrl: String!): WebPushConfig!
@@ -5130,6 +5165,14 @@ input UpdateGeneralSettingsInput {
   mindMapModel: String!
   mindMapReasoningEffort: String!
   mindMapMaxConcurrent: Int!
+}
+
+type CodexSettings {
+  contextWindow: Int
+}
+
+input UpdateCodexSettingsInput {
+  contextWindow: Int
 }
 
 type AppearanceSettings {
@@ -6596,6 +6639,17 @@ func (ec *executionContext) field_Mutation_updateAppearanceSettings_args(ctx con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateCodexSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCodexSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateCodexSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateGeneralSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7644,6 +7698,35 @@ func (ec *executionContext) fieldContext_CodexReasoningEffortOption_description(
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSettings_contextWindow(ctx context.Context, field graphql.CollectedField, obj *model.CodexSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSettings_contextWindow,
+		func(ctx context.Context) (any, error) {
+			return obj.ContextWindow, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSettings_contextWindow(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10614,6 +10697,51 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateGeneralSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateCodexSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateCodexSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateCodexSettings(ctx, fc.Args["input"].(model.UpdateCodexSettingsInput))
+		},
+		nil,
+		ec.marshalNCodexSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateCodexSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "contextWindow":
+				return ec.fieldContext_CodexSettings_contextWindow(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexSettings", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateCodexSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -14940,6 +15068,39 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 				return ec.fieldContext_GeneralSettings_mindMapMaxConcurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_codexSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_codexSettings,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().CodexSettings(ctx)
+		},
+		nil,
+		ec.marshalNCodexSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_codexSettings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "contextWindow":
+				return ec.fieldContext_CodexSettings_contextWindow(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexSettings", field.Name)
 		},
 	}
 	return fc, nil
@@ -29870,6 +30031,36 @@ func (ec *executionContext) unmarshalInputUpdateAppearanceSettingsInput(ctx cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateCodexSettingsInput(ctx context.Context, obj any) (model.UpdateCodexSettingsInput, error) {
+	var it model.UpdateCodexSettingsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"contextWindow"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "contextWindow":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextWindow"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContextWindow = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context.Context, obj any) (model.UpdateGeneralSettingsInput, error) {
 	var it model.UpdateGeneralSettingsInput
 	if obj == nil {
@@ -30818,6 +31009,42 @@ func (ec *executionContext) _CodexReasoningEffortOption(ctx context.Context, sel
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexSettingsImplementors = []string{"CodexSettings"}
+
+func (ec *executionContext) _CodexSettings(ctx context.Context, sel ast.SelectionSet, obj *model.CodexSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexSettings")
+		case "contextWindow":
+			out.Values[i] = ec._CodexSettings_contextWindow(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -32108,6 +32335,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateCodexSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateCodexSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateAppearanceSettings":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateAppearanceSettings(ctx, field)
@@ -33092,6 +33326,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_generalSettings(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "codexSettings":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_codexSettings(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -37523,6 +37779,20 @@ func (ec *executionContext) marshalNCodexReasoningEffortOption2ᚖgithubᚗcom�
 	return ec._CodexReasoningEffortOption(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNCodexSettings2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSettings(ctx context.Context, sel ast.SelectionSet, v model.CodexSettings) graphql.Marshaler {
+	return ec._CodexSettings(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCodexSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSettings(ctx context.Context, sel ast.SelectionSet, v *model.CodexSettings) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexSettings(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNCodexSlashCommand2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSlashCommandᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CodexSlashCommand) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -39294,6 +39564,11 @@ func (ec *executionContext) marshalNTunnelCountEvent2ᚖgithubᚗcomᚋnzlovᚋa
 
 func (ec *executionContext) unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput(ctx context.Context, v any) (model.UpdateAppearanceSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateAppearanceSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateCodexSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateCodexSettingsInput(ctx context.Context, v any) (model.UpdateCodexSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateCodexSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

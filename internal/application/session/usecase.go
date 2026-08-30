@@ -981,6 +981,7 @@ func (s *Service) maxConcurrentAgentsFor(ctx context.Context) (int, error) {
 }
 
 const restartRecoveryPrompt = "Continue the interrupted task after the AnyCode service restart. Inspect the current state before changing files, preserve completed work, and continue from the same task."
+const codexConfigurationRestartPrompt = "Continue the interrupted task after the Codex context configuration changed. Inspect the current state before changing files, preserve completed work, and continue from the same task."
 
 func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 	if s == nil {
@@ -1020,13 +1021,48 @@ func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 			}
 		}
 		if err := s.withSessionLock(ctx, interrupted.ID, func(ctx context.Context) error {
-			return s.recoverInterruptedSession(ctx, interrupted.ID, activeSnapshot)
+			return s.recoverInterruptedSession(ctx, interrupted.ID, activeSnapshot, restartRecoveryPrompt)
 		}); err != nil {
 			return recovered, fmt.Errorf("recover interrupted session %s: %w", interrupted.ID, err)
 		}
 		recovered++
 	}
 	return recovered, nil
+}
+
+// PrepareCodexRuntimeRestart moves active Codex-backed cards to their durable recovery states
+// before the shared App Server is replaced. It deliberately excludes terminal cards.
+func (s *Service) PrepareCodexRuntimeRestart(ctx context.Context) (int, error) {
+	if s == nil {
+		return 0, errors.New("session usecase: nil service")
+	}
+	sessions, err := s.repo.ListInterruptedWithCodexSession(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list Codex sessions for runtime restart: %w", err)
+	}
+	prepared := 0
+	for _, interrupted := range sessions {
+		if interrupted.Mode == domain.ModeTerminal {
+			continue
+		}
+		var activeSnapshot *processdomain.Run
+		if s.processes != nil {
+			active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(interrupted.ID))
+			if err != nil {
+				return prepared, fmt.Errorf("snapshot Codex process for session %s: %w", interrupted.ID, err)
+			}
+			if found {
+				activeSnapshot = &active
+			}
+		}
+		if err := s.withSessionLock(ctx, interrupted.ID, func(ctx context.Context) error {
+			return s.recoverInterruptedSession(ctx, interrupted.ID, activeSnapshot, codexConfigurationRestartPrompt)
+		}); err != nil {
+			return prepared, fmt.Errorf("prepare Codex runtime restart for session %s: %w", interrupted.ID, err)
+		}
+		prepared++
+	}
+	return prepared, nil
 }
 
 func (s *Service) recoverAllPendingSystemAdvances(ctx context.Context) (map[domain.ID]bool, error) {
@@ -1077,7 +1113,7 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 	return s.RecoverInterruptedSessions(ctx)
 }
 
-func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domain.ID, activeSnapshot *processdomain.Run) error {
+func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domain.ID, activeSnapshot *processdomain.Run, recoveryPrompt string) error {
 	session, err := s.repo.Find(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("find interrupted session: %w", err)
@@ -1155,7 +1191,7 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 		if strings.TrimSpace(session.CodexSessionID) == "" {
 			return s.persistInterruptedRecoveryFailureWithRun(ctx, session, interruptedRun, "service_restarted_without_codex_session_id", "interrupted session has no Codex session id")
 		}
-		return s.queueInterruptedSessionResume(ctx, session, interruptedRun)
+		return s.queueInterruptedSessionResume(ctx, session, interruptedRun, recoveryPrompt)
 	case domain.StatusWaitingUser:
 		return s.recoverWaitingUserSession(ctx, session, interruptedRun)
 	}
@@ -1221,8 +1257,8 @@ func (s *Service) persistInterruptedRecoveryFailureWithRun(ctx context.Context, 
 	return nil
 }
 
-func (s *Service) queueInterruptedSessionResume(ctx context.Context, session domain.Session, run *processdomain.Run) error {
-	options, err := s.recoveryCodexOptions(ctx, session, restartRecoveryPrompt)
+func (s *Service) queueInterruptedSessionResume(ctx context.Context, session domain.Session, run *processdomain.Run, recoveryPrompt string) error {
+	options, err := s.recoveryCodexOptions(ctx, session, recoveryPrompt)
 	if err != nil {
 		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "recovery_prepare_failed", err.Error())
 	}

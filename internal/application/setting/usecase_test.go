@@ -143,6 +143,35 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 
+func TestCodexSettingsSaveAppliesChangedContextWindow(t *testing.T) {
+	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
+	applied := []int{}
+	service := New(repo, WithCodexSettingsChanged(func(_ context.Context, contextWindow int) error {
+		applied = append(applied, contextWindow)
+		return nil
+	}))
+
+	got, err := service.GetCodexSettings(context.Background())
+	if err != nil || got.ContextWindow != nil {
+		t.Fatalf("GetCodexSettings() = %#v, %v", got, err)
+	}
+	contextWindow := 200_000
+	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow})
+	if err != nil || got.ContextWindow == nil || *got.ContextWindow != contextWindow || repo.configuration.Codex.ContextWindow != contextWindow || !slices.Equal(applied, []int{contextWindow}) {
+		t.Fatalf("UpdateCodexSettings() = %#v, %v; stored=%#v applied=%#v", got, err, repo.configuration.Codex, applied)
+	}
+	if _, err := service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow}); err != nil || len(applied) != 1 {
+		t.Fatalf("unchanged UpdateCodexSettings() error = %v, applied=%#v", err, applied)
+	}
+	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{})
+	if err != nil || got.ContextWindow != nil || repo.configuration.Codex.ContextWindow != 0 || !slices.Equal(applied, []int{contextWindow, 0}) {
+		t.Fatalf("default UpdateCodexSettings() = %#v, %v; stored=%#v applied=%#v", got, err, repo.configuration.Codex, applied)
+	}
+	invalid := 0
+	_, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &invalid})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+}
+
 func TestAsyncMindMapSettingsRequireAvailableModelAndReasoningEffort(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
 	changed := 0

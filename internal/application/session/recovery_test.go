@@ -71,6 +71,51 @@ func TestRecoverInterruptedSessionsQueuesResumeAndSettlesStopping(t *testing.T) 
 	}
 }
 
+func TestPrepareCodexRuntimeRestartQueuesActiveCardsAndSkipsTerminals(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	running := domain.Session{
+		ID: "running", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+		CodexSessionID: "codex-running", WorktreePath: "/workspace/running",
+	}
+	stopping := domain.Session{
+		ID: "stopping", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusStopping,
+		CodexSessionID: "codex-stopping", WorktreePath: "/workspace/stopping",
+	}
+	terminal := domain.Session{
+		ID: "terminal", ProjectID: "project-1", Mode: domain.ModeTerminal, Status: domain.StatusRunning,
+		CodexSessionID: "codex-terminal",
+	}
+	for _, item := range []domain.Session{running, stopping, terminal} {
+		repo.sessions[item.ID] = item
+	}
+	repo.interruptedSessions = []domain.Session{running, stopping, terminal}
+	processes := newFakeProcessRepository()
+	processes.activeBySession = map[processdomain.SessionID]processdomain.Run{
+		"running":  {ID: "process-running", SessionID: "running", Status: processdomain.StatusRunning},
+		"stopping": {ID: "process-stopping", SessionID: "stopping", Status: processdomain.StatusStopping},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+
+	count, err := service.PrepareCodexRuntimeRestart(ctx)
+	if err != nil {
+		t.Fatalf("PrepareCodexRuntimeRestart() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("prepared count = %d", count)
+	}
+	if got := repo.sessions["running"]; got.Status != domain.StatusQueued || got.Queue.Kind != domain.QueueKindResume || got.Queue.ResumeCodexSessionID != "codex-running" || !strings.Contains(got.Queue.Prompt, "context configuration changed") {
+		t.Fatalf("running session = %#v", got)
+	}
+	if got := repo.sessions["stopping"].Status; got != domain.StatusStopped {
+		t.Fatalf("stopping status = %q", got)
+	}
+	if got := repo.sessions["terminal"].Status; got != domain.StatusRunning {
+		t.Fatalf("terminal status = %q", got)
+	}
+}
+
 func TestRecoverInterruptedSessionCommitsRunQueueAndEventInOneTransaction(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

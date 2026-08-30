@@ -92,6 +92,10 @@ type MindMapConfiguration struct {
 	MaxConcurrent   int
 }
 
+type CodexConfiguration struct {
+	ContextWindow int
+}
+
 const (
 	SolidThemeVermilion SolidTheme = "vermilion"
 	SolidThemeAmber     SolidTheme = "amber"
@@ -152,6 +156,7 @@ type SystemConfiguration struct {
 	AgentMaxConcurrent   int
 	AgentWritableRoots   []string
 	SendShortcut         SendShortcut
+	Codex                CodexConfiguration
 	MindMap              MindMapConfiguration
 	BackgroundType       BackgroundType
 	SolidTheme           SolidTheme

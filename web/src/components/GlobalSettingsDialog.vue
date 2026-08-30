@@ -17,6 +17,7 @@
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
         <q-tab name="general" icon="tune" label="常规" />
+        <q-tab name="codex" icon="memory" label="Codex" />
         <q-tab name="writable_roots" icon="folder_open" label="白名单目录" />
         <q-tab name="appearance" icon="palette" label="外观" />
         <q-tab name="notifications" icon="notifications" label="通知" />
@@ -36,6 +37,17 @@
                 <q-icon name="tune" />
               </q-item-section>
               <q-item-section>常规</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'codex'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'codex'"
+            >
+              <q-item-section avatar>
+                <q-icon name="memory" />
+              </q-item-section>
+              <q-item-section>Codex</q-item-section>
             </q-item>
             <q-item
               clickable
@@ -289,6 +301,73 @@
                 </div>
               </q-slide-transition>
             </q-card>
+          </div>
+        </section>
+
+        <section v-else-if="activeSection === 'codex'" class="global-settings-panel">
+          <q-banner v-if="codexError" dense class="quick-command-error">
+            <template #avatar>
+              <q-icon name="error_outline" color="negative" />
+            </template>
+            {{ codexError }}
+            <template #action>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="重试加载 Codex 设置"
+                @click="refreshCodexSettings"
+              >
+                <q-tooltip>重试</q-tooltip>
+              </q-btn>
+            </template>
+          </q-banner>
+
+          <q-linear-progress v-if="codexLoading || codexSaving" indeterminate color="primary" />
+          <q-list bordered separator class="appearance-settings-list">
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="data_object" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>上下文长度</q-item-label>
+                <q-item-label caption
+                  >Codex 可用的上下文 Token 数；留空时跟随模型默认值</q-item-label
+                >
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-input
+                  v-model="codexContextWindowInput"
+                  outlined
+                  dense
+                  type="number"
+                  min="1"
+                  max="2147483647"
+                  step="1"
+                  clearable
+                  hide-bottom-space
+                  aria-label="Codex 上下文长度"
+                  :disable="codexLoading || codexSaving"
+                  :error="!codexContextWindowValid"
+                  error-message="请输入正整数，或留空跟随模型默认值"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <div class="row justify-end q-mt-md">
+            <q-btn
+              color="primary"
+              icon="save"
+              label="保存"
+              no-caps
+              :loading="codexSaving"
+              :disable="
+                codexLoading || codexSaving || !codexContextWindowValid || !codexSettingsChanged
+              "
+              @click="saveCodexSettings"
+            />
           </div>
         </section>
 
@@ -692,6 +771,11 @@ import {
   wallpaperColorSchemeOptions,
 } from '@/services/appearanceSettings';
 import {
+  getCodexSettings,
+  type CodexSettings,
+  updateCodexSettings,
+} from '@/services/codexSettings';
+import {
   defaultSendShortcut,
   getGeneralSettings,
   type GeneralSettings,
@@ -721,7 +805,7 @@ const emit = defineEmits<{
 const { thinkingPhrasesEnabled, thinkingPhraseStyle } = useSessionThinkingPhrases();
 const generalSettingsInvalidation = useGeneralSettingsInvalidation();
 const activeSection = ref<
-  'general' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
+  'general' | 'codex' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
 >('general');
 const defaultGeneral: GeneralSettings = {
   agentMaxConcurrent: 2,
@@ -755,6 +839,28 @@ const generalSaving = ref(false);
 const generalError = ref('');
 const generalSaveDebounceMs = 500;
 let generalSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const codexLoading = ref(false);
+const codexSaving = ref(false);
+const codexError = ref('');
+const codexContextWindowInput = ref<string | null>('');
+const persistedCodex = ref<CodexSettings>({ contextWindow: null });
+const parsedCodexContextWindow = computed(() => {
+  const input = (codexContextWindowInput.value ?? '').trim();
+  if (!input) return null;
+  return Number(input);
+});
+const codexContextWindowValid = computed(() => {
+  const contextWindow = parsedCodexContextWindow.value;
+  return (
+    contextWindow === null ||
+    (Number.isInteger(contextWindow) && contextWindow > 0 && contextWindow <= 2147483647)
+  );
+});
+const codexSettingsChanged = computed(
+  () =>
+    codexContextWindowValid.value &&
+    parsedCodexContextWindow.value !== persistedCodex.value.contextWindow,
+);
 const agentWritableRootsValid = computed(() =>
   agentWritableRoots.value.every((root) => root.startsWith('/') && root !== '/'),
 );
@@ -867,6 +973,37 @@ async function refreshGeneralSettings() {
     generalError.value = '无法加载常规设置';
   } finally {
     generalLoading.value = false;
+  }
+}
+
+async function refreshCodexSettings() {
+  codexLoading.value = true;
+  codexError.value = '';
+  try {
+    const settings = await getCodexSettings();
+    persistedCodex.value = settings;
+    codexContextWindowInput.value = settings.contextWindow?.toString() ?? '';
+  } catch {
+    codexError.value = '无法加载 Codex 设置';
+  } finally {
+    codexLoading.value = false;
+  }
+}
+
+async function saveCodexSettings() {
+  if (!codexContextWindowValid.value || !codexSettingsChanged.value) return;
+  codexSaving.value = true;
+  codexError.value = '';
+  try {
+    const settings = await updateCodexSettings({
+      contextWindow: parsedCodexContextWindow.value,
+    });
+    persistedCodex.value = settings;
+    codexContextWindowInput.value = settings.contextWindow?.toString() ?? '';
+  } catch {
+    codexError.value = '无法保存 Codex 设置或重启 Codex 会话';
+  } finally {
+    codexSaving.value = false;
   }
 }
 
@@ -1081,6 +1218,7 @@ onMounted(() => {
 });
 
 watch(activeSection, (section) => {
+  if (section === 'codex' && props.modelValue) void refreshCodexSettings();
   if (section === 'appearance' && props.modelValue) void refreshAppearance();
   if (section === 'notifications' && props.modelValue) void refreshNotifications();
 });
@@ -1116,6 +1254,7 @@ watch(
   (open) => {
     if (!open) return;
     if (activeSection.value === 'general') void refreshGeneralSettings();
+    if (activeSection.value === 'codex') void refreshCodexSettings();
     if (activeSection.value === 'writable_roots') void refreshGeneralSettings();
     if (activeSection.value === 'appearance') void refreshAppearance();
     if (activeSection.value === 'notifications') void refreshNotifications();

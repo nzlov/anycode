@@ -15,9 +15,10 @@ import (
 const defaultBin = "codex"
 
 type Client struct {
-	bin       string
-	codexHome string
-	observer  Observer
+	bin           string
+	codexHome     string
+	observer      Observer
+	contextWindow int
 
 	mu          sync.Mutex
 	runtime     *appServerRuntime
@@ -65,6 +66,14 @@ func WithCodexHome(path string) Option {
 
 func WithObserver(observer Observer) Option {
 	return func(c *Client) { c.observer = observer }
+}
+
+func WithContextWindow(contextWindow int) Option {
+	return func(c *Client) {
+		if contextWindow > 0 {
+			c.contextWindow = contextWindow
+		}
+	}
 }
 
 func New(bin string, options ...Option) *Client {
@@ -140,6 +149,25 @@ func (c *Client) Close() error {
 	c.mu.Lock()
 	runtime := c.runtime
 	c.runtime = nil
+	c.mu.Unlock()
+	if runtime == nil {
+		return nil
+	}
+	return runtime.close()
+}
+
+func (c *Client) Restart(contextWindow int) error {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	runtime := c.runtime
+	c.runtime = nil
+	if contextWindow > 0 {
+		c.contextWindow = contextWindow
+	} else {
+		c.contextWindow = 0
+	}
 	c.mu.Unlock()
 	if runtime == nil {
 		return nil

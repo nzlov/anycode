@@ -20,6 +20,7 @@ func (SystemConfiguration) Fields() []ent.Field {
 			Default([]string{}).
 			Annotations(entsql.DefaultExpr("'[]'")),
 		field.String("send_shortcut").NotEmpty().Default("shift_enter"),
+		field.Int("codex_context_window").Default(0),
 		field.Bool("mind_map_enabled").Default(false),
 		field.String("mind_map_mode").NotEmpty().Default("realtime"),
 		field.String("mind_map_layout").NotEmpty().Default("radial"),

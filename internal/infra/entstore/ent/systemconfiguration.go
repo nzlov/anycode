@@ -24,6 +24,8 @@ type SystemConfiguration struct {
 	AgentWritableRoots []string `json:"agent_writable_roots,omitempty"`
 	// SendShortcut holds the value of the "send_shortcut" field.
 	SendShortcut string `json:"send_shortcut,omitempty"`
+	// CodexContextWindow holds the value of the "codex_context_window" field.
+	CodexContextWindow int `json:"codex_context_window,omitempty"`
 	// MindMapEnabled holds the value of the "mind_map_enabled" field.
 	MindMapEnabled bool `json:"mind_map_enabled,omitempty"`
 	// MindMapMode holds the value of the "mind_map_mode" field.
@@ -64,7 +66,7 @@ func (*SystemConfiguration) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case systemconfiguration.FieldMindMapEnabled:
 			values[i] = new(sql.NullBool)
-		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldMindMapMaxConcurrent, systemconfiguration.FieldBackgroundMask:
+		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldCodexContextWindow, systemconfiguration.FieldMindMapMaxConcurrent, systemconfiguration.FieldBackgroundMask:
 			values[i] = new(sql.NullInt64)
 		case systemconfiguration.FieldID, systemconfiguration.FieldSendShortcut, systemconfiguration.FieldMindMapMode, systemconfiguration.FieldMindMapLayout, systemconfiguration.FieldMindMapModel, systemconfiguration.FieldMindMapReasoningEffort, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
 			values[i] = new(sql.NullString)
@@ -110,6 +112,12 @@ func (_m *SystemConfiguration) assignValues(columns []string, values []any) erro
 				return fmt.Errorf("unexpected type %T for field send_shortcut", values[i])
 			} else if value.Valid {
 				_m.SendShortcut = value.String
+			}
+		case systemconfiguration.FieldCodexContextWindow:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field codex_context_window", values[i])
+			} else if value.Valid {
+				_m.CodexContextWindow = int(value.Int64)
 			}
 		case systemconfiguration.FieldMindMapEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -239,6 +247,9 @@ func (_m *SystemConfiguration) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("send_shortcut=")
 	builder.WriteString(_m.SendShortcut)
+	builder.WriteString(", ")
+	builder.WriteString("codex_context_window=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CodexContextWindow))
 	builder.WriteString(", ")
 	builder.WriteString("mind_map_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MindMapEnabled))

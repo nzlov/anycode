@@ -76,6 +76,27 @@ func (_u *SystemConfigurationUpdate) SetNillableSendShortcut(v *string) *SystemC
 	return _u
 }
 
+// SetCodexContextWindow sets the "codex_context_window" field.
+func (_u *SystemConfigurationUpdate) SetCodexContextWindow(v int) *SystemConfigurationUpdate {
+	_u.mutation.ResetCodexContextWindow()
+	_u.mutation.SetCodexContextWindow(v)
+	return _u
+}
+
+// SetNillableCodexContextWindow sets the "codex_context_window" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableCodexContextWindow(v *int) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetCodexContextWindow(*v)
+	}
+	return _u
+}
+
+// AddCodexContextWindow adds value to the "codex_context_window" field.
+func (_u *SystemConfigurationUpdate) AddCodexContextWindow(v int) *SystemConfigurationUpdate {
+	_u.mutation.AddCodexContextWindow(v)
+	return _u
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_u *SystemConfigurationUpdate) SetMindMapEnabled(v bool) *SystemConfigurationUpdate {
 	_u.mutation.SetMindMapEnabled(v)
@@ -383,6 +404,12 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 	if value, ok := _u.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.CodexContextWindow(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodexContextWindow(); ok {
+		_spec.AddField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)
 	}
@@ -495,6 +522,27 @@ func (_u *SystemConfigurationUpdateOne) SetNillableSendShortcut(v *string) *Syst
 	if v != nil {
 		_u.SetSendShortcut(*v)
 	}
+	return _u
+}
+
+// SetCodexContextWindow sets the "codex_context_window" field.
+func (_u *SystemConfigurationUpdateOne) SetCodexContextWindow(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.ResetCodexContextWindow()
+	_u.mutation.SetCodexContextWindow(v)
+	return _u
+}
+
+// SetNillableCodexContextWindow sets the "codex_context_window" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableCodexContextWindow(v *int) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetCodexContextWindow(*v)
+	}
+	return _u
+}
+
+// AddCodexContextWindow adds value to the "codex_context_window" field.
+func (_u *SystemConfigurationUpdateOne) AddCodexContextWindow(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.AddCodexContextWindow(v)
 	return _u
 }
 
@@ -834,6 +882,12 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 	}
 	if value, ok := _u.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CodexContextWindow(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodexContextWindow(); ok {
+		_spec.AddField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

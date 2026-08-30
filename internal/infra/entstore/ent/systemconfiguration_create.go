@@ -54,6 +54,20 @@ func (_c *SystemConfigurationCreate) SetNillableSendShortcut(v *string) *SystemC
 	return _c
 }
 
+// SetCodexContextWindow sets the "codex_context_window" field.
+func (_c *SystemConfigurationCreate) SetCodexContextWindow(v int) *SystemConfigurationCreate {
+	_c.mutation.SetCodexContextWindow(v)
+	return _c
+}
+
+// SetNillableCodexContextWindow sets the "codex_context_window" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableCodexContextWindow(v *int) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetCodexContextWindow(*v)
+	}
+	return _c
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_c *SystemConfigurationCreate) SetMindMapEnabled(v bool) *SystemConfigurationCreate {
 	_c.mutation.SetMindMapEnabled(v)
@@ -295,6 +309,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultSendShortcut
 		_c.mutation.SetSendShortcut(v)
 	}
+	if _, ok := _c.mutation.CodexContextWindow(); !ok {
+		v := systemconfiguration.DefaultCodexContextWindow
+		_c.mutation.SetCodexContextWindow(v)
+	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		v := systemconfiguration.DefaultMindMapEnabled
 		_c.mutation.SetMindMapEnabled(v)
@@ -361,6 +379,9 @@ func (_c *SystemConfigurationCreate) check() error {
 		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
 			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.CodexContextWindow(); !ok {
+		return &ValidationError{Name: "codex_context_window", err: errors.New(`ent: missing required field "SystemConfiguration.codex_context_window"`)}
 	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		return &ValidationError{Name: "mind_map_enabled", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_enabled"`)}
@@ -475,6 +496,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
 		_node.SendShortcut = value
+	}
+	if value, ok := _c.mutation.CodexContextWindow(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
+		_node.CodexContextWindow = value
 	}
 	if value, ok := _c.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

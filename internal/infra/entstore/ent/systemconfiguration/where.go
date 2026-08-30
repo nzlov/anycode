@@ -74,6 +74,11 @@ func SendShortcut(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldSendShortcut, v))
 }
 
+// CodexContextWindow applies equality check predicate on the "codex_context_window" field. It's identical to CodexContextWindowEQ.
+func CodexContextWindow(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldCodexContextWindow, v))
+}
+
 // MindMapEnabled applies equality check predicate on the "mind_map_enabled" field. It's identical to MindMapEnabledEQ.
 func MindMapEnabled(v bool) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapEnabled, v))
@@ -247,6 +252,46 @@ func SendShortcutEqualFold(v string) predicate.SystemConfiguration {
 // SendShortcutContainsFold applies the ContainsFold predicate on the "send_shortcut" field.
 func SendShortcutContainsFold(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldSendShortcut, v))
+}
+
+// CodexContextWindowEQ applies the EQ predicate on the "codex_context_window" field.
+func CodexContextWindowEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldCodexContextWindow, v))
+}
+
+// CodexContextWindowNEQ applies the NEQ predicate on the "codex_context_window" field.
+func CodexContextWindowNEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldCodexContextWindow, v))
+}
+
+// CodexContextWindowIn applies the In predicate on the "codex_context_window" field.
+func CodexContextWindowIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldCodexContextWindow, vs...))
+}
+
+// CodexContextWindowNotIn applies the NotIn predicate on the "codex_context_window" field.
+func CodexContextWindowNotIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldCodexContextWindow, vs...))
+}
+
+// CodexContextWindowGT applies the GT predicate on the "codex_context_window" field.
+func CodexContextWindowGT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldCodexContextWindow, v))
+}
+
+// CodexContextWindowGTE applies the GTE predicate on the "codex_context_window" field.
+func CodexContextWindowGTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldCodexContextWindow, v))
+}
+
+// CodexContextWindowLT applies the LT predicate on the "codex_context_window" field.
+func CodexContextWindowLT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldCodexContextWindow, v))
+}
+
+// CodexContextWindowLTE applies the LTE predicate on the "codex_context_window" field.
+func CodexContextWindowLTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldCodexContextWindow, v))
 }
 
 // MindMapEnabledEQ applies the EQ predicate on the "mind_map_enabled" field.
