@@ -112,10 +112,7 @@ test('event file and diff previews keep a centered title bar above preview tools
     /<q-dialog[\s\S]*?v-model="eventResourceDialogOpen"[\s\S]*?:maximized="isMobileLayout"/,
   );
   assert.match(detail, /<q-card-section class="event-resource-dialog__header">/);
-  assert.match(
-    detail,
-    /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?:zoomable="isMobileLayout"/,
-  );
+  assert.match(detail, /<SessionFilePreview[\s\S]*?:file="eventResourceFile"[\s\S]*?\szoomable/);
   assert.match(
     detail,
     /event-resource-dialog__title[\s\S]*?event-resource-dialog__header-action[\s\S]*?icon="download"[\s\S]*?icon="close"/,

@@ -218,7 +218,7 @@
         <q-separator v-if="$q.screen.lt.md && !annotationToolbarVisible" />
         <SessionFilePreview
           :file="selected"
-          :zoomable="$q.screen.lt.md"
+          zoomable
           :annotation-session-id="sessionId"
           :annotation-source="
             selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
@@ -622,11 +622,6 @@ onBeforeUnmount(() => {
 .artifact-preview-dialog--mobile :deep(.session-file-preview) {
   min-height: 0;
   flex: 1 1 auto;
-}
-
-.artifact-preview-dialog--mobile :deep(.session-file-preview__image),
-.artifact-preview-dialog--mobile :deep(.session-file-preview__media) {
-  max-height: 100%;
 }
 
 .artifact-preview-dialog__mobile-actions {

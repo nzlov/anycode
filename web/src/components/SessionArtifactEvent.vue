@@ -66,7 +66,7 @@
         <q-separator v-if="$q.screen.lt.md && !annotationToolbarVisible" />
         <SessionFilePreview
           :file="selectedPreview"
-          :zoomable="$q.screen.lt.md"
+          zoomable
           :annotation-source="`临时文件 ${filename}`"
         >
           <template v-if="annotationToolbarVisible" #toolbar-leading>
@@ -231,11 +231,6 @@ function payloadString(key: string, fallback = '') {
 .artifact-event-preview--mobile :deep(.session-file-preview) {
   min-height: 0;
   flex: 1 1 auto;
-}
-
-.artifact-event-preview--mobile :deep(.session-file-preview__image),
-.artifact-event-preview--mobile :deep(.session-file-preview__media) {
-  max-height: 100%;
 }
 
 .artifact-event-preview__mobile-actions {

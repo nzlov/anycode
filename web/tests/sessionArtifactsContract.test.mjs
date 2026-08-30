@@ -112,16 +112,13 @@ test('text previews align the outer grid item to the top so long files remain re
   assert.match(preview, /\.session-file-preview--text\s*\{[^}]*align-items:\s*start;/s);
 });
 
-test('mobile artifact previews are titleless full-screen dialogs with draggable pinch-zoom media', () => {
+test('full-size artifact previews fit media and support mouse or touch dragging', () => {
   assert.match(panel, /:maximized="\$q\.screen\.lt\.md"/);
   assert.match(
     panel,
     /v-if="!\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-preview-header"/,
   );
-  assert.match(
-    panel,
-    /<SessionFilePreview[\s\S]*?:file="selected"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
-  );
+  assert.match(panel, /<SessionFilePreview[\s\S]*?:file="selected"[\s\S]*?\szoomable/);
   assert.match(
     panel,
     /v-if="\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-preview-dialog__mobile-actions"/,
@@ -144,10 +141,7 @@ test('mobile artifact previews are titleless full-screen dialogs with draggable 
     event,
     /v-if="!\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-event-preview__header"/,
   );
-  assert.match(
-    event,
-    /<SessionFilePreview[\s\S]*?:file="selectedPreview"[\s\S]*?:zoomable="\$q\.screen\.lt\.md"/,
-  );
+  assert.match(event, /<SessionFilePreview[\s\S]*?:file="selectedPreview"[\s\S]*?\szoomable/);
   assert.match(
     event,
     /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-event-preview__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
@@ -155,6 +149,11 @@ test('mobile artifact previews are titleless full-screen dialogs with draggable 
   assert.doesNotMatch(event, /useRouter|name: 'session-artifact'/);
   assert.match(preview, /zoomable\?: boolean/);
   assert.match(preview, /@pointerdown="startGesture"/);
+  assert.match(preview, /@wheel="zoomWithWheel"/);
+  assert.match(preview, /draggable="false"/);
+  assert.doesNotMatch(preview, /event\.pointerType !== 'touch'/);
+  assert.match(preview, /setPointerCapture\(event\.pointerId\)/);
+  assert.match(preview, /releasePointerCapture\(event\.pointerId\)/);
   assert.match(preview, /Math\.min\(\s*4,\s*Math\.max\(1,/);
   assert.match(preview, /translate3d\(\$\{offsetX\.value\}px, \$\{offsetY\.value\}px, 0\)/);
   assert.match(
@@ -168,6 +167,7 @@ test('mobile artifact previews are titleless full-screen dialogs with draggable 
     preview,
     /\.session-file-preview__zoom-surface--enabled\s*\{[^}]*touch-action:\s*none/s,
   );
+  assert.match(preview, /\.session-file-preview__image,[\s\S]*?max-height:\s*min\(72dvh,\s*100%\)/);
 });
 
 test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {

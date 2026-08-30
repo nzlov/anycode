@@ -12,6 +12,7 @@
       @pointermove="moveGesture"
       @pointerup="endGesture"
       @pointercancel="endGesture"
+      @wheel="zoomWithWheel"
     >
       <PreviewAnnotator
         mode="image"
@@ -30,6 +31,7 @@
           ref="mediaElement"
           :src="imageURL"
           :alt="file.filename"
+          draggable="false"
           class="session-file-preview__image"
           :style="mediaTransform"
           @load="finishImageLoad($event)"
@@ -83,10 +85,12 @@
       @pointermove="moveGesture"
       @pointerup="endGesture"
       @pointercancel="endGesture"
+      @wheel="zoomWithWheel"
     >
       <video
         ref="mediaElement"
         :src="objectURL"
+        draggable="false"
         class="session-file-preview__media"
         :style="mediaTransform"
         controls
@@ -237,8 +241,10 @@ function failImageLoad(event: Event) {
 }
 
 function startGesture(event: PointerEvent) {
-  if (!props.zoomable || event.pointerType !== 'touch') return;
+  if (!props.zoomable || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if (event.pointerType === 'mouse' && scale.value <= 1) return;
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  zoomSurface.value?.setPointerCapture(event.pointerId);
   if (pointers.size === 1) {
     setDragStart(event.clientX, event.clientY);
   } else if (pointers.size === 2) {
@@ -268,12 +274,22 @@ function moveGesture(event: PointerEvent) {
 }
 
 function endGesture(event: PointerEvent) {
+  if (zoomSurface.value?.hasPointerCapture(event.pointerId)) {
+    zoomSurface.value.releasePointerCapture(event.pointerId);
+  }
   pointers.delete(event.pointerId);
   pinchStartDistance = 0;
   pinchStartScale = scale.value;
   const remaining = [...pointers.values()][0];
   if (remaining) setDragStart(remaining.x, remaining.y);
   else dragStart = null;
+}
+
+function zoomWithWheel(event: WheelEvent) {
+  if (!props.zoomable) return;
+  event.preventDefault();
+  scale.value = Math.min(4, Math.max(1, scale.value * (event.deltaY < 0 ? 1.2 : 1 / 1.2)));
+  clampOffset();
 }
 
 function pointerDistance() {
@@ -324,9 +340,12 @@ onBeforeUnmount(clear);
 
 <style scoped>
 .session-file-preview {
+  box-sizing: border-box;
   display: grid;
   min-width: 0;
   min-height: 260px;
+  max-width: 100%;
+  max-height: 100%;
   height: 100%;
   place-items: center;
   overflow: auto;
@@ -354,16 +373,20 @@ onBeforeUnmount(clear);
 .session-file-preview__media {
   display: block;
   max-width: 100%;
-  max-height: 72vh;
+  max-height: min(72dvh, 100%);
   object-fit: contain;
   transform-origin: center;
+  user-select: none;
 }
 
 .session-file-preview__zoom-surface {
   position: relative;
   display: grid;
   width: 100%;
+  min-width: 0;
   height: 100%;
+  min-height: 0;
+  max-height: 100%;
   place-items: center;
   overflow: clip;
 }

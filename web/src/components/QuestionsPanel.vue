@@ -150,7 +150,7 @@
           </q-btn>
         </q-card-section>
         <q-separator v-if="!annotationToolbarVisible" />
-        <SessionFilePreview :file="selectedFile">
+        <SessionFilePreview :file="selectedFile" zoomable>
           <template v-if="annotationToolbarVisible" #toolbar-leading>
             <div class="question-file-preview-dialog__title ellipsis">
               {{ selectedFile?.filename || '文件预览' }}

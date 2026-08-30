@@ -22,6 +22,7 @@
         <SessionFilePreview
           v-else-if="file"
           :file="file"
+          zoomable
           :annotation-session-id="sessionId"
           :annotation-source="`临时文件 ${file.logicalPath || file.filename}`"
         />

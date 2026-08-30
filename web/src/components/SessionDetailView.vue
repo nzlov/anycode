@@ -640,7 +640,7 @@
           <SessionFilePreview
             v-else
             :file="eventResourceFile"
-            :zoomable="isMobileLayout"
+            zoomable
             :annotatable="eventResourceFile?.sourceType !== 'workspace'"
             :annotation-read-only="Boolean(eventResourceAnnotation)"
             :annotation-session-id="sessionId"
@@ -1743,11 +1743,6 @@ async function scrollEventsToBottom(force = false) {
 
 .event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview) {
   min-height: 0;
-}
-
-.event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview__image),
-.event-resource-dialog--mobile .event-resource-dialog__body :deep(.session-file-preview__media) {
-  max-height: 100%;
 }
 
 .event-resource-dialog__close {
