@@ -4498,7 +4498,11 @@ const asyncMindMapQueryPromptGuidance = "本项目使用异步思维图维护。
 func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {
 	parts := []string{anyCodePromptGuidance, questionsWaitPromptGuidance}
 	if strings.TrimSpace(session.BaseBranch) != "" {
-		parts = append(parts, managedWorktreePromptGuidance)
+		parts = append(parts, managedWorktreePromptGuidance, fmt.Sprintf(
+			"本卡片基础分支为 %q，当前工作树分支为 %q。",
+			strings.TrimSpace(session.BaseBranch),
+			strings.TrimSpace(session.WorktreeBranch),
+		))
 	}
 	if strings.TrimSpace(artifactDir) != "" {
 		parts = append(parts, artifactPromptGuidance)

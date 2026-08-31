@@ -7702,13 +7702,14 @@ func TestStartSessionDeveloperInstructionsProtectManagedWorktree(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
-		ID:           "session-1",
-		ProjectID:    "project-1",
-		Requirement:  "Implement the requested change",
-		Mode:         domain.ModeChat,
-		Status:       domain.StatusCreated,
-		BaseBranch:   "main",
-		WorktreePath: "/workspace/project",
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "Implement the requested change",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusCreated,
+		BaseBranch:     "main",
+		WorktreeBranch: "session-1",
+		WorktreePath:   "/workspace/project",
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{}}
@@ -7728,6 +7729,9 @@ func TestStartSessionDeveloperInstructionsProtectManagedWorktree(t *testing.T) {
 	}
 	if !strings.Contains(instructions, "卡片关闭时由 AnyCode") {
 		t.Fatalf("developer instructions should assign cleanup ownership to AnyCode: %q", instructions)
+	}
+	if !strings.Contains(instructions, `本卡片基础分支为 "main"，当前工作树分支为 "session-1"。`) {
+		t.Fatalf("developer instructions missing managed branch context: %q", instructions)
 	}
 	if strings.Contains(instructions, "若必须手动合并") || strings.Contains(instructions, "fast-forward merge") || strings.Contains(instructions, "默认合并提交信息") {
 		t.Fatalf("developer instructions should not require a merge commit for Diff recovery: %q", instructions)
