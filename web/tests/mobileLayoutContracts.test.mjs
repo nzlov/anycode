@@ -204,10 +204,7 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
     diffViewerSource,
     /\.diff-file-card\s*{[^}]*min-width:\s*0[^}]*overflow:\s*visible/s,
   );
-  assert.match(
-    diffViewerSource,
-    /\.diff-file-card\s*{[^}]*container-type:\s*inline-size/s,
-  );
+  assert.match(diffViewerSource, /\.diff-file-card\s*{[^}]*container-type:\s*inline-size/s);
   assert.match(
     diffViewerSource,
     /@container \(max-width:\s*840px\)[\s\S]*?\.diff-file-header\s*{[^}]*flex-wrap:\s*wrap[\s\S]*?\.diff-file-meta\s*{[^}]*flex:\s*0\s+0\s+100%[^}]*justify-content:\s*flex-end/s,
@@ -219,13 +216,12 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
 test('session detail mobile navigation shows one scroll owner at a time', () => {
   assert.match(detailSource, /v-if="isMobileLayout"[\s\S]*class="detail-mobile-tabs"/);
   assert(
-    detailSource.indexOf('<q-splitter') <
-      detailSource.indexOf('class="detail-mobile-tabs"'),
+    detailSource.indexOf('<q-splitter') < detailSource.indexOf('class="detail-mobile-tabs"'),
     'mobile detail navigation should follow the detail content',
   );
   assert.match(detailSource, /q-tab name="session"/);
   assert.match(detailSource, /q-tab name="info"/);
-  assert.match(detailSource, /q-tab name="changes"/);
+  assert.match(detailSource, /q-tab[^>]*name="changes"/);
   assert.match(detailSource, /q-tab name="artifacts"/);
   assert.match(
     detailSource,
@@ -237,18 +233,12 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
     detailSource,
     /\.detail-mobile-tabs\s*{[^}]*flex:\s*0\s+0\s+auto[^}]*border:\s*0[^}]*border-radius:\s*0/s,
   );
-  assert.match(
-    detailSource,
-    /\.detail-page--mobile\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
-  );
+  assert.match(detailSource, /\.detail-page--mobile\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s);
   assert.match(
     detailSource,
     /\.detail-page--mobile \.stream-card,\s*\.detail-page--mobile \.right-panel-card\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
   );
-  assert.match(
-    detailSource,
-    /\.detail-page--mobile \.detail-grid\s*{[^}]*width:\s*100%/s,
-  );
+  assert.match(detailSource, /\.detail-page--mobile \.detail-grid\s*{[^}]*width:\s*100%/s);
   assert.match(
     detailSource,
     /\.detail-page--mobile \.detail-splitter\s*>\s*:deep\(\.detail-splitter__panel--mobile-hidden\)\s*{[^}]*display:\s*none/s,

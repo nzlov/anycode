@@ -19,9 +19,10 @@
     <q-card class="session-fork-dialog">
       <q-card-section>
         <div class="text-h6">Fork 卡片</div>
-        <div class="text-caption text-muted q-mt-xs">
+        <div v-if="projectIsGit" class="text-caption text-muted q-mt-xs">
           新卡片继承当前 Codex 上下文；Git 工作区从当前分支 HEAD 创建，未提交修改不会复制。
         </div>
+        <div v-else class="text-caption text-muted q-mt-xs">新卡片继承当前 Codex 上下文。</div>
       </q-card-section>
 
       <q-card-section class="q-pt-none">
@@ -64,6 +65,7 @@ import { forkSession } from '@/services/sessions';
 const props = withDefaults(
   defineProps<{
     sourceSessionId: string;
+    projectIsGit?: boolean;
     fullWidth?: boolean;
     stayOnPage?: boolean;
   }>(),

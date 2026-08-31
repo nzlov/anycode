@@ -250,7 +250,8 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /card\.status === 'waiting_approval'/);
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
   assert.match(overviewSource, /<q-tab name="output"[^>]*label="审核结果"/);
-  assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(overviewSource, /<q-tab[^>]*name="diff"[^>]*label="Diff"/);
+  assert.match(overviewSource, /<q-tab v-if="approvalProjectIsGit" name="diff"/);
   assert.match(overviewSource, /<q-tab name="artifacts"[^>]*label="临时文件"/);
   assert.match(overviewSource, /<SessionArtifactsPanel/);
   assert.match(overviewSource, /resolveSessionArtifacts/);
@@ -330,11 +331,13 @@ test('overview waiting questions dialog shows questions and diff before submit',
   );
 
   assert.match(questionsDialogSource, /<q-tab name="questions"[^>]*label="问题"/);
-  assert.match(questionsDialogSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(questionsDialogSource, /<q-tab[^>]*name="diff"[^>]*label="Diff"/);
+  assert.match(questionsDialogSource, /<q-tab v-if="showDiff" name="diff"/);
   assert.match(questionsDialogSource, /<QuestionsPanel/);
   assert.match(questionsDialogSource, /<DiffWorkspace[\s\S]*v-model="diffWorkspaceState"/);
   assert.match(questionsDialogSource, /:target="diffTarget"/);
   assert.match(overviewSource, /<QuestionsDialog[\s\S]*:diff-target="questionsDiffTarget"/);
+  assert.match(overviewSource, /<QuestionsDialog[\s\S]*:show-diff="questionsDiffAvailable"/);
   assert.doesNotMatch(questionsDialogSource, /fullDiffRoute|打开完整 Diff 页面/);
   assert.doesNotMatch(overviewSource, /questionsAllDiffRoute|:full-diff-route/);
   assert.match(overviewSource, /getPendingQuestionRequests\(sessionId\)/);
@@ -378,7 +381,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   );
   const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
 
-  assert.match(overviewSource, /v-if="card\.filesChanged > 0"/);
+  assert.match(overviewSource, /v-if="card\.projectIsGit && card\.filesChanged > 0"/);
   assert.match(overviewSource, /icon="difference"/);
   assert.match(overviewSource, /:label="String\(card\.filesChanged\)"/);
   assert.match(overviewSource, /:aria-label="`查看 \$\{card\.filesChanged\} 个变更文件`"/);

@@ -631,14 +631,15 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 
 func TestQuerySessionCardForwardsUseCase(t *testing.T) {
 	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{
-		DTO:         sessionapp.DTO{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusRunning},
-		ProjectName: "AnyCode",
+		DTO:          sessionapp.DTO{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusRunning},
+		ProjectName:  "AnyCode",
+		ProjectIsGit: true,
 	}}
 	got, err := NewResolver(UseCases{Sessions: sessions}).Query().SessionCard(context.Background(), "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sessions.gotGetCardID != "session-1" || got.ID != "session-1" || got.ProjectName != "AnyCode" {
+	if sessions.gotGetCardID != "session-1" || got.ID != "session-1" || got.ProjectName != "AnyCode" || !got.ProjectIsGit {
 		t.Fatalf("session card = %#v, requested = %q", got, sessions.gotGetCardID)
 	}
 }

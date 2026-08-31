@@ -8,7 +8,7 @@
         <div class="overview-horizontal-terminal__meta">
           <span :title="card.projectName">{{ card.projectName }}</span>
           <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
-          <span :title="card.branch">{{ card.branch }}</span>
+          <span v-if="card.projectIsGit" :title="card.branch">{{ card.branch }}</span>
         </div>
       </div>
       <div class="overview-horizontal-terminal__actions">

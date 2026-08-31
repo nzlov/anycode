@@ -211,7 +211,10 @@ test('horizontal headers keep compact close actions last in the top action row',
     conversationSource,
     /aria-label="打开会话详情"[\s\S]*aria-label="合并思维图并关闭"[\s\S]*:aria-label="mindMapRealtime \? '关闭，不合并思维图' : '关闭卡片'"[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
   );
-  assert.doesNotMatch(conversationSource, /overview-horizontal-conversation__close-actions|label="关闭"/);
+  assert.doesNotMatch(
+    conversationSource,
+    /overview-horizontal-conversation__close-actions|label="关闭"/,
+  );
   assert.match(
     terminalSource,
     /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
@@ -243,7 +246,7 @@ test('horizontal sessions render the complete reusable detail surface', () => {
   assert.match(detailViewSource, /<SessionEventMessage/);
   assert.match(detailViewSource, /<CodexPromptComposer/);
   assert.match(detailViewSource, /<q-tab name="info"[^>]*label="会话信息"/);
-  assert.match(detailViewSource, /<q-tab name="changes"[^>]*label="当前变更"/);
+  assert.match(detailViewSource, /<q-tab[^>]*name="changes"[^>]*label="当前变更"/);
   assert.match(detailViewSource, /<q-tab name="artifacts"[^>]*label="临时文件"/);
   assert.match(detailViewSource, /<DiffWorkspace/);
   assert.match(detailViewSource, /<SessionArtifactsPanel/);
@@ -252,7 +255,10 @@ test('horizontal sessions render the complete reusable detail surface', () => {
 
 test('mobile session details switch changes and artifacts in place', () => {
   assert.match(conversationSource, /<SessionDetailView[\s\S]*:layout="layout"/);
-  assert.match(detailViewSource, /<q-tab name="changes" icon="difference" label="变更"/);
+  assert.match(
+    detailViewSource,
+    /<q-tab[^>]*name="changes"[^>]*icon="difference"[^>]*label="变更"/,
+  );
   assert.match(detailViewSource, /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/);
   assert.doesNotMatch(detailViewSource, /<q-route-tab/);
   assert.doesNotMatch(detailViewSource, /mobileDiffRoute|allArtifactsRoute/);

@@ -12,7 +12,9 @@
         <div class="overview-horizontal-conversation__meta">
           <span :title="card.projectName">{{ card.projectName }}</span>
           <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
-          <span v-if="layout === 'desktop'" :title="card.branch">{{ card.branch }}</span>
+          <span v-if="layout === 'desktop' && card.projectIsGit" :title="card.branch">
+            {{ card.branch }}
+          </span>
           <span v-if="layout === 'desktop' && card.mode === 'workflow'" :title="card.node">
             {{ card.node }}
           </span>
@@ -38,6 +40,7 @@
         <SessionForkButton
           v-if="card.availableActions.includes('fork')"
           :source-session-id="card.id"
+          :project-is-git="card.projectIsGit"
           stay-on-page
           @forked="emit('forked', $event)"
         />

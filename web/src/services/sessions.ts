@@ -52,6 +52,7 @@ export interface SessionCard {
   id: string;
   projectId: string;
   projectName: string;
+  projectIsGit: boolean;
   title: string;
   summary: string;
   mode: SessionMode;
@@ -280,6 +281,7 @@ interface GraphQLSessionCard {
   id: string;
   projectId: string;
   projectName: string;
+  projectIsGit: boolean;
   requirement: string;
   requirementSummary: string;
   mode: string;
@@ -323,6 +325,7 @@ interface GraphQLSessionDetail {
   id: string;
   projectId: string;
   projectName: string;
+  projectIsGit: boolean;
   forkedFromSessionId?: string | null;
   requirement: string;
   mode: string;
@@ -445,6 +448,7 @@ const sessionCardFields = `
   id
   projectId
   projectName
+  projectIsGit
   requirement
   requirementSummary
   mode
@@ -478,6 +482,7 @@ const sessionDetailFields = `
   id
   projectId
   projectName
+  projectIsGit
   forkedFromSessionId
   requirement
   mode
@@ -1249,6 +1254,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     id: session.id,
     projectId: session.projectId,
     projectName: session.projectName || session.projectId,
+    projectIsGit: session.projectIsGit,
     title: session.requirementSummary || firstLine(session.requirement),
     summary: session.requirementSummary || session.requirement,
     mode: normalizeMode(session.mode),
@@ -1276,6 +1282,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     id: session.id,
     projectId: session.projectId,
     projectName: session.projectName,
+    projectIsGit: session.projectIsGit,
     title: firstLine(session.requirement),
     summary: session.requirement,
     mode: normalizeMode(session.mode),
@@ -1336,6 +1343,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     id: session.id,
     projectId: session.projectId,
     projectName: session.projectId,
+    projectIsGit: false,
     title: firstLine(session.requirement),
     summary: session.requirement,
     mode: normalizeMode(session.mode),

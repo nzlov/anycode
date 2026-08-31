@@ -508,6 +508,7 @@ type ComplexityRoot struct {
 		Mode               func(childComplexity int) int
 		Priority           func(childComplexity int) int
 		ProjectID          func(childComplexity int) int
+		ProjectIsGit       func(childComplexity int) int
 		ProjectName        func(childComplexity int) int
 		Requirement        func(childComplexity int) int
 		RequirementSummary func(childComplexity int) int
@@ -555,6 +556,7 @@ type ComplexityRoot struct {
 		PendingApproval     func(childComplexity int) int
 		Priority            func(childComplexity int) int
 		ProjectID           func(childComplexity int) int
+		ProjectIsGit        func(childComplexity int) int
 		ProjectName         func(childComplexity int) int
 		PromptAppends       func(childComplexity int) int
 		Requirement         func(childComplexity int) int
@@ -3279,6 +3281,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.ProjectID(childComplexity), true
+	case "SessionCard.projectIsGit":
+		if e.ComplexityRoot.SessionCard.ProjectIsGit == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.ProjectIsGit(childComplexity), true
 	case "SessionCard.projectName":
 		if e.ComplexityRoot.SessionCard.ProjectName == nil {
 			break
@@ -3493,6 +3501,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.ProjectID(childComplexity), true
+	case "SessionDetail.projectIsGit":
+		if e.ComplexityRoot.SessionDetail.ProjectIsGit == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.ProjectIsGit(childComplexity), true
 	case "SessionDetail.projectName":
 		if e.ComplexityRoot.SessionDetail.ProjectName == nil {
 			break
@@ -5313,6 +5327,7 @@ type SessionCard {
   id: ID!
   projectId: ID!
   projectName: String!
+  projectIsGit: Boolean!
   requirement: String!
   requirementSummary: String!
   mode: String!
@@ -5358,6 +5373,7 @@ type SessionDetail {
   id: ID!
   projectId: ID!
   projectName: String!
+  projectIsGit: Boolean!
   forkedFromSessionId: ID
   requirement: String!
   mode: String!
@@ -15737,6 +15753,8 @@ func (ec *executionContext) fieldContext_Query_sessionCard(ctx context.Context, 
 				return ec.fieldContext_SessionCard_projectId(ctx, field)
 			case "projectName":
 				return ec.fieldContext_SessionCard_projectName(ctx, field)
+			case "projectIsGit":
+				return ec.fieldContext_SessionCard_projectIsGit(ctx, field)
 			case "requirement":
 				return ec.fieldContext_SessionCard_requirement(ctx, field)
 			case "requirementSummary":
@@ -15822,6 +15840,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_projectId(ctx, field)
 			case "projectName":
 				return ec.fieldContext_SessionDetail_projectName(ctx, field)
+			case "projectIsGit":
+				return ec.fieldContext_SessionDetail_projectIsGit(ctx, field)
 			case "forkedFromSessionId":
 				return ec.fieldContext_SessionDetail_forkedFromSessionId(ctx, field)
 			case "requirement":
@@ -18476,6 +18496,35 @@ func (ec *executionContext) fieldContext_SessionCard_projectName(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_projectIsGit(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_projectIsGit,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectIsGit, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_projectIsGit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_requirement(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19086,6 +19135,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_projectId(ctx, field)
 			case "projectName":
 				return ec.fieldContext_SessionCard_projectName(ctx, field)
+			case "projectIsGit":
+				return ec.fieldContext_SessionCard_projectIsGit(ctx, field)
 			case "requirement":
 				return ec.fieldContext_SessionCard_requirement(ctx, field)
 			case "requirementSummary":
@@ -19430,6 +19481,35 @@ func (ec *executionContext) fieldContext_SessionDetail_projectName(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_projectIsGit(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_projectIsGit,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectIsGit, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_projectIsGit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34582,6 +34662,11 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "projectIsGit":
+			out.Values[i] = ec._SessionCard_projectIsGit(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "requirement":
 			out.Values[i] = ec._SessionCard_requirement(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -34848,6 +34933,11 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			}
 		case "projectName":
 			out.Values[i] = ec._SessionDetail_projectName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectIsGit":
+			out.Values[i] = ec._SessionDetail_projectIsGit(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

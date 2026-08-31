@@ -206,7 +206,7 @@
               narrow-indicator
             >
               <q-tab name="info" icon="info" label="会话信息" />
-              <q-tab name="changes" icon="difference" label="当前变更">
+              <q-tab v-if="session?.projectIsGit" name="changes" icon="difference" label="当前变更">
                 <q-badge
                   v-if="session && session.filesChanged > 0"
                   floating
@@ -282,7 +282,7 @@
                       </q-item-label>
                     </q-item-section>
                   </q-item>
-                  <q-item>
+                  <q-item v-if="session?.projectIsGit">
                     <q-item-section>
                       <q-item-label caption>分支</q-item-label>
                       <q-item-label class="session-branch-summary">
@@ -383,7 +383,12 @@
                     :source-session-id="sessionId"
                     full-width
                   />
-                  <SessionForkButton v-if="canFork" :source-session-id="sessionId" full-width />
+                  <SessionForkButton
+                    v-if="canFork"
+                    :source-session-id="sessionId"
+                    :project-is-git="session?.projectIsGit"
+                    full-width
+                  />
                   <q-btn
                     v-if="mindMapAvailable"
                     class="session-detail-tool-button q-mt-md app-command-btn"
@@ -494,7 +499,7 @@
                 </div>
               </q-tab-panel>
 
-              <q-tab-panel name="changes" class="detail-diff-panel">
+              <q-tab-panel v-if="session?.projectIsGit" name="changes" class="detail-diff-panel">
                 <q-btn
                   class="full-width q-mb-md app-command-btn"
                   outline
@@ -539,7 +544,7 @@
     >
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
-      <q-tab name="changes" icon="difference" label="变更">
+      <q-tab v-if="session?.projectIsGit" name="changes" icon="difference" label="变更">
         <q-badge
           v-if="session && session.filesChanged > 0"
           floating

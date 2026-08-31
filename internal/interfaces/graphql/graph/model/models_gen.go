@@ -627,6 +627,7 @@ type SessionCard struct {
 	ID                 string                `json:"id"`
 	ProjectID          string                `json:"projectId"`
 	ProjectName        string                `json:"projectName"`
+	ProjectIsGit       bool                  `json:"projectIsGit"`
 	Requirement        string                `json:"requirement"`
 	RequirementSummary string                `json:"requirementSummary"`
 	Mode               string                `json:"mode"`
@@ -681,6 +682,7 @@ type SessionDetail struct {
 	ID                  string                `json:"id"`
 	ProjectID           string                `json:"projectId"`
 	ProjectName         string                `json:"projectName"`
+	ProjectIsGit        bool                  `json:"projectIsGit"`
 	ForkedFromSessionID *string               `json:"forkedFromSessionId,omitempty"`
 	Requirement         string                `json:"requirement"`
 	Mode                string                `json:"mode"`

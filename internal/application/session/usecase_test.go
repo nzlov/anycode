@@ -4413,7 +4413,7 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 		Filename:  "note.txt",
 	}
 	projects := newFakeProjectRepository("project-1")
-	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "Project One"}
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "Project One", IsGit: true}
 	service := New(repo, projects, WithAttachments(repo, files))
 
 	got, err := service.ListSessions(ctx, ListSessionsInput{
@@ -4435,6 +4435,9 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 	}
 	if got.Items[0].ProjectName != "Project One" {
 		t.Fatalf("ProjectName = %q", got.Items[0].ProjectName)
+	}
+	if !got.Items[0].ProjectIsGit {
+		t.Fatal("ProjectIsGit = false")
 	}
 	if len(got.Items[0].Attachments) != 1 || got.Items[0].Attachments[0].Filename != "note.txt" {
 		t.Fatalf("ListSessions() attachments = %#v", got.Items[0].Attachments)
@@ -4580,6 +4583,9 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	}
 	if got.ProjectName != "Project One" {
 		t.Fatalf("GetSession() ProjectName = %q", got.ProjectName)
+	}
+	if got.ProjectIsGit {
+		t.Fatal("GetSession() ProjectIsGit = true for non-git project")
 	}
 	if got.ForkedFromSessionID != "source-session" {
 		t.Fatalf("GetSession() ForkedFromSessionID = %q", got.ForkedFromSessionID)

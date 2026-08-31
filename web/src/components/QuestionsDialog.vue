@@ -8,13 +8,16 @@
       <div class="questions-dialog__tabs">
         <q-tabs v-model="activeTab" dense align="left" class="text-primary">
           <q-tab name="questions" icon="quiz" label="问题" />
-          <q-tab name="diff" icon="difference" label="Diff" />
+          <q-tab v-if="showDiff" name="diff" icon="difference" label="Diff" />
         </q-tabs>
       </div>
       <q-separator />
 
       <q-tab-panels v-model="activeTab" animated class="questions-dialog__panels">
-        <q-tab-panel name="questions" class="questions-dialog__panel questions-dialog__panel--questions">
+        <q-tab-panel
+          name="questions"
+          class="questions-dialog__panel questions-dialog__panel--questions"
+        >
           <QuestionsPanel
             class="questions-dialog__body"
             :requests="requests"
@@ -24,7 +27,7 @@
             @submit="(requestId, answers) => emit('submit', requestId, answers)"
           />
         </q-tab-panel>
-        <q-tab-panel name="diff" class="questions-dialog__panel">
+        <q-tab-panel v-if="showDiff" name="diff" class="questions-dialog__panel">
           <DiffWorkspace v-if="modelValue" v-model="diffWorkspaceState" :target="diffTarget" />
         </q-tab-panel>
       </q-tab-panels>
@@ -47,6 +50,7 @@ const props = defineProps<{
   loading?: boolean;
   submitting?: boolean;
   diffTarget: DiffWorkspaceTarget;
+  showDiff?: boolean;
 }>();
 
 const emit = defineEmits<{

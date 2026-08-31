@@ -152,11 +152,7 @@
       >
         <template #body-cell-title="props">
           <q-td :props="props">
-            <router-link
-              class="table-link"
-              :to="`/sessions/${props.row.id}`"
-              @click.stop
-            >
+            <router-link class="table-link" :to="`/sessions/${props.row.id}`" @click.stop>
               {{ props.row.title }}
             </router-link>
           </q-td>
@@ -178,9 +174,15 @@
           </q-td>
         </template>
 
+        <template #body-cell-branch="props">
+          <q-td :props="props">
+            <span v-if="props.row.projectIsGit">{{ props.row.branch }}</span>
+          </q-td>
+        </template>
+
         <template #body-cell-diff="props">
           <q-td :props="props" class="session-table__diff-count">
-            {{ props.row.filesChanged }}
+            <span v-if="props.row.projectIsGit">{{ props.row.filesChanged }}</span>
           </q-td>
         </template>
 
@@ -207,6 +209,7 @@
               <q-tooltip>取消排队</q-tooltip>
             </q-btn>
             <q-btn
+              v-if="props.row.projectIsGit"
               flat
               round
               dense
@@ -387,12 +390,14 @@ const pagination = computed({
     sort.value = sortValue(value.sortBy, value.descending ?? true);
   },
 });
+const hasGitRows = computed(() => rows.value.some((row) => row.projectIsGit));
 const visibleColumns = computed(() =>
-  $q.screen.lt.sm
+  ($q.screen.lt.sm
     ? ['title', 'status', 'actions']
     : $q.screen.lt.md
       ? ['title', 'diff', 'tokens', 'updatedAt', 'status', 'actions']
-      : ['title', 'project', 'branch', 'node', 'diff', 'tokens', 'updatedAt', 'status', 'actions'],
+      : ['title', 'project', 'branch', 'node', 'diff', 'tokens', 'updatedAt', 'status', 'actions']
+  ).filter((name) => hasGitRows.value || (name !== 'branch' && name !== 'diff')),
 );
 
 watch(status, (value) => {

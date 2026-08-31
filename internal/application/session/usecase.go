@@ -207,6 +207,7 @@ type WorktreeCleanupErrorDTO struct {
 type CardDTO struct {
 	DTO
 	ProjectName        string
+	ProjectIsGit       bool
 	RequirementSummary string
 	CurrentNodeTitle   string
 	TerminalSummary    *TerminalSummaryDTO
@@ -230,6 +231,7 @@ type CardStatusDTO struct {
 type DetailDTO struct {
 	DTO
 	ProjectName         string
+	ProjectIsGit        bool
 	ForkedFromSessionID domain.ID
 	CloseReason         *domain.CloseReason
 	CurrentNodeTitle    string
@@ -8535,7 +8537,7 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, err
 	}
-	return toDetailDTO(session, project.Name, attachments, appends, currentNodeTitle, pendingApproval), nil
+	return toDetailDTO(session, project.Name, project.IsGit, attachments, appends, currentNodeTitle, pendingApproval), nil
 }
 
 func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error) {
@@ -8560,6 +8562,7 @@ func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, er
 	}
 	card := toCardDTO(session, attachments, currentNodeTitle)
 	card.ProjectName = project.Name
+	card.ProjectIsGit = project.IsGit
 	card.TerminalSummary = s.terminalSummary(session)
 	return card, nil
 }
@@ -8608,19 +8611,18 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		return port.Page[CardDTO]{}, fmt.Errorf("list session cards: %w", err)
 	}
 	items := make([]CardDTO, 0, len(sessions))
-	projectNames := make(map[domain.ProjectID]string)
+	projects := make(map[domain.ProjectID]projectdomain.Project)
 	for _, session := range sessions {
-		projectName, ok := projectNames[session.ProjectID]
+		project, ok := projects[session.ProjectID]
 		if !ok {
-			project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+			project, err = s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
 			if err != nil {
 				return port.Page[CardDTO]{}, fmt.Errorf("find session project: %w", err)
 			}
 			if project.RemovedAt != nil {
 				continue
 			}
-			projectName = project.Name
-			projectNames[session.ProjectID] = projectName
+			projects[session.ProjectID] = project
 		}
 		attachments, err := s.listSessionAttachments(ctx, session.ID)
 		if err != nil {
@@ -8631,7 +8633,8 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 			return port.Page[CardDTO]{}, err
 		}
 		item := toCardDTO(session, attachments, currentNodeTitle)
-		item.ProjectName = projectName
+		item.ProjectName = project.Name
+		item.ProjectIsGit = project.IsGit
 		item.TerminalSummary = s.terminalSummary(session)
 		items = append(items, item)
 	}
@@ -8935,7 +8938,7 @@ func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, c
 	}
 }
 
-func toDetailDTO(session domain.Session, projectName string, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string, pendingApproval *PendingApprovalDTO) DetailDTO {
+func toDetailDTO(session domain.Session, projectName string, projectIsGit bool, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string, pendingApproval *PendingApprovalDTO) DetailDTO {
 	promptAppends := make([]PromptAppendDTO, 0, len(appends))
 	for _, promptAppend := range appends {
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
@@ -8943,6 +8946,7 @@ func toDetailDTO(session domain.Session, projectName string, attachments []domai
 	return DetailDTO{
 		DTO:                 toDTO(session),
 		ProjectName:         projectName,
+		ProjectIsGit:        projectIsGit,
 		ForkedFromSessionID: session.ForkedFromSessionID,
 		CloseReason:         session.CloseReason,
 		CurrentNodeTitle:    currentNodeTitle,

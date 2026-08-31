@@ -389,6 +389,7 @@ type SessionCard {
   id: ID!
   projectId: ID!
   projectName: String!
+  projectIsGit: Boolean!
   requirement: String!
   requirementSummary: String!
   mode: String!
@@ -434,6 +435,7 @@ type SessionDetail {
   id: ID!
   projectId: ID!
   projectName: String!
+  projectIsGit: Boolean!
   forkedFromSessionId: ID
   requirement: String!
   mode: String!

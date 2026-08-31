@@ -122,11 +122,11 @@
                 <span class="overview-card-meta__label">所属项目</span>
                 <span>{{ card.projectName }}</span>
               </div>
-              <div>
+              <div v-if="card.projectIsGit">
                 <span class="overview-card-meta__label">基础分支</span>
                 <span>{{ card.branch }}</span>
               </div>
-              <div>
+              <div v-if="card.projectIsGit">
                 <span class="overview-card-meta__label">工作分支</span>
                 <span>{{ card.worktreeBranch || '-' }}</span>
               </div>
@@ -201,7 +201,7 @@
                 </q-btn>
 
                 <q-btn
-                  v-if="card.filesChanged > 0"
+                  v-if="card.projectIsGit && card.filesChanged > 0"
                   flat
                   dense
                   no-caps
@@ -348,6 +348,7 @@
       :loading="questionsLoading"
       :submitting="questionsSubmitting"
       :diff-target="questionsDiffTarget"
+      :show-diff="questionsDiffAvailable"
       @submit="submitAnswers"
     />
 
@@ -356,7 +357,7 @@
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
             <q-tab name="output" icon="fact_check" label="审核结果" />
-            <q-tab name="diff" icon="difference" label="Diff" />
+            <q-tab v-if="approvalProjectIsGit" name="diff" icon="difference" label="Diff" />
             <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
           </q-tabs>
           <div class="forward-approval-dialog__actions">
@@ -384,7 +385,11 @@
               @open-artifact="openApprovalArtifact"
             />
           </q-tab-panel>
-          <q-tab-panel name="diff" class="forward-approval-dialog__panel">
+          <q-tab-panel
+            v-if="approvalProjectIsGit"
+            name="diff"
+            class="forward-approval-dialog__panel"
+          >
             <DiffWorkspace
               v-if="approvalDialog"
               v-model="approvalDiffWorkspaceState"
@@ -640,6 +645,10 @@ const questionsDiffTarget = computed<DiffWorkspaceTarget>(() => ({
   kind: 'session',
   sessionId: activeQuestionSessionId.value,
 }));
+const questionsDiffAvailable = computed(() =>
+  Boolean(latestRows.value.find((card) => card.id === activeQuestionSessionId.value)?.projectIsGit),
+);
+const approvalProjectIsGit = ref(false);
 const approvalAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: approvalSessionId.value, mode: 'all' },
@@ -1172,8 +1181,8 @@ async function closeCard(card: SessionCard, mergeMindMap = false) {
 function projectMindMapRealtime(projectId: string) {
   return Boolean(
     generalSettings.value?.mindMapEnabled &&
-      generalSettings.value.mindMapMode === 'realtime' &&
-      projects.value.find((project) => project.id === projectId)?.mindMapEnabled,
+    generalSettings.value.mindMapMode === 'realtime' &&
+    projects.value.find((project) => project.id === projectId)?.mindMapEnabled,
   );
 }
 
@@ -1224,6 +1233,7 @@ async function openApprovalDialog(card: SessionCard) {
   }
   const requestGeneration = ++approvalContextGeneration;
   approvalSessionId.value = card.id;
+  approvalProjectIsGit.value = card.projectIsGit;
   approvalTab.value = 'output';
   approvalContext.value = null;
   approvalPending.value = null;
@@ -1235,6 +1245,7 @@ async function openApprovalDialog(card: SessionCard) {
   try {
     const detail = await getSession(card.id);
     if (!isCurrentApprovalContext(requestGeneration, card.id)) return;
+    approvalProjectIsGit.value = detail.projectIsGit;
     if (detail.status !== 'waiting_approval' || !detail.pendingApproval) {
       approvalDialog.value = false;
       clearApprovalContext();
@@ -1314,6 +1325,7 @@ function clearApprovalContext() {
   approvalPending.value = null;
   approvalLoading.value = false;
   approvalSessionId.value = '';
+  approvalProjectIsGit.value = false;
   approvalResolvedArtifacts.value = {};
   approvalArtifactFocus.value = null;
 }

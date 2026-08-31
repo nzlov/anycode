@@ -65,7 +65,7 @@ test('standalone mobile entries navigate while artifact previews open in place',
   );
   assert.doesNotMatch(artifacts, /useRouter|name: 'session-artifact'/);
   assert.match(artifacts, /:maximized="\$q\.screen\.lt\.md"/);
-  assert.match(detail, /<q-tab name="changes" icon="difference" label="变更"/);
+  assert.match(detail, /<q-tab[^>]*name="changes"[^>]*icon="difference"[^>]*label="变更"/);
   assert.match(detail, /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/);
   assert.doesNotMatch(detail, /<q-route-tab|mobileDiffRoute|allArtifactsRoute/);
   assert.match(
