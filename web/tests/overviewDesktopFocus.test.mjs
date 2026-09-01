@@ -74,9 +74,9 @@ test('desktop create panel uses one project row and expands with prompt content'
 test('desktop create panel presents the prompt before a compact context row', () => {
   assert.match(
     newSessionSource,
-    /<q-card-section\s+v-if="!panel"\s+class="new-session-dialog__header/s,
+    /<q-card-section\s+v-if="!panel && !page"\s+class="new-session-dialog__header/s,
   );
-  assert.match(newSessionSource, /<q-separator v-if="!panel"/);
+  assert.match(newSessionSource, /<q-separator v-if="!panel && !page"/);
   assert.match(newSessionSource, /class="new-session-grid new-session-context"/);
   assert.match(newSessionSource, /:outlined="!panel"[\s\S]*?:borderless="panel"/);
   assert.match(newSessionSource, /:title="panel \? '' : '提示词'"/);

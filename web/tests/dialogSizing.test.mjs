@@ -56,7 +56,8 @@ test('one shared class keeps fallback content dialogs compact at the 600px break
 
 test('content dialogs keep shared cards while full-screen mobile previews opt out', () => {
   for (const [source, semanticClass] of contentDialogs.filter(
-    ([, semanticClass]) => semanticClass !== 'event-resource-dialog',
+    ([, semanticClass]) =>
+      semanticClass !== 'event-resource-dialog' && semanticClass !== 'new-session-dialog',
   )) {
     assert.match(
       source,
@@ -64,6 +65,8 @@ test('content dialogs keep shared cards while full-screen mobile previews opt ou
       `${semanticClass} must use app-content-dialog`,
     );
   }
+  assert.match(newSessionSource, /class="new-session-dialog"/);
+  assert.match(newSessionSource, /'app-content-dialog': !page/);
   assert.match(detailSource, /'app-content-dialog': !isMobileLayout/);
 
   assert.doesNotMatch(

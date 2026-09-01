@@ -1136,6 +1136,20 @@ body.desktop
   flex: 0 0 auto;
 }
 
+.new-session-page-content {
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+}
+
+.new-session-page-content .new-session-body {
+  padding: 0;
+  overflow-y: visible;
+  overscroll-behavior: auto;
+}
+
 .global-settings-dialog {
   display: flex;
   flex-direction: column;
@@ -2285,11 +2299,6 @@ body.desktop
 @media (max-width: 699px) {
   .page-shell {
     padding: 16px 0;
-  }
-
-  .new-session-dialog:not(.new-session-dialog--panel) .prompt-input textarea {
-    max-height: max(188px, min(36dvh, 320px));
-    overflow-y: auto !important;
   }
 
   .new-session-grid,

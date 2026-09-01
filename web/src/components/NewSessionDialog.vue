@@ -9,13 +9,21 @@
     persistent
     @update:model-value="page ? undefined : emitModel($event)"
   >
-    <q-card
-      class="new-session-dialog app-content-dialog"
-      :class="{ 'new-session-dialog--panel': panel }"
+    <component
+      :is="page ? 'section' : QCard"
+      class="new-session-dialog"
+      :class="{
+        'app-content-dialog': !page,
+        'new-session-dialog--panel': panel,
+        'new-session-page-content': page,
+      }"
       :inert="branchesLoading"
       :aria-busy="branchesLoading"
     >
-      <q-card-section v-if="!panel" class="new-session-dialog__header row items-center q-pb-sm">
+      <q-card-section
+        v-if="!panel && !page"
+        class="new-session-dialog__header row items-center q-pb-sm"
+      >
         <div class="text-subtitle1 text-weight-bold">新建卡片</div>
         <q-space />
         <q-btn
@@ -32,7 +40,7 @@
         </q-btn>
       </q-card-section>
 
-      <q-separator v-if="!panel" />
+      <q-separator v-if="!panel && !page" />
 
       <q-card-section class="new-session-body">
         <div class="new-session-grid new-session-context">
@@ -158,13 +166,13 @@
       </q-card-section>
 
       <q-inner-loading :showing="branchesLoading" color="primary" />
-    </q-card>
+    </component>
   </component>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Notify, QDialog, useQuasar } from 'quasar';
+import { Notify, QCard, QDialog, useQuasar } from 'quasar';
 
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';

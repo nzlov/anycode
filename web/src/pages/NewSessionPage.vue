@@ -1,5 +1,6 @@
 <template>
   <q-page class="surface-page">
+    <PageToolbar title="新建卡片" />
     <NewSessionDialog
       page
       :model-value="true"
@@ -14,6 +15,7 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
+import PageToolbar from '@/components/PageToolbar.vue';
 
 const route = useRoute();
 const router = useRouter();

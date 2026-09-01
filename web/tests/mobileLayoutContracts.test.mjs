@@ -45,26 +45,34 @@ test('prompt runtime controls have one shared component owner', () => {
   assert.doesNotMatch(composerSource, /<q-select/);
 });
 
-test('new session mobile entry uses a page and keeps one scrolling body', () => {
+test('new session mobile entry uses a direct page with page-owned scrolling', () => {
   assert.doesNotMatch(newSessionSource, /:maximized=/);
   assert.match(newSessionSource, /page\?: boolean/);
   assert.match(newSessionPageSource, /<NewSessionDialog[\s\S]*page/);
+  assert.match(newSessionPageSource, /<PageToolbar title="新建卡片"/);
   assert.match(routesSource, /name: 'new-session'/);
   assert.match(newSessionSource, /const \$q = useQuasar\(\)/);
-  assert.match(newSessionSource, /class="new-session-dialog app-content-dialog"/);
+  assert.match(newSessionSource, /:is="page \? 'section' : QCard"/);
+  assert.match(newSessionSource, /'app-content-dialog': !page/);
+  assert.match(newSessionSource, /'new-session-page-content': page/);
   assert.match(
     stylesSource,
     /\.new-session-dialog\s*{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s,
   );
   assert.match(stylesSource, /\.new-session-body\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(
+    stylesSource,
+    /\.new-session-page-content\s*{[^}]*overflow:\s*visible[^}]*background:\s*transparent/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-page-content \.new-session-body\s*{[^}]*padding:\s*0[^}]*overflow-y:\s*visible/s,
+  );
+  assert.match(
     smallStyles,
     /\.app-content-dialog\s*{[^}]*width:\s*calc\(100vw - 24px\)\s*!important[^}]*height:\s*auto/s,
   );
-  assert.match(
-    mobileStyles,
-    /\.new-session-dialog:not\(\.new-session-dialog--panel\) \.prompt-input textarea\s*{[^}]*max-height:\s*max\(188px,\s*min\(36dvh,\s*320px\)\)[^}]*overflow-y:\s*auto\s*!important/s,
-  );
+  assert.doesNotMatch(mobileStyles, /\.new-session-dialog[^}]*\.prompt-input textarea/);
 });
 
 test('questions mobile entry opens the questions dialog in place', () => {
