@@ -649,6 +649,7 @@ var (
 		{Name: "agent_writable_roots", Type: field.TypeJSON, Default: schema.Expr("'[]'")},
 		{Name: "send_shortcut", Type: field.TypeString, Default: "shift_enter"},
 		{Name: "codex_context_window", Type: field.TypeInt, Default: 0},
+		{Name: "codex_auto_compact_token_limit", Type: field.TypeInt, Default: 0},
 		{Name: "mind_map_enabled", Type: field.TypeBool, Default: false},
 		{Name: "mind_map_mode", Type: field.TypeString, Default: "realtime"},
 		{Name: "mind_map_layout", Type: field.TypeString, Default: "radial"},

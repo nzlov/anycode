@@ -68,6 +68,20 @@ func (_c *SystemConfigurationCreate) SetNillableCodexContextWindow(v *int) *Syst
 	return _c
 }
 
+// SetCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field.
+func (_c *SystemConfigurationCreate) SetCodexAutoCompactTokenLimit(v int) *SystemConfigurationCreate {
+	_c.mutation.SetCodexAutoCompactTokenLimit(v)
+	return _c
+}
+
+// SetNillableCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableCodexAutoCompactTokenLimit(v *int) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetCodexAutoCompactTokenLimit(*v)
+	}
+	return _c
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_c *SystemConfigurationCreate) SetMindMapEnabled(v bool) *SystemConfigurationCreate {
 	_c.mutation.SetMindMapEnabled(v)
@@ -313,6 +327,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultCodexContextWindow
 		_c.mutation.SetCodexContextWindow(v)
 	}
+	if _, ok := _c.mutation.CodexAutoCompactTokenLimit(); !ok {
+		v := systemconfiguration.DefaultCodexAutoCompactTokenLimit
+		_c.mutation.SetCodexAutoCompactTokenLimit(v)
+	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		v := systemconfiguration.DefaultMindMapEnabled
 		_c.mutation.SetMindMapEnabled(v)
@@ -382,6 +400,9 @@ func (_c *SystemConfigurationCreate) check() error {
 	}
 	if _, ok := _c.mutation.CodexContextWindow(); !ok {
 		return &ValidationError{Name: "codex_context_window", err: errors.New(`ent: missing required field "SystemConfiguration.codex_context_window"`)}
+	}
+	if _, ok := _c.mutation.CodexAutoCompactTokenLimit(); !ok {
+		return &ValidationError{Name: "codex_auto_compact_token_limit", err: errors.New(`ent: missing required field "SystemConfiguration.codex_auto_compact_token_limit"`)}
 	}
 	if _, ok := _c.mutation.MindMapEnabled(); !ok {
 		return &ValidationError{Name: "mind_map_enabled", err: errors.New(`ent: missing required field "SystemConfiguration.mind_map_enabled"`)}
@@ -500,6 +521,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.CodexContextWindow(); ok {
 		_spec.SetField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
 		_node.CodexContextWindow = value
+	}
+	if value, ok := _c.mutation.CodexAutoCompactTokenLimit(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexAutoCompactTokenLimit, field.TypeInt, value)
+		_node.CodexAutoCompactTokenLimit = value
 	}
 	if value, ok := _c.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

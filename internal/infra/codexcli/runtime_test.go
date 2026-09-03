@@ -21,11 +21,11 @@ type testToolHandler struct {
 	calls chan process.DynamicToolCall
 }
 
-func TestAppServerArgsApplyOptionalContextWindow(t *testing.T) {
-	if got := appServerArgs(0); !slices.Equal(got, []string{"app-server", "--stdio"}) {
+func TestAppServerArgsApplyOptionalContextSettings(t *testing.T) {
+	if got := appServerArgs(0, 0); !slices.Equal(got, []string{"app-server", "--stdio"}) {
 		t.Fatalf("default app-server args = %#v", got)
 	}
-	if got := appServerArgs(200_000); !slices.Equal(got, []string{"-c", "model_context_window=200000", "app-server", "--stdio"}) {
+	if got := appServerArgs(200_000, 160_000); !slices.Equal(got, []string{"-c", "model_auto_compact_token_limit=160000", "-c", "model_context_window=200000", "app-server", "--stdio"}) {
 		t.Fatalf("configured app-server args = %#v", got)
 	}
 }

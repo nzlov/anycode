@@ -93,7 +93,8 @@ type MindMapConfiguration struct {
 }
 
 type CodexConfiguration struct {
-	ContextWindow int
+	ContextWindow         int
+	AutoCompactTokenLimit int
 }
 
 const (

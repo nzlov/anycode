@@ -74,7 +74,9 @@ type ComplexityRoot struct {
 	}
 
 	CodexSettings struct {
-		ContextWindow func(childComplexity int) int
+		AgentMaxConcurrent    func(childComplexity int) int
+		AutoCompactTokenLimit func(childComplexity int) int
+		ContextWindow         func(childComplexity int) int
 	}
 
 	CodexSlashCommand struct {
@@ -145,7 +147,6 @@ type ComplexityRoot struct {
 	}
 
 	GeneralSettings struct {
-		AgentMaxConcurrent     func(childComplexity int) int
 		AgentWritableRoots     func(childComplexity int) int
 		MindMapEnabled         func(childComplexity int) int
 		MindMapLayout          func(childComplexity int) int
@@ -1123,6 +1124,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CodexReasoningEffortOption.Value(childComplexity), true
 
+	case "CodexSettings.agentMaxConcurrent":
+		if e.ComplexityRoot.CodexSettings.AgentMaxConcurrent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSettings.AgentMaxConcurrent(childComplexity), true
+	case "CodexSettings.autoCompactTokenLimit":
+		if e.ComplexityRoot.CodexSettings.AutoCompactTokenLimit == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSettings.AutoCompactTokenLimit(childComplexity), true
 	case "CodexSettings.contextWindow":
 		if e.ComplexityRoot.CodexSettings.ContextWindow == nil {
 			break
@@ -1362,12 +1375,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.FileDiff.Hunks(childComplexity), true
 
-	case "GeneralSettings.agentMaxConcurrent":
-		if e.ComplexityRoot.GeneralSettings.AgentMaxConcurrent == nil {
-			break
-		}
-
-		return e.ComplexityRoot.GeneralSettings.AgentMaxConcurrent(childComplexity), true
 	case "GeneralSettings.agentWritableRoots":
 		if e.ComplexityRoot.GeneralSettings.AgentWritableRoots == nil {
 			break
@@ -5158,7 +5165,6 @@ enum AppearanceSolidTheme {
 }
 
 type GeneralSettings {
-  agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
   sendShortcut: String!
   mindMapEnabled: Boolean!
@@ -5170,7 +5176,6 @@ type GeneralSettings {
 }
 
 input UpdateGeneralSettingsInput {
-  agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
   sendShortcut: String!
   mindMapEnabled: Boolean!
@@ -5183,10 +5188,14 @@ input UpdateGeneralSettingsInput {
 
 type CodexSettings {
   contextWindow: Int
+  autoCompactTokenLimit: Int
+  agentMaxConcurrent: Int!
 }
 
 input UpdateCodexSettingsInput {
   contextWindow: Int
+  autoCompactTokenLimit: Int
+  agentMaxConcurrent: Int!
 }
 
 type AppearanceSettings {
@@ -7748,6 +7757,64 @@ func (ec *executionContext) fieldContext_CodexSettings_contextWindow(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _CodexSettings_autoCompactTokenLimit(ctx context.Context, field graphql.CollectedField, obj *model.CodexSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSettings_autoCompactTokenLimit,
+		func(ctx context.Context) (any, error) {
+			return obj.AutoCompactTokenLimit, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSettings_autoCompactTokenLimit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSettings_agentMaxConcurrent(ctx context.Context, field graphql.CollectedField, obj *model.CodexSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSettings_agentMaxConcurrent,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentMaxConcurrent, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSettings_agentMaxConcurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _CodexSlashCommand_name(ctx context.Context, field graphql.CollectedField, obj *model.CodexSlashCommand) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8884,35 +8951,6 @@ func (ec *executionContext) fieldContext_FileDiff_hunks(_ context.Context, field
 				return ec.fieldContext_DiffHunk_lines(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DiffHunk", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _GeneralSettings_agentMaxConcurrent(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_GeneralSettings_agentMaxConcurrent,
-		func(ctx context.Context) (any, error) {
-			return obj.AgentMaxConcurrent, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_GeneralSettings_agentMaxConcurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "GeneralSettings",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10683,8 +10721,6 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "agentMaxConcurrent":
-				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
 			case "sendShortcut":
@@ -10746,6 +10782,10 @@ func (ec *executionContext) fieldContext_Mutation_updateCodexSettings(ctx contex
 			switch field.Name {
 			case "contextWindow":
 				return ec.fieldContext_CodexSettings_contextWindow(ctx, field)
+			case "autoCompactTokenLimit":
+				return ec.fieldContext_CodexSettings_autoCompactTokenLimit(ctx, field)
+			case "agentMaxConcurrent":
+				return ec.fieldContext_CodexSettings_agentMaxConcurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type CodexSettings", field.Name)
 		},
@@ -15064,8 +15104,6 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "agentMaxConcurrent":
-				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
 			case "agentWritableRoots":
 				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
 			case "sendShortcut":
@@ -15115,6 +15153,10 @@ func (ec *executionContext) fieldContext_Query_codexSettings(_ context.Context, 
 			switch field.Name {
 			case "contextWindow":
 				return ec.fieldContext_CodexSettings_contextWindow(ctx, field)
+			case "autoCompactTokenLimit":
+				return ec.fieldContext_CodexSettings_autoCompactTokenLimit(ctx, field)
+			case "agentMaxConcurrent":
+				return ec.fieldContext_CodexSettings_agentMaxConcurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type CodexSettings", field.Name)
 		},
@@ -30122,7 +30164,7 @@ func (ec *executionContext) unmarshalInputUpdateCodexSettingsInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"contextWindow"}
+	fieldsInOrder := [...]string{"contextWindow", "autoCompactTokenLimit", "agentMaxConcurrent"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -30136,6 +30178,20 @@ func (ec *executionContext) unmarshalInputUpdateCodexSettingsInput(ctx context.C
 				return it, err
 			}
 			it.ContextWindow = data
+		case "autoCompactTokenLimit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("autoCompactTokenLimit"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AutoCompactTokenLimit = data
+		case "agentMaxConcurrent":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentMaxConcurrent"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AgentMaxConcurrent = data
 		}
 	}
 	return it, nil
@@ -30152,20 +30208,13 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots", "sendShortcut", "mindMapEnabled", "mindMapMode", "mindMapLayout", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
+	fieldsInOrder := [...]string{"agentWritableRoots", "sendShortcut", "mindMapEnabled", "mindMapMode", "mindMapLayout", "mindMapModel", "mindMapReasoningEffort", "mindMapMaxConcurrent"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "agentMaxConcurrent":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentMaxConcurrent"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.AgentMaxConcurrent = data
 		case "agentWritableRoots":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentWritableRoots"))
 			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
@@ -31125,6 +31174,13 @@ func (ec *executionContext) _CodexSettings(ctx context.Context, sel ast.Selectio
 			out.Values[i] = graphql.MarshalString("CodexSettings")
 		case "contextWindow":
 			out.Values[i] = ec._CodexSettings_contextWindow(ctx, field, obj)
+		case "autoCompactTokenLimit":
+			out.Values[i] = ec._CodexSettings_autoCompactTokenLimit(ctx, field, obj)
+		case "agentMaxConcurrent":
+			out.Values[i] = ec._CodexSettings_agentMaxConcurrent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -31681,11 +31737,6 @@ func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.Select
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("GeneralSettings")
-		case "agentMaxConcurrent":
-			out.Values[i] = ec._GeneralSettings_agentMaxConcurrent(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "agentWritableRoots":
 			out.Values[i] = ec._GeneralSettings_agentWritableRoots(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

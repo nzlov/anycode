@@ -6,7 +6,7 @@ function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
 
-test('global concurrency is database-backed and editable in general settings', () => {
+test('general settings exclude Codex concurrency', () => {
   const serviceSource = readSource('../src/services/generalSettings.ts');
   const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
   const configSource = readSource('../../internal/infra/config/config.go');
@@ -14,8 +14,8 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(serviceSource, /query GeneralSettings/);
   assert.match(serviceSource, /mutation UpdateGeneralSettings/);
   assert.match(settingsSource, /name="general"/);
-  assert.match(settingsSource, /Agent 并发数量/);
-  assert.match(settingsSource, /general\.agentMaxConcurrent/);
+  assert.doesNotMatch(settingsSource, /general\.agentMaxConcurrent/);
+  assert.doesNotMatch(serviceSource, /agentMaxConcurrent/);
   assert.match(serviceSource, /agentWritableRoots/);
   assert.match(settingsSource, /白名单目录/);
   assert.match(settingsSource, /agentWritableRoots/);
@@ -92,7 +92,7 @@ test('general settings save valid changes after a debounce without a separating 
   assert.match(settingsSource, /const generalSaveDebounceMs = 500/);
   assert.match(
     settingsSource,
-    /watch\(\s*\[[\s\S]*?general\.value\.agentMaxConcurrent[\s\S]*?general\.value\.sendShortcut[\s\S]*?agentWritableRoots[\s\S]*?scheduleGeneralSettingsSave/,
+    /watch\(\s*\[[\s\S]*?general\.value\.sendShortcut[\s\S]*?agentWritableRoots[\s\S]*?scheduleGeneralSettingsSave/,
   );
   assert.match(
     settingsSource,

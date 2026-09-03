@@ -98,16 +98,19 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 
 func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {
 	return &model.GeneralSettings{
-		AgentMaxConcurrent: dto.AgentMaxConcurrent, AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
-		SendShortcut:   string(dto.SendShortcut),
-		MindMapEnabled: dto.MindMapEnabled, MindMapMode: string(dto.MindMapMode), MindMapModel: dto.MindMapModel,
+		AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
+		SendShortcut:       string(dto.SendShortcut),
+		MindMapEnabled:     dto.MindMapEnabled, MindMapMode: string(dto.MindMapMode), MindMapModel: dto.MindMapModel,
 		MindMapLayout:          string(dto.MindMapLayout),
 		MindMapReasoningEffort: dto.MindMapReasoningEffort, MindMapMaxConcurrent: dto.MindMapMaxConcurrent,
 	}
 }
 
 func mapCodexSettings(dto settingapp.CodexSettingsDTO) *model.CodexSettings {
-	return &model.CodexSettings{ContextWindow: dto.ContextWindow}
+	return &model.CodexSettings{
+		ContextWindow: dto.ContextWindow, AutoCompactTokenLimit: dto.AutoCompactTokenLimit,
+		AgentMaxConcurrent: dto.AgentMaxConcurrent,
+	}
 }
 
 func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {

@@ -38,7 +38,6 @@ type UseCase interface {
 }
 
 type UpdateGeneralSettingsInput struct {
-	AgentMaxConcurrent     int
 	AgentWritableRoots     []string
 	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
@@ -50,7 +49,6 @@ type UpdateGeneralSettingsInput struct {
 }
 
 type GeneralSettingsDTO struct {
-	AgentMaxConcurrent     int
 	AgentWritableRoots     []string
 	SendShortcut           domain.SendShortcut
 	MindMapEnabled         bool
@@ -62,11 +60,15 @@ type GeneralSettingsDTO struct {
 }
 
 type UpdateCodexSettingsInput struct {
-	ContextWindow *int
+	ContextWindow         *int
+	AutoCompactTokenLimit *int
+	AgentMaxConcurrent    int
 }
 
 type CodexSettingsDTO struct {
-	ContextWindow *int
+	ContextWindow         *int
+	AutoCompactTokenLimit *int
+	AgentMaxConcurrent    int
 }
 
 type UpdateAppearanceSettingsInput struct {
@@ -134,7 +136,7 @@ type Service struct {
 	onConcurrencyLimitChanged func()
 	codexModels               []processdomain.CodexModel
 	onMindMapSettingsChanged  func()
-	onCodexSettingsChanged    func(context.Context, int) error
+	onCodexSettingsChanged    func(context.Context, int, int) error
 }
 
 type Option func(*Service)
@@ -170,7 +172,7 @@ func WithMindMapSettings(models []processdomain.CodexModel, callback func()) Opt
 	}
 }
 
-func WithCodexSettingsChanged(callback func(context.Context, int) error) Option {
+func WithCodexSettingsChanged(callback func(context.Context, int, int) error) Option {
 	return func(service *Service) {
 		service.onCodexSettingsChanged = callback
 	}
@@ -196,9 +198,6 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 	if err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get general settings failed").WithRetryable(true)
 	}
-	if configuration.AgentMaxConcurrent <= 0 {
-		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
-	}
 	if !configuration.SendShortcut.Valid() {
 		configuration.SendShortcut = domain.SendShortcutShiftEnter
 	}
@@ -206,7 +205,6 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 		configuration.MindMap.Layout = domain.MindMapLayoutRadial
 	}
 	return GeneralSettingsDTO{
-		AgentMaxConcurrent:     configuration.AgentMaxConcurrent,
 		AgentWritableRoots:     append([]string{}, configuration.AgentWritableRoots...),
 		SendShortcut:           configuration.SendShortcut,
 		MindMapEnabled:         configuration.MindMap.Enabled,
@@ -226,53 +224,82 @@ func (s *Service) GetCodexSettings(ctx context.Context) (CodexSettingsDTO, error
 	if err != nil {
 		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get Codex settings failed").WithRetryable(true)
 	}
-	return codexSettingsDTO(configuration.Codex), nil
+	if configuration.AgentMaxConcurrent <= 0 {
+		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
+	}
+	return codexSettingsDTO(configuration), nil
 }
 
 func (s *Service) UpdateCodexSettings(ctx context.Context, input UpdateCodexSettingsInput) (CodexSettingsDTO, error) {
 	if s == nil || s.repo == nil {
 		return CodexSettingsDTO{}, errors.New("setting usecase: nil service")
 	}
-	contextWindow := 0
-	if input.ContextWindow != nil {
-		contextWindow = *input.ContextWindow
-		if contextWindow <= 0 {
-			return CodexSettingsDTO{}, validationError("contextWindow", "Codex context window must be positive")
-		}
+	contextWindow, err := optionalPositiveInt(input.ContextWindow, "contextWindow", "Codex context window")
+	if err != nil {
+		return CodexSettingsDTO{}, err
+	}
+	autoCompactTokenLimit, err := optionalPositiveInt(input.AutoCompactTokenLimit, "autoCompactTokenLimit", "Codex auto compact token limit")
+	if err != nil {
+		return CodexSettingsDTO{}, err
+	}
+	if input.AgentMaxConcurrent <= 0 {
+		return CodexSettingsDTO{}, validationError("agentMaxConcurrent", "agent concurrency limit must be positive")
 	}
 	configuration, err := s.repo.GetSystemConfiguration(ctx)
 	if err != nil {
 		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get Codex settings failed").WithRetryable(true)
 	}
-	if configuration.Codex.ContextWindow == contextWindow {
-		return codexSettingsDTO(configuration.Codex), nil
+	if configuration.Codex.ContextWindow == contextWindow &&
+		configuration.Codex.AutoCompactTokenLimit == autoCompactTokenLimit &&
+		configuration.AgentMaxConcurrent == input.AgentMaxConcurrent {
+		return codexSettingsDTO(configuration), nil
 	}
+	contextChanged := configuration.Codex.ContextWindow != contextWindow ||
+		configuration.Codex.AutoCompactTokenLimit != autoCompactTokenLimit
+	concurrencyChanged := configuration.AgentMaxConcurrent != input.AgentMaxConcurrent
 	configuration.Codex.ContextWindow = contextWindow
+	configuration.Codex.AutoCompactTokenLimit = autoCompactTokenLimit
+	configuration.AgentMaxConcurrent = input.AgentMaxConcurrent
 	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
 		return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update Codex settings failed").WithRetryable(true)
 	}
-	if s.onCodexSettingsChanged != nil {
-		if err := s.onCodexSettingsChanged(ctx, contextWindow); err != nil {
+	if contextChanged && s.onCodexSettingsChanged != nil {
+		if err := s.onCodexSettingsChanged(ctx, contextWindow, autoCompactTokenLimit); err != nil {
 			return CodexSettingsDTO{}, apperror.Wrap(err, apperror.CodeCodexStartFailed, apperror.CategoryCodexError, "restart Codex sessions failed").WithRetryable(true)
 		}
 	}
-	return codexSettingsDTO(configuration.Codex), nil
+	if concurrencyChanged && s.onConcurrencyLimitChanged != nil {
+		s.onConcurrencyLimitChanged()
+	}
+	return codexSettingsDTO(configuration), nil
 }
 
-func codexSettingsDTO(configuration domain.CodexConfiguration) CodexSettingsDTO {
-	if configuration.ContextWindow <= 0 {
-		return CodexSettingsDTO{}
+func optionalPositiveInt(value *int, field, label string) (int, error) {
+	if value == nil {
+		return 0, nil
 	}
-	contextWindow := configuration.ContextWindow
-	return CodexSettingsDTO{ContextWindow: &contextWindow}
+	if *value <= 0 {
+		return 0, validationError(field, label+" must be positive")
+	}
+	return *value, nil
+}
+
+func codexSettingsDTO(configuration domain.SystemConfiguration) CodexSettingsDTO {
+	result := CodexSettingsDTO{AgentMaxConcurrent: configuration.AgentMaxConcurrent}
+	if configuration.Codex.ContextWindow > 0 {
+		contextWindow := configuration.Codex.ContextWindow
+		result.ContextWindow = &contextWindow
+	}
+	if configuration.Codex.AutoCompactTokenLimit > 0 {
+		autoCompactTokenLimit := configuration.Codex.AutoCompactTokenLimit
+		result.AutoCompactTokenLimit = &autoCompactTokenLimit
+	}
+	return result
 }
 
 func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error) {
 	if s == nil || s.repo == nil {
 		return GeneralSettingsDTO{}, errors.New("setting usecase: nil service")
-	}
-	if input.AgentMaxConcurrent <= 0 {
-		return GeneralSettingsDTO{}, validationError("agentMaxConcurrent", "agent concurrency limit must be positive")
 	}
 	writableRoots, err := normalizeAgentWritableRoots(input.AgentWritableRoots)
 	if err != nil {
@@ -312,23 +339,19 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	if err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get general settings failed").WithRetryable(true)
 	}
-	configuration.AgentMaxConcurrent = input.AgentMaxConcurrent
 	configuration.AgentWritableRoots = writableRoots
 	configuration.SendShortcut = sendShortcut
 	configuration.MindMap = mindMap
 	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update general settings failed").WithRetryable(true)
 	}
-	if s.onConcurrencyLimitChanged != nil {
-		s.onConcurrencyLimitChanged()
-	}
 	if s.onMindMapSettingsChanged != nil {
 		s.onMindMapSettingsChanged()
 	}
 	return GeneralSettingsDTO{
-		AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots,
-		SendShortcut:   sendShortcut,
-		MindMapEnabled: mindMap.Enabled, MindMapMode: mindMap.Mode, MindMapModel: mindMap.Model,
+		AgentWritableRoots: writableRoots,
+		SendShortcut:       sendShortcut,
+		MindMapEnabled:     mindMap.Enabled, MindMapMode: mindMap.Mode, MindMapModel: mindMap.Model,
 		MindMapLayout:          mindMap.Layout,
 		MindMapReasoningEffort: mindMap.ReasoningEffort, MindMapMaxConcurrent: mindMap.MaxConcurrent,
 	}, nil

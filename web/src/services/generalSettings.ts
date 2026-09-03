@@ -1,7 +1,6 @@
 import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface GeneralSettings {
-  agentMaxConcurrent: number;
   agentWritableRoots: string[];
   sendShortcut: SendShortcut;
   mindMapEnabled: boolean;
@@ -23,7 +22,6 @@ export const mindMapLayoutOptions: { label: string; value: MindMapLayout }[] = [
 export const defaultSendShortcut: SendShortcut = 'shift_enter';
 
 const generalSettingsFields = `
-  agentMaxConcurrent
   agentWritableRoots
   sendShortcut
   mindMapEnabled

@@ -21,6 +21,8 @@ const (
 	FieldSendShortcut = "send_shortcut"
 	// FieldCodexContextWindow holds the string denoting the codex_context_window field in the database.
 	FieldCodexContextWindow = "codex_context_window"
+	// FieldCodexAutoCompactTokenLimit holds the string denoting the codex_auto_compact_token_limit field in the database.
+	FieldCodexAutoCompactTokenLimit = "codex_auto_compact_token_limit"
 	// FieldMindMapEnabled holds the string denoting the mind_map_enabled field in the database.
 	FieldMindMapEnabled = "mind_map_enabled"
 	// FieldMindMapMode holds the string denoting the mind_map_mode field in the database.
@@ -60,6 +62,7 @@ var Columns = []string{
 	FieldAgentWritableRoots,
 	FieldSendShortcut,
 	FieldCodexContextWindow,
+	FieldCodexAutoCompactTokenLimit,
 	FieldMindMapEnabled,
 	FieldMindMapMode,
 	FieldMindMapLayout,
@@ -97,6 +100,8 @@ var (
 	SendShortcutValidator func(string) error
 	// DefaultCodexContextWindow holds the default value on creation for the "codex_context_window" field.
 	DefaultCodexContextWindow int
+	// DefaultCodexAutoCompactTokenLimit holds the default value on creation for the "codex_auto_compact_token_limit" field.
+	DefaultCodexAutoCompactTokenLimit int
 	// DefaultMindMapEnabled holds the default value on creation for the "mind_map_enabled" field.
 	DefaultMindMapEnabled bool
 	// DefaultMindMapMode holds the default value on creation for the "mind_map_mode" field.
@@ -158,6 +163,11 @@ func BySendShortcut(opts ...sql.OrderTermOption) OrderOption {
 // ByCodexContextWindow orders the results by the codex_context_window field.
 func ByCodexContextWindow(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCodexContextWindow, opts...).ToFunc()
+}
+
+// ByCodexAutoCompactTokenLimit orders the results by the codex_auto_compact_token_limit field.
+func ByCodexAutoCompactTokenLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCodexAutoCompactTokenLimit, opts...).ToFunc()
 }
 
 // ByMindMapEnabled orders the results by the mind_map_enabled field.

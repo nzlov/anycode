@@ -203,7 +203,12 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	if err != nil {
 		return nil, fmt.Errorf("load Codex system configuration: %w", err)
 	}
-	codex := codexcli.New(cfg.CodexBin, codexcli.WithObserver(codexMetricLogger{}), codexcli.WithContextWindow(systemConfiguration.Codex.ContextWindow))
+	codex := codexcli.New(
+		cfg.CodexBin,
+		codexcli.WithObserver(codexMetricLogger{}),
+		codexcli.WithContextWindow(systemConfiguration.Codex.ContextWindow),
+		codexcli.WithAutoCompactTokenLimit(systemConfiguration.Codex.AutoCompactTokenLimit),
+	)
 	capabilities, err := ensureCodexReady(context.Background(), codex)
 	if err != nil {
 		_ = codex.Close()
@@ -245,11 +250,11 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	projectGit := gitcli.New("")
 	// GLUE: saving a global Codex setting crosses the setting, session, and process-runtime boundaries;
 	// remove this callback when application-level setting changes use a shared command bus.
-	applyCodexContextWindow := func(ctx context.Context, contextWindow int) error {
+	applyCodexSettings := func(ctx context.Context, contextWindow, autoCompactTokenLimit int) error {
 		if _, err := sessionService.PrepareCodexRuntimeRestart(ctx); err != nil {
 			return err
 		}
-		restartErr := codex.Restart(contextWindow)
+		restartErr := codex.Restart(contextWindow, autoCompactTokenLimit)
 		sessionService.ScheduleQueueDrain()
 		return restartErr
 	}
@@ -269,7 +274,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		Statistics:       statisticsapp.New(store.Statistics()),
 		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
-		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule), settingapp.WithCodexSettingsChanged(applyCodexContextWindow)),
+		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain), settingapp.WithMindMapSettings(capabilities.Models, mindMapQueue.Schedule), settingapp.WithCodexSettingsChanged(applyCodexSettings)),
 		Tunnels:      tunnelService,
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,

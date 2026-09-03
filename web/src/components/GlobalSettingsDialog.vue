@@ -122,29 +122,6 @@
             <q-list bordered separator class="appearance-settings-list">
               <q-item>
                 <q-item-section avatar>
-                  <q-icon name="dynamic_feed" color="primary" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label>Agent 并发数量</q-item-label>
-                  <q-item-label caption>同时运行的 Codex agent 上限</q-item-label>
-                </q-item-section>
-                <q-item-section side class="appearance-settings-list__control">
-                  <q-input
-                    v-model.number="general.agentMaxConcurrent"
-                    outlined
-                    dense
-                    type="number"
-                    min="1"
-                    step="1"
-                    hide-bottom-space
-                    aria-label="Agent 并发数量"
-                    :disable="generalLoading || generalSaving"
-                    :error="!agentMaxConcurrentValid"
-                  />
-                </q-item-section>
-              </q-item>
-              <q-item>
-                <q-item-section avatar>
                   <q-icon name="keyboard_return" color="primary" />
                 </q-item-section>
                 <q-item-section>
@@ -355,6 +332,57 @@
                 />
               </q-item-section>
             </q-item>
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="compress" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>自动压缩阈值</q-item-label>
+                <q-item-label caption
+                  >达到此 Token 数时自动压缩；留空时跟随 Codex 默认值</q-item-label
+                >
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-input
+                  v-model="codexAutoCompactTokenLimitInput"
+                  outlined
+                  dense
+                  type="number"
+                  min="1"
+                  max="2147483647"
+                  step="1"
+                  clearable
+                  hide-bottom-space
+                  aria-label="Codex 自动压缩阈值"
+                  :disable="codexLoading || codexSaving"
+                  :error="!codexAutoCompactTokenLimitValid"
+                  error-message="请输入正整数，或留空跟随 Codex 默认值"
+                />
+              </q-item-section>
+            </q-item>
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="dynamic_feed" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Agent 并发数量</q-item-label>
+                <q-item-label caption>同时运行的 Codex agent 上限</q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-input
+                  v-model.number="codexAgentMaxConcurrent"
+                  outlined
+                  dense
+                  type="number"
+                  min="1"
+                  step="1"
+                  hide-bottom-space
+                  aria-label="Agent 并发数量"
+                  :disable="codexLoading || codexSaving"
+                  :error="!codexAgentMaxConcurrentValid"
+                />
+              </q-item-section>
+            </q-item>
           </q-list>
           <div class="row justify-end q-mt-md">
             <q-btn
@@ -364,7 +392,12 @@
               no-caps
               :loading="codexSaving"
               :disable="
-                codexLoading || codexSaving || !codexContextWindowValid || !codexSettingsChanged
+                codexLoading ||
+                codexSaving ||
+                !codexContextWindowValid ||
+                !codexAutoCompactTokenLimitValid ||
+                !codexAgentMaxConcurrentValid ||
+                !codexSettingsChanged
               "
               @click="saveCodexSettings"
             />
@@ -808,7 +841,6 @@ const activeSection = ref<
   'general' | 'codex' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
 >('general');
 const defaultGeneral: GeneralSettings = {
-  agentMaxConcurrent: 2,
   agentWritableRoots: [],
   sendShortcut: defaultSendShortcut,
   mindMapEnabled: false,
@@ -843,7 +875,13 @@ const codexLoading = ref(false);
 const codexSaving = ref(false);
 const codexError = ref('');
 const codexContextWindowInput = ref<string | null>('');
-const persistedCodex = ref<CodexSettings>({ contextWindow: null });
+const codexAutoCompactTokenLimitInput = ref<string | null>('');
+const codexAgentMaxConcurrent = ref(2);
+const persistedCodex = ref<CodexSettings>({
+  contextWindow: null,
+  autoCompactTokenLimit: null,
+  agentMaxConcurrent: 2,
+});
 const parsedCodexContextWindow = computed(() => {
   const input = (codexContextWindowInput.value ?? '').trim();
   if (!input) return null;
@@ -856,10 +894,31 @@ const codexContextWindowValid = computed(() => {
     (Number.isInteger(contextWindow) && contextWindow > 0 && contextWindow <= 2147483647)
   );
 });
+const parsedCodexAutoCompactTokenLimit = computed(() => {
+  const input = (codexAutoCompactTokenLimitInput.value ?? '').trim();
+  if (!input) return null;
+  return Number(input);
+});
+const codexAutoCompactTokenLimitValid = computed(() => {
+  const autoCompactTokenLimit = parsedCodexAutoCompactTokenLimit.value;
+  return (
+    autoCompactTokenLimit === null ||
+    (Number.isInteger(autoCompactTokenLimit) &&
+      autoCompactTokenLimit > 0 &&
+      autoCompactTokenLimit <= 2147483647)
+  );
+});
+const codexAgentMaxConcurrentValid = computed(
+  () => Number.isInteger(codexAgentMaxConcurrent.value) && codexAgentMaxConcurrent.value > 0,
+);
 const codexSettingsChanged = computed(
   () =>
     codexContextWindowValid.value &&
-    parsedCodexContextWindow.value !== persistedCodex.value.contextWindow,
+    codexAutoCompactTokenLimitValid.value &&
+    codexAgentMaxConcurrentValid.value &&
+    (parsedCodexContextWindow.value !== persistedCodex.value.contextWindow ||
+      parsedCodexAutoCompactTokenLimit.value !== persistedCodex.value.autoCompactTokenLimit ||
+      codexAgentMaxConcurrent.value !== persistedCodex.value.agentMaxConcurrent),
 );
 const agentWritableRootsValid = computed(() =>
   agentWritableRoots.value.every((root) => root.startsWith('/') && root !== '/'),
@@ -881,9 +940,6 @@ const draftWritableRootValid = computed(
 const directoryPickerInitialPath = computed(() =>
   normalizedDraftWritableRoot.value.startsWith('/') ? normalizedDraftWritableRoot.value : '/',
 );
-const agentMaxConcurrentValid = computed(
-  () => Number.isInteger(general.value.agentMaxConcurrent) && general.value.agentMaxConcurrent > 0,
-);
 const mindMapMaxConcurrentValid = computed(
   () =>
     Number.isInteger(general.value.mindMapMaxConcurrent) && general.value.mindMapMaxConcurrent > 0,
@@ -899,11 +955,10 @@ const mindMapSettingsValid = computed(
 );
 const generalSettingsValid = computed(
   () =>
-    agentMaxConcurrentValid.value && agentWritableRootsValid.value && mindMapSettingsValid.value,
+    agentWritableRootsValid.value && mindMapSettingsValid.value,
 );
 const generalSettingsChanged = computed(
   () =>
-    general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent ||
     general.value.sendShortcut !== persistedGeneral.value.sendShortcut ||
     general.value.mindMapEnabled !== persistedGeneral.value.mindMapEnabled ||
     general.value.mindMapMode !== persistedGeneral.value.mindMapMode ||
@@ -983,6 +1038,8 @@ async function refreshCodexSettings() {
     const settings = await getCodexSettings();
     persistedCodex.value = settings;
     codexContextWindowInput.value = settings.contextWindow?.toString() ?? '';
+    codexAutoCompactTokenLimitInput.value = settings.autoCompactTokenLimit?.toString() ?? '';
+    codexAgentMaxConcurrent.value = settings.agentMaxConcurrent;
   } catch {
     codexError.value = '无法加载 Codex 设置';
   } finally {
@@ -991,15 +1048,25 @@ async function refreshCodexSettings() {
 }
 
 async function saveCodexSettings() {
-  if (!codexContextWindowValid.value || !codexSettingsChanged.value) return;
+  if (
+    !codexContextWindowValid.value ||
+    !codexAutoCompactTokenLimitValid.value ||
+    !codexAgentMaxConcurrentValid.value ||
+    !codexSettingsChanged.value
+  )
+    return;
   codexSaving.value = true;
   codexError.value = '';
   try {
     const settings = await updateCodexSettings({
       contextWindow: parsedCodexContextWindow.value,
+      autoCompactTokenLimit: parsedCodexAutoCompactTokenLimit.value,
+      agentMaxConcurrent: codexAgentMaxConcurrent.value,
     });
     persistedCodex.value = settings;
     codexContextWindowInput.value = settings.contextWindow?.toString() ?? '';
+    codexAutoCompactTokenLimitInput.value = settings.autoCompactTokenLimit?.toString() ?? '';
+    codexAgentMaxConcurrent.value = settings.agentMaxConcurrent;
   } catch {
     codexError.value = '无法保存 Codex 设置或重启 Codex 会话';
   } finally {
@@ -1013,7 +1080,6 @@ async function saveGeneralSettings() {
   generalError.value = '';
   try {
     general.value = await updateGeneralSettings({
-      agentMaxConcurrent: general.value.agentMaxConcurrent,
       agentWritableRoots: agentWritableRoots.value,
       sendShortcut: general.value.sendShortcut,
       mindMapEnabled: general.value.mindMapEnabled,
@@ -1224,7 +1290,7 @@ watch(activeSection, (section) => {
 });
 
 watch(
-  [() => general.value.agentMaxConcurrent, () => general.value.sendShortcut, agentWritableRoots],
+  [() => general.value.sendShortcut, agentWritableRoots],
   scheduleGeneralSettingsSave,
 );
 

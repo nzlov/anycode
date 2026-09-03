@@ -89,7 +89,7 @@ type appServerRun struct {
 }
 
 func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRuntime, error) {
-	cmd := exec.Command(client.Bin(), appServerArgs(client.contextWindow)...)
+	cmd := exec.Command(client.Bin(), appServerArgs(client.contextWindow, client.autoCompactTokenLimit)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	env := os.Environ()
 	if codexHome := client.CodexHome(); codexHome != "" {
@@ -132,10 +132,13 @@ func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRunti
 	return runtime, nil
 }
 
-func appServerArgs(contextWindow int) []string {
+func appServerArgs(contextWindow, autoCompactTokenLimit int) []string {
 	args := []string{"app-server", "--stdio"}
 	if contextWindow > 0 {
 		args = append([]string{"-c", fmt.Sprintf("model_context_window=%d", contextWindow)}, args...)
+	}
+	if autoCompactTokenLimit > 0 {
+		args = append([]string{"-c", fmt.Sprintf("model_auto_compact_token_limit=%d", autoCompactTokenLimit)}, args...)
 	}
 	return args
 }

@@ -111,64 +111,67 @@ func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 
 func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
-	changed := 0
-	service := New(repo, WithConcurrencyLimitChanged(func() { changed++ }))
+	service := New(repo)
 
 	got, err := service.GetGeneralSettings(context.Background())
-	if err != nil || got.AgentMaxConcurrent != 2 || len(got.AgentWritableRoots) != 0 || got.SendShortcut != domain.SendShortcutShiftEnter || got.MindMapLayout != domain.MindMapLayoutRadial {
+	if err != nil || len(got.AgentWritableRoots) != 0 || got.SendShortcut != domain.SendShortcutShiftEnter || got.MindMapLayout != domain.MindMapLayoutRadial {
 		t.Fatalf("GetGeneralSettings() = %#v, %v", got, err)
 	}
 	got, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{
-		AgentMaxConcurrent: 4,
 		AgentWritableRoots: []string{" /home/anycode/.cache/go-build ", "/home/anycode/go", "/home/anycode/go"},
 		SendShortcut:       domain.SendShortcutEnter,
 		MindMapLayout:      domain.MindMapLayoutNested,
 	})
 	wantRoots := []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}
-	if err != nil || got.AgentMaxConcurrent != 4 || got.SendShortcut != domain.SendShortcutEnter || got.MindMapLayout != domain.MindMapLayoutNested || !slices.Equal(got.AgentWritableRoots, wantRoots) || !slices.Equal(repo.configuration.AgentWritableRoots, wantRoots) || repo.configuration.SendShortcut != domain.SendShortcutEnter || repo.configuration.MindMap.Layout != domain.MindMapLayoutNested || changed != 1 {
-		t.Fatalf("UpdateGeneralSettings() = %#v, %v; stored=%#v changed=%d", got, err, repo.configuration, changed)
+	if err != nil || got.SendShortcut != domain.SendShortcutEnter || got.MindMapLayout != domain.MindMapLayoutNested || !slices.Equal(got.AgentWritableRoots, wantRoots) || !slices.Equal(repo.configuration.AgentWritableRoots, wantRoots) || repo.configuration.SendShortcut != domain.SendShortcutEnter || repo.configuration.MindMap.Layout != domain.MindMapLayoutNested {
+		t.Fatalf("UpdateGeneralSettings() = %#v, %v; stored=%#v", got, err, repo.configuration)
 	}
-	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 0})
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentWritableRoots: []string{"relative/path"}})
 	assertAppError(t, err, apperror.CodeValidationFailed)
-	if changed != 1 {
-		t.Fatalf("invalid update callback count = %d", changed)
-	}
-	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"relative/path"}})
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentWritableRoots: []string{"/"}})
 	assertAppError(t, err, apperror.CodeValidationFailed)
-	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"/"}})
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{SendShortcut: "space"})
 	assertAppError(t, err, apperror.CodeValidationFailed)
-	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, SendShortcut: "space"})
-	assertAppError(t, err, apperror.CodeValidationFailed)
-	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, MindMapLayout: "grid"})
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{MindMapLayout: "grid"})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 
-func TestCodexSettingsSaveAppliesChangedContextWindow(t *testing.T) {
+func TestCodexSettingsSaveAppliesRuntimeAndConcurrencyChanges(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
-	applied := []int{}
-	service := New(repo, WithCodexSettingsChanged(func(_ context.Context, contextWindow int) error {
-		applied = append(applied, contextWindow)
+	applied := [][2]int{}
+	concurrencyChanges := 0
+	service := New(repo, WithCodexSettingsChanged(func(_ context.Context, contextWindow, autoCompactTokenLimit int) error {
+		applied = append(applied, [2]int{contextWindow, autoCompactTokenLimit})
 		return nil
-	}))
+	}), WithConcurrencyLimitChanged(func() { concurrencyChanges++ }))
 
 	got, err := service.GetCodexSettings(context.Background())
-	if err != nil || got.ContextWindow != nil {
+	if err != nil || got.ContextWindow != nil || got.AutoCompactTokenLimit != nil || got.AgentMaxConcurrent != 2 {
 		t.Fatalf("GetCodexSettings() = %#v, %v", got, err)
 	}
 	contextWindow := 200_000
-	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow})
-	if err != nil || got.ContextWindow == nil || *got.ContextWindow != contextWindow || repo.configuration.Codex.ContextWindow != contextWindow || !slices.Equal(applied, []int{contextWindow}) {
+	autoCompactTokenLimit := 160_000
+	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{
+		ContextWindow: &contextWindow, AutoCompactTokenLimit: &autoCompactTokenLimit, AgentMaxConcurrent: 4,
+	})
+	if err != nil || got.ContextWindow == nil || *got.ContextWindow != contextWindow || got.AutoCompactTokenLimit == nil || *got.AutoCompactTokenLimit != autoCompactTokenLimit || got.AgentMaxConcurrent != 4 || repo.configuration.Codex.ContextWindow != contextWindow || repo.configuration.Codex.AutoCompactTokenLimit != autoCompactTokenLimit || repo.configuration.AgentMaxConcurrent != 4 || !slices.Equal(applied, [][2]int{{contextWindow, autoCompactTokenLimit}}) || concurrencyChanges != 1 {
 		t.Fatalf("UpdateCodexSettings() = %#v, %v; stored=%#v applied=%#v", got, err, repo.configuration.Codex, applied)
 	}
-	if _, err := service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow}); err != nil || len(applied) != 1 {
+	if _, err := service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow, AutoCompactTokenLimit: &autoCompactTokenLimit, AgentMaxConcurrent: 4}); err != nil || len(applied) != 1 || concurrencyChanges != 1 {
 		t.Fatalf("unchanged UpdateCodexSettings() error = %v, applied=%#v", err, applied)
 	}
-	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{})
-	if err != nil || got.ContextWindow != nil || repo.configuration.Codex.ContextWindow != 0 || !slices.Equal(applied, []int{contextWindow, 0}) {
+	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &contextWindow, AutoCompactTokenLimit: &autoCompactTokenLimit, AgentMaxConcurrent: 5})
+	if err != nil || got.AgentMaxConcurrent != 5 || len(applied) != 1 || concurrencyChanges != 2 {
+		t.Fatalf("concurrency UpdateCodexSettings() = %#v, %v; applied=%#v changes=%d", got, err, applied, concurrencyChanges)
+	}
+	got, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{AgentMaxConcurrent: 5})
+	if err != nil || got.ContextWindow != nil || got.AutoCompactTokenLimit != nil || repo.configuration.Codex.ContextWindow != 0 || repo.configuration.Codex.AutoCompactTokenLimit != 0 || !slices.Equal(applied, [][2]int{{contextWindow, autoCompactTokenLimit}, {0, 0}}) {
 		t.Fatalf("default UpdateCodexSettings() = %#v, %v; stored=%#v applied=%#v", got, err, repo.configuration.Codex, applied)
 	}
 	invalid := 0
-	_, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &invalid})
+	_, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{ContextWindow: &invalid, AgentMaxConcurrent: 4})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.UpdateCodexSettings(context.Background(), UpdateCodexSettingsInput{AgentMaxConcurrent: 0})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 
@@ -179,7 +182,7 @@ func TestAsyncMindMapSettingsRequireAvailableModelAndReasoningEffort(t *testing.
 		Slug: "gpt-mind-map", SupportedReasoningLevels: []processdomain.CodexReasoningLevel{{Effort: "high"}},
 	}}, func() { changed++ }))
 	input := UpdateGeneralSettingsInput{
-		AgentMaxConcurrent: 2, MindMapEnabled: true, MindMapMode: domain.MindMapModeAsync,
+		MindMapEnabled: true, MindMapMode: domain.MindMapModeAsync,
 		MindMapModel: "gpt-mind-map", MindMapReasoningEffort: "", MindMapMaxConcurrent: 3,
 	}
 

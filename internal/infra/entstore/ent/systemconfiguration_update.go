@@ -97,6 +97,27 @@ func (_u *SystemConfigurationUpdate) AddCodexContextWindow(v int) *SystemConfigu
 	return _u
 }
 
+// SetCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field.
+func (_u *SystemConfigurationUpdate) SetCodexAutoCompactTokenLimit(v int) *SystemConfigurationUpdate {
+	_u.mutation.ResetCodexAutoCompactTokenLimit()
+	_u.mutation.SetCodexAutoCompactTokenLimit(v)
+	return _u
+}
+
+// SetNillableCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableCodexAutoCompactTokenLimit(v *int) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetCodexAutoCompactTokenLimit(*v)
+	}
+	return _u
+}
+
+// AddCodexAutoCompactTokenLimit adds value to the "codex_auto_compact_token_limit" field.
+func (_u *SystemConfigurationUpdate) AddCodexAutoCompactTokenLimit(v int) *SystemConfigurationUpdate {
+	_u.mutation.AddCodexAutoCompactTokenLimit(v)
+	return _u
+}
+
 // SetMindMapEnabled sets the "mind_map_enabled" field.
 func (_u *SystemConfigurationUpdate) SetMindMapEnabled(v bool) *SystemConfigurationUpdate {
 	_u.mutation.SetMindMapEnabled(v)
@@ -410,6 +431,12 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 	if value, ok := _u.mutation.AddedCodexContextWindow(); ok {
 		_spec.AddField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.CodexAutoCompactTokenLimit(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexAutoCompactTokenLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodexAutoCompactTokenLimit(); ok {
+		_spec.AddField(systemconfiguration.FieldCodexAutoCompactTokenLimit, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)
 	}
@@ -543,6 +570,27 @@ func (_u *SystemConfigurationUpdateOne) SetNillableCodexContextWindow(v *int) *S
 // AddCodexContextWindow adds value to the "codex_context_window" field.
 func (_u *SystemConfigurationUpdateOne) AddCodexContextWindow(v int) *SystemConfigurationUpdateOne {
 	_u.mutation.AddCodexContextWindow(v)
+	return _u
+}
+
+// SetCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field.
+func (_u *SystemConfigurationUpdateOne) SetCodexAutoCompactTokenLimit(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.ResetCodexAutoCompactTokenLimit()
+	_u.mutation.SetCodexAutoCompactTokenLimit(v)
+	return _u
+}
+
+// SetNillableCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableCodexAutoCompactTokenLimit(v *int) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetCodexAutoCompactTokenLimit(*v)
+	}
+	return _u
+}
+
+// AddCodexAutoCompactTokenLimit adds value to the "codex_auto_compact_token_limit" field.
+func (_u *SystemConfigurationUpdateOne) AddCodexAutoCompactTokenLimit(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.AddCodexAutoCompactTokenLimit(v)
 	return _u
 }
 
@@ -888,6 +936,12 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 	}
 	if value, ok := _u.mutation.AddedCodexContextWindow(); ok {
 		_spec.AddField(systemconfiguration.FieldCodexContextWindow, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CodexAutoCompactTokenLimit(); ok {
+		_spec.SetField(systemconfiguration.FieldCodexAutoCompactTokenLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCodexAutoCompactTokenLimit(); ok {
+		_spec.AddField(systemconfiguration.FieldCodexAutoCompactTokenLimit, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.MindMapEnabled(); ok {
 		_spec.SetField(systemconfiguration.FieldMindMapEnabled, field.TypeBool, value)

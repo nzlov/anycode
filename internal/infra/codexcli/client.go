@@ -15,10 +15,11 @@ import (
 const defaultBin = "codex"
 
 type Client struct {
-	bin           string
-	codexHome     string
-	observer      Observer
-	contextWindow int
+	bin                   string
+	codexHome             string
+	observer              Observer
+	contextWindow         int
+	autoCompactTokenLimit int
 
 	mu          sync.Mutex
 	runtime     *appServerRuntime
@@ -72,6 +73,14 @@ func WithContextWindow(contextWindow int) Option {
 	return func(c *Client) {
 		if contextWindow > 0 {
 			c.contextWindow = contextWindow
+		}
+	}
+}
+
+func WithAutoCompactTokenLimit(autoCompactTokenLimit int) Option {
+	return func(c *Client) {
+		if autoCompactTokenLimit > 0 {
+			c.autoCompactTokenLimit = autoCompactTokenLimit
 		}
 	}
 }
@@ -156,7 +165,7 @@ func (c *Client) Close() error {
 	return runtime.close()
 }
 
-func (c *Client) Restart(contextWindow int) error {
+func (c *Client) Restart(contextWindow, autoCompactTokenLimit int) error {
 	if c == nil {
 		return nil
 	}
@@ -167,6 +176,11 @@ func (c *Client) Restart(contextWindow int) error {
 		c.contextWindow = contextWindow
 	} else {
 		c.contextWindow = 0
+	}
+	if autoCompactTokenLimit > 0 {
+		c.autoCompactTokenLimit = autoCompactTokenLimit
+	} else {
+		c.autoCompactTokenLimit = 0
 	}
 	c.mu.Unlock()
 	if runtime == nil {

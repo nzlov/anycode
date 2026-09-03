@@ -2,10 +2,14 @@ import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface CodexSettings {
   contextWindow: number | null;
+  autoCompactTokenLimit: number | null;
+  agentMaxConcurrent: number;
 }
 
 const codexSettingsFields = `
   contextWindow
+  autoCompactTokenLimit
+  agentMaxConcurrent
 `;
 
 export async function getCodexSettings() {

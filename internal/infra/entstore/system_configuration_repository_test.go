@@ -33,6 +33,7 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	configuration.AgentWritableRoots = []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}
 	configuration.SendShortcut = setting.SendShortcutEnter
 	configuration.Codex.ContextWindow = 200_000
+	configuration.Codex.AutoCompactTokenLimit = 160_000
 	configuration.MindMap.Layout = setting.MindMapLayoutNested
 	configuration.SolidTheme = setting.SolidThemeIndigo
 	configuration.BackgroundMask = 42
@@ -47,7 +48,7 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get saved system configuration: %v", err)
 	}
-	if got.AgentMaxConcurrent != 5 || got.SendShortcut != setting.SendShortcutEnter || got.Codex.ContextWindow != 200_000 || got.MindMap.Layout != setting.MindMapLayoutNested || !slices.Equal(got.AgentWritableRoots, configuration.AgentWritableRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
+	if got.AgentMaxConcurrent != 5 || got.SendShortcut != setting.SendShortcutEnter || got.Codex.ContextWindow != 200_000 || got.Codex.AutoCompactTokenLimit != 160_000 || got.MindMap.Layout != setting.MindMapLayoutNested || !slices.Equal(got.AgentWritableRoots, configuration.AgentWritableRoots) || got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
 		t.Fatalf("saved system configuration = %#v", got)
 	}
 	max, err := store.Settings().MaxConcurrentAgents(ctx)
@@ -99,7 +100,7 @@ func TestSystemConfigurationMigrationAddsWritableRootsToExistingRow(t *testing.T
 		t.Fatalf("migrate store: %v", err)
 	}
 	configuration, err := store.Settings().GetSystemConfiguration(ctx)
-	if err != nil || configuration.AgentMaxConcurrent != 3 || len(configuration.AgentWritableRoots) != 0 || configuration.SendShortcut != setting.SendShortcutShiftEnter || configuration.Codex.ContextWindow != 0 || configuration.MindMap.Layout != setting.MindMapLayoutRadial {
+	if err != nil || configuration.AgentMaxConcurrent != 3 || len(configuration.AgentWritableRoots) != 0 || configuration.SendShortcut != setting.SendShortcutShiftEnter || configuration.Codex.ContextWindow != 0 || configuration.Codex.AutoCompactTokenLimit != 0 || configuration.MindMap.Layout != setting.MindMapLayoutRadial {
 		t.Fatalf("migrated system configuration = %#v, %v", configuration, err)
 	}
 }

@@ -79,6 +79,11 @@ func CodexContextWindow(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldCodexContextWindow, v))
 }
 
+// CodexAutoCompactTokenLimit applies equality check predicate on the "codex_auto_compact_token_limit" field. It's identical to CodexAutoCompactTokenLimitEQ.
+func CodexAutoCompactTokenLimit(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldCodexAutoCompactTokenLimit, v))
+}
+
 // MindMapEnabled applies equality check predicate on the "mind_map_enabled" field. It's identical to MindMapEnabledEQ.
 func MindMapEnabled(v bool) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldMindMapEnabled, v))
@@ -292,6 +297,46 @@ func CodexContextWindowLT(v int) predicate.SystemConfiguration {
 // CodexContextWindowLTE applies the LTE predicate on the "codex_context_window" field.
 func CodexContextWindowLTE(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldLTE(FieldCodexContextWindow, v))
+}
+
+// CodexAutoCompactTokenLimitEQ applies the EQ predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldCodexAutoCompactTokenLimit, v))
+}
+
+// CodexAutoCompactTokenLimitNEQ applies the NEQ predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitNEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldCodexAutoCompactTokenLimit, v))
+}
+
+// CodexAutoCompactTokenLimitIn applies the In predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldCodexAutoCompactTokenLimit, vs...))
+}
+
+// CodexAutoCompactTokenLimitNotIn applies the NotIn predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitNotIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldCodexAutoCompactTokenLimit, vs...))
+}
+
+// CodexAutoCompactTokenLimitGT applies the GT predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitGT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldCodexAutoCompactTokenLimit, v))
+}
+
+// CodexAutoCompactTokenLimitGTE applies the GTE predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitGTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldCodexAutoCompactTokenLimit, v))
+}
+
+// CodexAutoCompactTokenLimitLT applies the LT predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitLT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldCodexAutoCompactTokenLimit, v))
+}
+
+// CodexAutoCompactTokenLimitLTE applies the LTE predicate on the "codex_auto_compact_token_limit" field.
+func CodexAutoCompactTokenLimitLTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldCodexAutoCompactTokenLimit, v))
 }
 
 // MindMapEnabledEQ applies the EQ predicate on the "mind_map_enabled" field.

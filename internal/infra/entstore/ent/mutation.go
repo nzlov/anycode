@@ -18293,36 +18293,38 @@ func (m *StagedAttachmentMutation) ResetEdge(name string) error {
 // SystemConfigurationMutation represents an operation that mutates the SystemConfiguration nodes in the graph.
 type SystemConfigurationMutation struct {
 	config
-	op                         Op
-	typ                        string
-	id                         *string
-	agent_max_concurrent       *int
-	addagent_max_concurrent    *int
-	agent_writable_roots       *[]string
-	appendagent_writable_roots []string
-	send_shortcut              *string
-	codex_context_window       *int
-	addcodex_context_window    *int
-	mind_map_enabled           *bool
-	mind_map_mode              *string
-	mind_map_layout            *string
-	mind_map_model             *string
-	mind_map_reasoning_effort  *string
-	mind_map_max_concurrent    *int
-	addmind_map_max_concurrent *int
-	wallpaper_color_scheme     *string
-	background_type            *string
-	solid_theme                *string
-	background_mask            *int
-	addbackground_mask         *int
-	wallpaper_id               *string
-	wallpaper_filename         *string
-	wallpaper_mime_type        *string
-	updated_at                 *time.Time
-	clearedFields              map[string]struct{}
-	done                       bool
-	oldValue                   func(context.Context) (*SystemConfiguration, error)
-	predicates                 []predicate.SystemConfiguration
+	op                                Op
+	typ                               string
+	id                                *string
+	agent_max_concurrent              *int
+	addagent_max_concurrent           *int
+	agent_writable_roots              *[]string
+	appendagent_writable_roots        []string
+	send_shortcut                     *string
+	codex_context_window              *int
+	addcodex_context_window           *int
+	codex_auto_compact_token_limit    *int
+	addcodex_auto_compact_token_limit *int
+	mind_map_enabled                  *bool
+	mind_map_mode                     *string
+	mind_map_layout                   *string
+	mind_map_model                    *string
+	mind_map_reasoning_effort         *string
+	mind_map_max_concurrent           *int
+	addmind_map_max_concurrent        *int
+	wallpaper_color_scheme            *string
+	background_type                   *string
+	solid_theme                       *string
+	background_mask                   *int
+	addbackground_mask                *int
+	wallpaper_id                      *string
+	wallpaper_filename                *string
+	wallpaper_mime_type               *string
+	updated_at                        *time.Time
+	clearedFields                     map[string]struct{}
+	done                              bool
+	oldValue                          func(context.Context) (*SystemConfiguration, error)
+	predicates                        []predicate.SystemConfiguration
 }
 
 var _ ent.Mutation = (*SystemConfigurationMutation)(nil)
@@ -18626,6 +18628,62 @@ func (m *SystemConfigurationMutation) AddedCodexContextWindow() (r int, exists b
 func (m *SystemConfigurationMutation) ResetCodexContextWindow() {
 	m.codex_context_window = nil
 	m.addcodex_context_window = nil
+}
+
+// SetCodexAutoCompactTokenLimit sets the "codex_auto_compact_token_limit" field.
+func (m *SystemConfigurationMutation) SetCodexAutoCompactTokenLimit(i int) {
+	m.codex_auto_compact_token_limit = &i
+	m.addcodex_auto_compact_token_limit = nil
+}
+
+// CodexAutoCompactTokenLimit returns the value of the "codex_auto_compact_token_limit" field in the mutation.
+func (m *SystemConfigurationMutation) CodexAutoCompactTokenLimit() (r int, exists bool) {
+	v := m.codex_auto_compact_token_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCodexAutoCompactTokenLimit returns the old "codex_auto_compact_token_limit" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldCodexAutoCompactTokenLimit(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCodexAutoCompactTokenLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCodexAutoCompactTokenLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCodexAutoCompactTokenLimit: %w", err)
+	}
+	return oldValue.CodexAutoCompactTokenLimit, nil
+}
+
+// AddCodexAutoCompactTokenLimit adds i to the "codex_auto_compact_token_limit" field.
+func (m *SystemConfigurationMutation) AddCodexAutoCompactTokenLimit(i int) {
+	if m.addcodex_auto_compact_token_limit != nil {
+		*m.addcodex_auto_compact_token_limit += i
+	} else {
+		m.addcodex_auto_compact_token_limit = &i
+	}
+}
+
+// AddedCodexAutoCompactTokenLimit returns the value that was added to the "codex_auto_compact_token_limit" field in this mutation.
+func (m *SystemConfigurationMutation) AddedCodexAutoCompactTokenLimit() (r int, exists bool) {
+	v := m.addcodex_auto_compact_token_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCodexAutoCompactTokenLimit resets all changes to the "codex_auto_compact_token_limit" field.
+func (m *SystemConfigurationMutation) ResetCodexAutoCompactTokenLimit() {
+	m.codex_auto_compact_token_limit = nil
+	m.addcodex_auto_compact_token_limit = nil
 }
 
 // SetMindMapEnabled sets the "mind_map_enabled" field.
@@ -19206,7 +19264,7 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 19)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
@@ -19218,6 +19276,9 @@ func (m *SystemConfigurationMutation) Fields() []string {
 	}
 	if m.codex_context_window != nil {
 		fields = append(fields, systemconfiguration.FieldCodexContextWindow)
+	}
+	if m.codex_auto_compact_token_limit != nil {
+		fields = append(fields, systemconfiguration.FieldCodexAutoCompactTokenLimit)
 	}
 	if m.mind_map_enabled != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapEnabled)
@@ -19277,6 +19338,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 		return m.SendShortcut()
 	case systemconfiguration.FieldCodexContextWindow:
 		return m.CodexContextWindow()
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		return m.CodexAutoCompactTokenLimit()
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.MindMapEnabled()
 	case systemconfiguration.FieldMindMapMode:
@@ -19322,6 +19385,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 		return m.OldSendShortcut(ctx)
 	case systemconfiguration.FieldCodexContextWindow:
 		return m.OldCodexContextWindow(ctx)
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		return m.OldCodexAutoCompactTokenLimit(ctx)
 	case systemconfiguration.FieldMindMapEnabled:
 		return m.OldMindMapEnabled(ctx)
 	case systemconfiguration.FieldMindMapMode:
@@ -19386,6 +19451,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCodexContextWindow(v)
+		return nil
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCodexAutoCompactTokenLimit(v)
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		v, ok := value.(bool)
@@ -19499,6 +19571,9 @@ func (m *SystemConfigurationMutation) AddedFields() []string {
 	if m.addcodex_context_window != nil {
 		fields = append(fields, systemconfiguration.FieldCodexContextWindow)
 	}
+	if m.addcodex_auto_compact_token_limit != nil {
+		fields = append(fields, systemconfiguration.FieldCodexAutoCompactTokenLimit)
+	}
 	if m.addmind_map_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldMindMapMaxConcurrent)
 	}
@@ -19517,6 +19592,8 @@ func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) 
 		return m.AddedAgentMaxConcurrent()
 	case systemconfiguration.FieldCodexContextWindow:
 		return m.AddedCodexContextWindow()
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		return m.AddedCodexAutoCompactTokenLimit()
 	case systemconfiguration.FieldMindMapMaxConcurrent:
 		return m.AddedMindMapMaxConcurrent()
 	case systemconfiguration.FieldBackgroundMask:
@@ -19543,6 +19620,13 @@ func (m *SystemConfigurationMutation) AddField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCodexContextWindow(v)
+		return nil
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCodexAutoCompactTokenLimit(v)
 		return nil
 	case systemconfiguration.FieldMindMapMaxConcurrent:
 		v, ok := value.(int)
@@ -19596,6 +19680,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 		return nil
 	case systemconfiguration.FieldCodexContextWindow:
 		m.ResetCodexContextWindow()
+		return nil
+	case systemconfiguration.FieldCodexAutoCompactTokenLimit:
+		m.ResetCodexAutoCompactTokenLimit()
 		return nil
 	case systemconfiguration.FieldMindMapEnabled:
 		m.ResetMindMapEnabled()

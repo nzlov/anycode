@@ -220,7 +220,6 @@ enum AppearanceSolidTheme {
 }
 
 type GeneralSettings {
-  agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
   sendShortcut: String!
   mindMapEnabled: Boolean!
@@ -232,7 +231,6 @@ type GeneralSettings {
 }
 
 input UpdateGeneralSettingsInput {
-  agentMaxConcurrent: Int!
   agentWritableRoots: [String!]!
   sendShortcut: String!
   mindMapEnabled: Boolean!
@@ -245,10 +243,14 @@ input UpdateGeneralSettingsInput {
 
 type CodexSettings {
   contextWindow: Int
+  autoCompactTokenLimit: Int
+  agentMaxConcurrent: Int!
 }
 
 input UpdateCodexSettingsInput {
   contextWindow: Int
+  autoCompactTokenLimit: Int
+  agentMaxConcurrent: Int!
 }
 
 type AppearanceSettings {

@@ -369,16 +369,36 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 }
 
 func TestGeneralSettingsResolversForwardSettingsUseCase(t *testing.T) {
-	settings := &fakeSettingUseCase{generalResult: settingapp.GeneralSettingsDTO{AgentMaxConcurrent: 4, AgentWritableRoots: []string{"/cache/go-build"}, SendShortcut: settingdomain.SendShortcutShiftEnter, MindMapLayout: settingdomain.MindMapLayoutNested}}
+	settings := &fakeSettingUseCase{generalResult: settingapp.GeneralSettingsDTO{AgentWritableRoots: []string{"/cache/go-build"}, SendShortcut: settingdomain.SendShortcutShiftEnter, MindMapLayout: settingdomain.MindMapLayoutNested}}
 	resolver := NewResolver(UseCases{Settings: settings})
 
 	got, err := resolver.Query().GeneralSettings(context.Background())
-	if err != nil || got.AgentMaxConcurrent != 4 || got.SendShortcut != "shift_enter" || got.MindMapLayout != "nested" || !slices.Equal(got.AgentWritableRoots, []string{"/cache/go-build"}) {
+	if err != nil || got.SendShortcut != "shift_enter" || got.MindMapLayout != "nested" || !slices.Equal(got.AgentWritableRoots, []string{"/cache/go-build"}) {
 		t.Fatalf("GeneralSettings() = %#v, %v", got, err)
 	}
-	updated, err := resolver.Mutation().UpdateGeneralSettings(context.Background(), model.UpdateGeneralSettingsInput{AgentMaxConcurrent: 6, AgentWritableRoots: []string{"/go"}, SendShortcut: "enter", MindMapLayout: "nested"})
-	if err != nil || settings.generalInput.AgentMaxConcurrent != 6 || settings.generalInput.SendShortcut != settingdomain.SendShortcutEnter || settings.generalInput.MindMapLayout != settingdomain.MindMapLayoutNested || !slices.Equal(settings.generalInput.AgentWritableRoots, []string{"/go"}) || updated.AgentMaxConcurrent != 4 {
+	updated, err := resolver.Mutation().UpdateGeneralSettings(context.Background(), model.UpdateGeneralSettingsInput{AgentWritableRoots: []string{"/go"}, SendShortcut: "enter", MindMapLayout: "nested"})
+	if err != nil || settings.generalInput.SendShortcut != settingdomain.SendShortcutEnter || settings.generalInput.MindMapLayout != settingdomain.MindMapLayoutNested || !slices.Equal(settings.generalInput.AgentWritableRoots, []string{"/go"}) || !slices.Equal(updated.AgentWritableRoots, []string{"/cache/go-build"}) {
 		t.Fatalf("UpdateGeneralSettings() = %#v, input=%#v, error=%v", updated, settings.generalInput, err)
+	}
+}
+
+func TestCodexSettingsResolversForwardSettingsUseCase(t *testing.T) {
+	contextWindow := 200_000
+	autoCompactTokenLimit := 160_000
+	settings := &fakeSettingUseCase{codexResult: settingapp.CodexSettingsDTO{
+		ContextWindow: &contextWindow, AutoCompactTokenLimit: &autoCompactTokenLimit, AgentMaxConcurrent: 4,
+	}}
+	resolver := NewResolver(UseCases{Settings: settings})
+
+	got, err := resolver.Query().CodexSettings(context.Background())
+	if err != nil || got.ContextWindow == nil || *got.ContextWindow != contextWindow || got.AutoCompactTokenLimit == nil || *got.AutoCompactTokenLimit != autoCompactTokenLimit || got.AgentMaxConcurrent != 4 {
+		t.Fatalf("CodexSettings() = %#v, %v", got, err)
+	}
+	updated, err := resolver.Mutation().UpdateCodexSettings(context.Background(), model.UpdateCodexSettingsInput{
+		ContextWindow: &contextWindow, AutoCompactTokenLimit: &autoCompactTokenLimit, AgentMaxConcurrent: 6,
+	})
+	if err != nil || settings.codexInput.ContextWindow != &contextWindow || settings.codexInput.AutoCompactTokenLimit != &autoCompactTokenLimit || settings.codexInput.AgentMaxConcurrent != 6 || updated.AgentMaxConcurrent != 4 {
+		t.Fatalf("UpdateCodexSettings() = %#v, input=%#v, error=%v", updated, settings.codexInput, err)
 	}
 }
 
@@ -1456,6 +1476,8 @@ type fakeSettingUseCase struct {
 	settingapp.UseCase
 	generalInput     settingapp.UpdateGeneralSettingsInput
 	generalResult    settingapp.GeneralSettingsDTO
+	codexInput       settingapp.UpdateCodexSettingsInput
+	codexResult      settingapp.CodexSettingsDTO
 	appearanceInput  settingapp.UpdateAppearanceSettingsInput
 	appearanceResult settingapp.AppearanceSettingsDTO
 	listInput        settingapp.ListQuickCommandsInput
@@ -1474,6 +1496,15 @@ func (f *fakeSettingUseCase) GetGeneralSettings(context.Context) (settingapp.Gen
 func (f *fakeSettingUseCase) UpdateGeneralSettings(_ context.Context, input settingapp.UpdateGeneralSettingsInput) (settingapp.GeneralSettingsDTO, error) {
 	f.generalInput = input
 	return f.generalResult, nil
+}
+
+func (f *fakeSettingUseCase) GetCodexSettings(context.Context) (settingapp.CodexSettingsDTO, error) {
+	return f.codexResult, nil
+}
+
+func (f *fakeSettingUseCase) UpdateCodexSettings(_ context.Context, input settingapp.UpdateCodexSettingsInput) (settingapp.CodexSettingsDTO, error) {
+	f.codexInput = input
+	return f.codexResult, nil
 }
 
 type fakeNotificationUseCase struct {

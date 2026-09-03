@@ -96,7 +96,9 @@ type CodexReasoningEffortOption struct {
 }
 
 type CodexSettings struct {
-	ContextWindow *int `json:"contextWindow,omitempty"`
+	ContextWindow         *int `json:"contextWindow,omitempty"`
+	AutoCompactTokenLimit *int `json:"autoCompactTokenLimit,omitempty"`
+	AgentMaxConcurrent    int  `json:"agentMaxConcurrent"`
 }
 
 type CodexSlashCommand struct {
@@ -199,7 +201,6 @@ type ForkSessionInput struct {
 }
 
 type GeneralSettings struct {
-	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
 	AgentWritableRoots     []string `json:"agentWritableRoots"`
 	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`
@@ -1017,11 +1018,12 @@ type UpdateAppearanceSettingsInput struct {
 }
 
 type UpdateCodexSettingsInput struct {
-	ContextWindow *int `json:"contextWindow,omitempty"`
+	ContextWindow         *int `json:"contextWindow,omitempty"`
+	AutoCompactTokenLimit *int `json:"autoCompactTokenLimit,omitempty"`
+	AgentMaxConcurrent    int  `json:"agentMaxConcurrent"`
 }
 
 type UpdateGeneralSettingsInput struct {
-	AgentMaxConcurrent     int      `json:"agentMaxConcurrent"`
 	AgentWritableRoots     []string `json:"agentWritableRoots"`
 	SendShortcut           string   `json:"sendShortcut"`
 	MindMapEnabled         bool     `json:"mindMapEnabled"`

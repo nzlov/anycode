@@ -40,7 +40,6 @@ func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input mode
 		return nil, missingUseCase("settings")
 	}
 	dto, err := r.UseCases.Settings.UpdateGeneralSettings(ctx, settingapp.UpdateGeneralSettingsInput{
-		AgentMaxConcurrent: input.AgentMaxConcurrent,
 		AgentWritableRoots: input.AgentWritableRoots,
 		SendShortcut:       settingdomain.SendShortcut(input.SendShortcut),
 		MindMapEnabled:     input.MindMapEnabled, MindMapMode: settingdomain.MindMapMode(input.MindMapMode),
@@ -59,7 +58,10 @@ func (r *mutationResolver) UpdateCodexSettings(ctx context.Context, input model.
 	if r.UseCases.Settings == nil {
 		return nil, missingUseCase("settings")
 	}
-	dto, err := r.UseCases.Settings.UpdateCodexSettings(ctx, settingapp.UpdateCodexSettingsInput{ContextWindow: input.ContextWindow})
+	dto, err := r.UseCases.Settings.UpdateCodexSettings(ctx, settingapp.UpdateCodexSettingsInput{
+		ContextWindow: input.ContextWindow, AutoCompactTokenLimit: input.AutoCompactTokenLimit,
+		AgentMaxConcurrent: input.AgentMaxConcurrent,
+	})
 	if err != nil {
 		return nil, err
 	}
