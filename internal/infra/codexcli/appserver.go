@@ -360,7 +360,7 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 func mindMapTagsTool() map[string]any {
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapTags),
-		"description": "List every existing first-level mind map tag and return the current tagRevision. Call this immediately before mind_map_update. The returned tagRevision is required for updates and becomes stale after any graph change.",
+		"description": "Refresh mind map tag metadata when no fresh mind_map_search result is available or an update reports a stale revision. Returns compact JSON text containing tagRevision and tag titles; parse the text before reading fields when composing tool calls in code.",
 		"inputSchema": map[string]any{"type": "object", "additionalProperties": false},
 	}
 }
@@ -368,12 +368,12 @@ func mindMapTagsTool() map[string]any {
 func mindMapSearchTool() map[string]any {
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapSearch),
-		"description": "Search node IDs, titles, content, and code file locations in this card's current mind map. Returns compact Markdown containing matching nodes, their one-hop related nodes, and relationships. Use this before adding, updating, deleting, or linking concepts so existing durable nodes are reused.",
+		"description": "Search node IDs, titles, content, tags, and code locations in this card's current mind map. Returns budgeted Markdown with full matching nodes, summarized one-hop related nodes, non-tag relationships, and a tagRevision that can be passed directly to mind_map_update. Use one focused SQL-style boolean search before changing concepts so durable nodes are reused.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"query"},
 			"properties": map[string]any{
-				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "Case-insensitive text to find in node IDs, titles, content, file paths, or methods."},
-				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "description": "Maximum matching nodes to return. Defaults to 20."},
+				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "SQL-style boolean expression of case-insensitive terms across node IDs, titles, content, tags, file paths, and methods. AND binds more tightly than OR; parentheses override precedence. Adjacent terms require an operator. Example: workflow AND (runner OR retry)."},
+				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "description": "Maximum matching nodes to return. Defaults to 5; usually use 3-5."},
 			},
 		},
 	}
@@ -403,11 +403,11 @@ func mindMapUpdateTool() map[string]any {
 	}}
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
-		"description": "Apply node and relationship changes to this card's isolated mind map. Call mind_map_tags immediately before every update and pass its tagRevision. Every node upsert must provide its complete desired tag-name list. The server exclusively creates, reuses, links, and removes tag nodes; agents must not manipulate project-root or tag relationships. Nodes that reference implementation code must include a non-empty files list with file, method, startLine, and endLine. Search before reusing or changing concepts. Each node must express exactly one durable concept. Remove obsolete delivery, commit, test-result, incident, error, and debugging nodes. Deleting a node also removes its relationships.",
+		"description": "Apply node and relationship changes to this card's isolated mind map. Pass the tagRevision from the most recent mind_map_search or mind_map_tags result. Every node upsert must provide its complete desired tag-name list. The server exclusively creates, reuses, links, and removes tag nodes; agents must not manipulate project-root or tag relationships. Nodes that reference implementation code must include a non-empty files list with file, method, startLine, and endLine. Search before reusing or changing concepts. Each node must express exactly one durable concept. Delete obsolete transient nodes only when they were touched by the current task. Deleting a node also removes its relationships.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"tagRevision", "operations"},
 			"properties": map[string]any{
-				"tagRevision": map[string]any{"type": "string", "minLength": 1, "description": "Exact tagRevision returned by the most recent mind_map_tags call."},
+				"tagRevision": map[string]any{"type": "string", "minLength": 1, "description": "Exact tagRevision returned by the most recent mind_map_search or mind_map_tags call."},
 				"operations":  map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": operation},
 			},
 		},

@@ -22,11 +22,13 @@ import (
 )
 
 const (
-	questionsTool       = "questions"
-	publishArtifactTool = "publish_artifact"
-	tunnelCreateTool    = "tunnel_create"
-	tunnelListTool      = "tunnel_list"
-	tunnelCloseTool     = "tunnel_close"
+	questionsTool                   = "questions"
+	publishArtifactTool             = "publish_artifact"
+	tunnelCreateTool                = "tunnel_create"
+	tunnelListTool                  = "tunnel_list"
+	tunnelCloseTool                 = "tunnel_close"
+	mindMapSearchMaxOutputBytes     = 16 * 1024
+	mindMapSearchHeaderReserveBytes = 2 * 1024
 )
 
 type SessionUseCase interface {
@@ -107,12 +109,12 @@ func (s *Service) listMindMapTags(ctx context.Context, call processdomain.Dynami
 	if err != nil {
 		return processdomain.DynamicToolResult{}, err
 	}
-	tags := make([]map[string]any, 0, len(result.Tags))
+	tags := make([]string, 0, len(result.Tags))
 	for _, tag := range result.Tags {
-		tags = append(tags, map[string]any{"id": tag.ID, "title": tag.Title, "content": tag.Content})
+		tags = append(tags, tag.Title)
 	}
 	payload, err := json.Marshal(map[string]any{
-		"projectId": result.ProjectID, "sessionId": result.SessionID, "tagRevision": result.Revision, "tags": tags,
+		"tagRevision": result.Revision, "tags": tags,
 	})
 	if err != nil {
 		return processdomain.DynamicToolResult{}, fmt.Errorf("encode mind map tags: %w", err)
@@ -160,7 +162,7 @@ func (s *Service) updateMindMap(ctx context.Context, call processdomain.DynamicT
 		return processdomain.DynamicToolResult{}, fmt.Errorf("decode mind_map_update arguments: %w", err)
 	}
 	if strings.TrimSpace(input.TagRevision) == "" {
-		return processdomain.DynamicToolResult{}, errors.New("mind map tag revision is required; call mind_map_tags before updating")
+		return processdomain.DynamicToolResult{}, errors.New("mind map tag revision is required; run mind_map_search or mind_map_tags before updating")
 	}
 	operations := make([]mindmapapp.OperationInput, 0, len(input.Operations))
 	for _, operation := range input.Operations {
@@ -189,54 +191,117 @@ func mindMapUpdateResult(graph mindmapapp.GraphDTO, appliedOperations int) (proc
 }
 
 func mindMapSearchResult(result mindmapapp.SearchResultDTO) processdomain.DynamicToolResult {
+	bodyBudget := mindMapSearchMaxOutputBytes - mindMapSearchHeaderReserveBytes
+	usedBodyBytes := 0
+	detailsTruncated := false
+	matchItems := make([]string, 0, len(result.Matches))
+	for _, match := range result.Matches {
+		item := renderMindMapMarkdownNode(match.Node, match.MatchedFields, result.NodeTags[match.Node.ID], true)
+		headingBytes := 0
+		if len(matchItems) == 0 {
+			headingBytes = len("\n## Matches\n")
+		}
+		if usedBodyBytes+headingBytes+len(item) > bodyBudget {
+			item = renderMindMapMarkdownNode(match.Node, match.MatchedFields, result.NodeTags[match.Node.ID], false)
+			item += "  details: omitted to fit output budget\n"
+			detailsTruncated = true
+		}
+		if usedBodyBytes+headingBytes+len(item) > bodyBudget {
+			break
+		}
+		matchItems = append(matchItems, item)
+		usedBodyBytes += headingBytes + len(item)
+	}
+
+	relatedItems := make([]string, 0, len(result.RelatedNodes))
+	for _, node := range result.RelatedNodes {
+		item := fmt.Sprintf("- %s — %s\n", node.ID, node.Title)
+		headingBytes := 0
+		if len(relatedItems) == 0 {
+			headingBytes = len("\n## Related\n")
+		}
+		if usedBodyBytes+headingBytes+len(item) > bodyBudget {
+			break
+		}
+		relatedItems = append(relatedItems, item)
+		usedBodyBytes += headingBytes + len(item)
+	}
+
+	edgeItems := make([]string, 0, len(result.Edges))
+	for _, edge := range result.Edges {
+		var item strings.Builder
+		fmt.Fprintf(&item, "- %s: %s -> %s", edge.ID, edge.SourceID, edge.TargetID)
+		if edge.Label != "" {
+			fmt.Fprintf(&item, " — %s", edge.Label)
+		}
+		item.WriteByte('\n')
+		headingBytes := 0
+		if len(edgeItems) == 0 {
+			headingBytes = len("\n## Edges\n")
+		}
+		if usedBodyBytes+headingBytes+item.Len() > bodyBudget {
+			break
+		}
+		edgeItems = append(edgeItems, item.String())
+		usedBodyBytes += headingBytes + item.Len()
+	}
+
+	truncated := result.Truncated || detailsTruncated || len(matchItems) < len(result.Matches) ||
+		len(relatedItems) < len(result.RelatedNodes) || len(edgeItems) < len(result.Edges)
 	var output strings.Builder
 	output.WriteString("# mind_map_search\n")
 	fmt.Fprintf(&output, "project: %s\nsession: %s\n", result.ProjectID, result.SessionID)
 	writeMindMapMarkdownField(&output, "query", result.Query, "")
-	fmt.Fprintf(&output, "matches: %d/%d\ntruncated: %t\n", len(result.Matches), result.TotalMatches, result.Truncated)
+	fmt.Fprintf(&output, "tagRevision: %s\n", result.TagRevision)
+	fmt.Fprintf(&output, "matches: %d/%d\nrelated: %d/%d\nedges: %d/%d\ntruncated: %t\n",
+		len(matchItems), result.TotalMatches, len(relatedItems), len(result.RelatedNodes), len(edgeItems), len(result.Edges), truncated)
 
-	if len(result.Matches) > 0 {
+	if len(matchItems) > 0 {
 		output.WriteString("\n## Matches\n")
-		for _, match := range result.Matches {
-			writeMindMapMarkdownNode(&output, match.Node, match.MatchedFields)
+		for _, item := range matchItems {
+			output.WriteString(item)
 		}
 	}
 
-	if len(result.RelatedNodes) > 0 {
+	if len(relatedItems) > 0 {
 		output.WriteString("\n## Related\n")
-		for _, node := range result.RelatedNodes {
-			writeMindMapMarkdownNode(&output, node, nil)
+		for _, item := range relatedItems {
+			output.WriteString(item)
 		}
 	}
 
-	if len(result.Edges) > 0 {
+	if len(edgeItems) > 0 {
 		output.WriteString("\n## Edges\n")
-		for _, edge := range result.Edges {
-			fmt.Fprintf(&output, "- %s: %s -> %s", edge.ID, edge.SourceID, edge.TargetID)
-			if edge.Label != "" {
-				fmt.Fprintf(&output, " — %s", edge.Label)
-			}
-			output.WriteByte('\n')
+		for _, item := range edgeItems {
+			output.WriteString(item)
 		}
 	}
 	return textResult([]byte(strings.TrimSuffix(output.String(), "\n")))
 }
 
-func writeMindMapMarkdownNode(output *strings.Builder, node mindmapapp.NodeDTO, matchedFields []string) {
-	fmt.Fprintf(output, "- %s — %s\n", node.ID, node.Title)
+func renderMindMapMarkdownNode(node mindmapapp.NodeDTO, matchedFields, tags []string, includeDetails bool) string {
+	var output strings.Builder
+	fmt.Fprintf(&output, "- %s — %s\n", node.ID, node.Title)
 	if len(matchedFields) > 0 {
-		fmt.Fprintf(output, "  matched: %s\n", strings.Join(matchedFields, ", "))
+		fmt.Fprintf(&output, "  matched: %s\n", strings.Join(matchedFields, ", "))
+	}
+	if len(tags) > 0 {
+		fmt.Fprintf(&output, "  tags: %s\n", strings.Join(tags, ", "))
+	}
+	if !includeDetails {
+		return output.String()
 	}
 	if node.Content != "" {
-		writeMindMapMarkdownField(output, "content", node.Content, "  ")
+		writeMindMapMarkdownField(&output, "content", node.Content, "  ")
 	}
 	if len(node.Files) == 0 {
-		return
+		return output.String()
 	}
 	output.WriteString("  files:\n")
 	for _, file := range node.Files {
-		fmt.Fprintf(output, "  - %s:%d-%d — %s\n", file.File, file.StartLine, file.EndLine, file.Method)
+		fmt.Fprintf(&output, "  - %s:%d-%d — %s\n", file.File, file.StartLine, file.EndLine, file.Method)
 	}
+	return output.String()
 }
 
 func writeMindMapMarkdownField(output *strings.Builder, name string, value string, indent string) {

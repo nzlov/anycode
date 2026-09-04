@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,14 @@ import (
 
 type testMindMapSettings struct {
 	configuration settingdomain.MindMapConfiguration
+}
+
+func TestAsyncTaskPromptUsesBudgetedSearchAndScopedCleanup(t *testing.T) {
+	for _, expected := range []string{"SQL 风格布尔表达式", "AND 优先于 OR", "可用括号改变优先级", "相邻查询词之间必须有操作符", "limit 通常取 3–5", "tagRevision", "JSON 文本", "一次批量更新", "只清理当前会话", "不得为全库清理"} {
+		if !strings.Contains(asyncTaskPromptGuidance, expected) {
+			t.Fatalf("async mind map guidance lacks %q: %q", expected, asyncTaskPromptGuidance)
+		}
+	}
 }
 
 func (s *testMindMapSettings) MindMapConfiguration(context.Context) (settingdomain.MindMapConfiguration, error) {
@@ -512,6 +521,35 @@ func TestSearchGraphMatchesAnyTermAndRanksTermCoverage(t *testing.T) {
 	}
 	if result.Matches[1].Node.ID != "durable" || result.Matches[2].Node.ID != "storage" {
 		t.Fatalf("partial match order = %#v", result.Matches)
+	}
+}
+
+func TestSearchGraphTreatsTagsAsSearchableNodeMetadata(t *testing.T) {
+	tagID := domain.ManagedTagNodeID("backend")
+	updatedAt := time.Date(2026, 9, 4, 8, 0, 0, 0, time.UTC)
+	graph := GraphDTO{
+		ProjectID: "project-1", SessionID: "session-1", UpdatedAt: updatedAt,
+		Nodes: []NodeDTO{
+			{ID: domain.RootNodeID, Title: "AnyCode"},
+			{ID: tagID, Title: "Backend"},
+			{ID: "worker", Title: "Worker"},
+		},
+		Edges: []EdgeDTO{
+			{ID: domain.TagRootEdgeID(tagID), SourceID: domain.RootNodeID, TargetID: tagID},
+			{ID: domain.TagNodeEdgeID(tagID, "worker"), SourceID: tagID, TargetID: "worker"},
+		},
+	}
+
+	result := searchGraph(graph, "backend", 5)
+
+	if result.TagRevision != formatTagRevision(updatedAt) || result.TotalMatches != 1 || len(result.Matches) != 1 || result.Matches[0].Node.ID != "worker" {
+		t.Fatalf("tag search = %#v", result)
+	}
+	if !slices.Equal(result.Matches[0].MatchedFields, []string{"tags"}) || !slices.Equal(result.NodeTags["worker"], []string{"Backend"}) {
+		t.Fatalf("tag metadata = %#v", result)
+	}
+	if len(result.RelatedNodes) != 0 || len(result.Edges) != 0 {
+		t.Fatalf("managed tag topology leaked into search = %#v", result)
 	}
 }
 

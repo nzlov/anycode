@@ -58,12 +58,12 @@ func TestMindMapCodexContextSeparatesRealtimeAndAsyncTools(t *testing.T) {
 	session := domain.Session{ID: "session-1", ProjectID: "project-1"}
 
 	tools, guidance, err := service.mindMapCodexContext(context.Background(), session)
-	if err != nil || len(tools) != 3 || tools[0] != processdomain.DynamicToolMindMapSearch || tools[1] != processdomain.DynamicToolMindMapTags || tools[2] != processdomain.DynamicToolMindMapUpdate || !strings.Contains(guidance, "必须及时") || !strings.Contains(guidance, "不要尝试读取全图") || !strings.Contains(guidance, "一个节点只表达一个稳定概念") || !strings.Contains(guidance, "禁止将文件列表更新到节点内容里") || !strings.Contains(guidance, "mind_map_tags") || !strings.Contains(guidance, "完整的 Tag 名称列表") || !strings.Contains(guidance, "清理孤儿 tag") || !strings.Contains(guidance, "禁止创建仅用于记录错误") {
+	if err != nil || len(tools) != 3 || tools[0] != processdomain.DynamicToolMindMapSearch || tools[1] != processdomain.DynamicToolMindMapTags || tools[2] != processdomain.DynamicToolMindMapUpdate || !strings.Contains(guidance, "必须及时") || !strings.Contains(guidance, "SQL 风格布尔表达式") || !strings.Contains(guidance, "AND 优先于 OR") || !strings.Contains(guidance, "可用括号改变优先级") || !strings.Contains(guidance, "相邻查询词之间必须有操作符") || !strings.Contains(guidance, "limit 通常取 3–5") || !strings.Contains(guidance, "tagRevision") || !strings.Contains(guidance, "JSON 文本") || !strings.Contains(guidance, "一个节点只表达一个稳定概念") || !strings.Contains(guidance, "完整的 Tag 名称列表") || !strings.Contains(guidance, "清理孤儿 Tag") || !strings.Contains(guidance, "只清理本次任务") || !strings.Contains(guidance, "不得为全库清理") {
 		t.Fatalf("realtime context = tools:%#v guidance:%q err:%v", tools, guidance, err)
 	}
 	settings.configuration.Mode = settingdomain.MindMapModeAsync
 	tools, guidance, err = service.mindMapCodexContext(context.Background(), session)
-	if err != nil || len(tools) != 1 || tools[0] != processdomain.DynamicToolMindMapSearch || !strings.Contains(guidance, "不提供全图查看工具") {
+	if err != nil || len(tools) != 1 || tools[0] != processdomain.DynamicToolMindMapSearch || !strings.Contains(guidance, "SQL 风格布尔表达式") || !strings.Contains(guidance, "AND 优先于 OR") || !strings.Contains(guidance, "可用括号改变优先级") || !strings.Contains(guidance, "不得修改思维图") {
 		t.Fatalf("async context = tools:%#v guidance:%q err:%v", tools, guidance, err)
 	}
 	settings.configuration.Enabled = false

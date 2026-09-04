@@ -3,6 +3,7 @@ package codextool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -190,13 +191,14 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 		ProjectID: "project-1", SessionID: "session-1",
 		Nodes: []mindmapapp.NodeDTO{{ID: mindmapdomain.RootNodeID, Title: "AnyCode"}},
 	}, searchResult: mindmapapp.SearchResultDTO{
-		ProjectID: "project-1", SessionID: "session-1", Query: "tool", TotalMatches: 1,
+		ProjectID: "project-1", SessionID: "session-1", Query: "tool", TagRevision: "revision-1", TotalMatches: 1,
 		Matches: []mindmapapp.NodeMatchDTO{{Node: mindmapapp.NodeDTO{
 			ID: "tools", Title: "Dynamic tools", Content: "Agent tools",
 			Files: []mindmapdomain.NodeFile{{File: "internal/tools.go", Method: "Run", StartLine: 10, EndLine: 20}},
 		}, MatchedFields: []string{"title", "content"}}},
-		RelatedNodes: []mindmapapp.NodeDTO{{ID: "agent", Title: "Agent"}},
+		RelatedNodes: []mindmapapp.NodeDTO{{ID: "agent", Title: "Agent", Content: "not rendered"}},
 		Edges:        []mindmapapp.EdgeDTO{{ID: "agent-tools", SourceID: "agent", TargetID: "tools", Label: "uses"}},
+		NodeTags:     map[mindmapdomain.NodeID][]string{"tools": {"Backend", "Tools"}},
 	}}
 	service := New(nil, nil, WithMindMaps(maps))
 	call := processdomain.DynamicToolCall{ProcessRunID: "run-1", SessionID: "session-1"}
@@ -211,12 +213,16 @@ func TestMindMapToolsSearchAndUpdateCurrentGraph(t *testing.T) {
 project: project-1
 session: session-1
 query: tool
+tagRevision: revision-1
 matches: 1/1
+related: 1/1
+edges: 1/1
 truncated: false
 
 ## Matches
 - tools — Dynamic tools
   matched: title, content
+  tags: Backend, Tools
   content: Agent tools
   files:
   - internal/tools.go:10-20 — Run
@@ -231,8 +237,9 @@ truncated: false
 	}
 	call.Tool = string(processdomain.DynamicToolMindMapTags)
 	call.Arguments = json.RawMessage(`{}`)
+	maps.tagList.Tags = []mindmapapp.NodeDTO{{ID: "tag:backend", Title: "Backend", Content: "unused"}}
 	tagResult, err := service.HandleDynamicTool(context.Background(), call)
-	if err != nil || !strings.Contains(tagResult.Content[0].Text, `"tagRevision":"revision-1"`) {
+	if err != nil || tagResult.Content[0].Text != `{"tagRevision":"revision-1","tags":["Backend"]}` {
 		t.Fatalf("tags result = %#v err = %v", tagResult, err)
 	}
 
@@ -258,11 +265,29 @@ truncated: false
 
 func TestMindMapSearchResultOmitsEmptySections(t *testing.T) {
 	result := mindMapSearchResult(mindmapapp.SearchResultDTO{
-		ProjectID: "project-1", SessionID: "session-1", Query: "missing",
+		ProjectID: "project-1", SessionID: "session-1", Query: "missing", TagRevision: "revision-1",
 	})
-	want := "# mind_map_search\nproject: project-1\nsession: session-1\nquery: missing\nmatches: 0/0\ntruncated: false"
+	want := "# mind_map_search\nproject: project-1\nsession: session-1\nquery: missing\ntagRevision: revision-1\nmatches: 0/0\nrelated: 0/0\nedges: 0/0\ntruncated: false"
 	if len(result.Content) != 1 || result.Content[0].Text != want {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestMindMapSearchResultEnforcesOverallOutputBudget(t *testing.T) {
+	matches := make([]mindmapapp.NodeMatchDTO, 50)
+	for index := range matches {
+		matches[index] = mindmapapp.NodeMatchDTO{Node: mindmapapp.NodeDTO{
+			ID: mindmapdomain.NodeID(fmt.Sprintf("node-%02d", index)), Title: "Large node", Content: strings.Repeat("x", 20_000),
+		}, MatchedFields: []string{"content"}}
+	}
+	result := mindMapSearchResult(mindmapapp.SearchResultDTO{
+		ProjectID: "project-1", SessionID: "session-1", Query: "large", TagRevision: "revision-1",
+		Matches: matches, TotalMatches: len(matches),
+	})
+
+	text := result.Content[0].Text
+	if len(text) > mindMapSearchMaxOutputBytes || !strings.Contains(text, "truncated: true") || !strings.Contains(text, "details: omitted to fit output budget") {
+		t.Fatalf("budgeted search result length=%d result=%q", len(text), text)
 	}
 }
 

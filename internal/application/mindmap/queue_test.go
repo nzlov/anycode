@@ -76,13 +76,13 @@ func TestAsyncQueueUsesIndependentGlobalConcurrencyAndConfiguredModel(t *testing
 		if input.Model != "mind-map-model" || input.ReasoningEffort != "xhigh" || input.PermissionMode != "read-only" {
 			t.Fatalf("start input = %#v", input)
 		}
-		if !strings.Contains(input.DeveloperInstructions, "禁止创建仅用于记录错误") {
+		if !strings.Contains(input.DeveloperInstructions, "禁止创建仅记录错误") || !strings.Contains(input.DeveloperInstructions, "只清理当前会话") {
 			t.Fatalf("developer instructions = %q", input.DeveloperInstructions)
 		}
-		if !strings.Contains(input.DeveloperInstructions, "禁止将文件列表更新到节点内容里") {
+		if !strings.Contains(input.DeveloperInstructions, "文件列表不得写入节点内容") {
 			t.Fatalf("developer instructions allow file lists in node content = %q", input.DeveloperInstructions)
 		}
-		if !strings.Contains(input.DeveloperInstructions, "完整的 Tag 名称列表") || !strings.Contains(input.DeveloperInstructions, "清理孤儿 tag") {
+		if !strings.Contains(input.DeveloperInstructions, "完整的 Tag 名称列表") || !strings.Contains(input.DeveloperInstructions, "清理孤儿 Tag") {
 			t.Fatalf("developer instructions lack managed tag or code location rules = %q", input.DeveloperInstructions)
 		}
 		if len(input.DynamicTools) != 3 || input.DynamicTools[0] != processdomain.DynamicToolMindMapSearch || input.DynamicTools[1] != processdomain.DynamicToolMindMapTags || input.DynamicTools[2] != processdomain.DynamicToolMindMapUpdate {

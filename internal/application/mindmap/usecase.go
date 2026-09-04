@@ -129,9 +129,11 @@ type SearchResultDTO struct {
 	ProjectID    domain.ProjectID
 	SessionID    domain.SessionID
 	Query        string
+	TagRevision  string
 	Matches      []NodeMatchDTO
 	RelatedNodes []NodeDTO
 	Edges        []EdgeDTO
+	NodeTags     map[domain.NodeID][]string
 	TotalMatches int
 	Truncated    bool
 }
@@ -801,8 +803,12 @@ func (s *Service) SearchForProcess(ctx context.Context, processRunID string, ses
 	if err != nil {
 		return SearchResultDTO{}, err
 	}
+	compiledQuery, err := compileSearchQuery(query)
+	if err != nil {
+		return SearchResultDTO{}, err
+	}
 	if limit == 0 {
-		limit = 20
+		limit = 5
 	}
 	if limit < 1 || limit > 50 {
 		return SearchResultDTO{}, errors.New("mind map search limit must be between 1 and 50")
@@ -811,7 +817,13 @@ func (s *Service) SearchForProcess(ctx context.Context, processRunID string, ses
 	if err != nil {
 		return SearchResultDTO{}, err
 	}
-	return searchGraph(graph, query, limit), nil
+	exactQuery := ""
+	if len(compiledQuery.terms) == 1 {
+		exactQuery = compiledQuery.terms[0]
+	}
+	return searchGraphWithQuery(graph, query, limit, compiledQuery.terms, exactQuery, func(value string) bool {
+		return compiledQuery.root.matches(value)
+	}), nil
 }
 
 func (s *Service) ListTagsForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID) (TagListDTO, error) {
@@ -1119,7 +1131,7 @@ func formatTagRevision(value time.Time) string {
 
 func validateTagRevision(expected string, current time.Time) error {
 	if strings.TrimSpace(expected) != formatTagRevision(current) {
-		return errors.New("mind map tags changed; list tags again before updating")
+		return errors.New("mind map tags changed; run a fresh mind map search or list tags again before updating")
 	}
 	return nil
 }
@@ -1297,18 +1309,56 @@ func validateNodeFiles(files []domain.NodeFile) ([]domain.NodeFile, error) {
 }
 
 func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
+	terms := strings.Fields(normalizedQuery)
+	return searchGraphWithQuery(graph, query, limit, terms, normalizedQuery, func(value string) bool {
+		return containsAny(value, terms)
+	})
+}
+
+func searchGraphWithQuery(graph GraphDTO, query string, limit int, terms []string, exactQuery string, matches func(string) bool) SearchResultDTO {
 	type candidate struct {
 		match        NodeMatchDTO
 		matchedTerms int
 		score        int
 	}
-	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
-	terms := strings.Fields(normalizedQuery)
+	nodesByID := make(map[domain.NodeID]NodeDTO, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		nodesByID[node.ID] = node
+	}
+	nodeTags := make(map[domain.NodeID][]string)
+	for _, edge := range graph.Edges {
+		var tagID, nodeID domain.NodeID
+		switch {
+		case domain.IsTagNodeID(edge.SourceID) && !domain.IsTagNodeID(edge.TargetID):
+			tagID, nodeID = edge.SourceID, edge.TargetID
+		case domain.IsTagNodeID(edge.TargetID) && !domain.IsTagNodeID(edge.SourceID):
+			tagID, nodeID = edge.TargetID, edge.SourceID
+		default:
+			continue
+		}
+		if nodeID == domain.RootNodeID {
+			continue
+		}
+		if tag, ok := nodesByID[tagID]; ok {
+			nodeTags[nodeID] = append(nodeTags[nodeID], tag.Title)
+		}
+	}
+	for nodeID := range nodeTags {
+		sort.Slice(nodeTags[nodeID], func(i, j int) bool {
+			return strings.ToLower(nodeTags[nodeID][i]) < strings.ToLower(nodeTags[nodeID][j])
+		})
+		nodeTags[nodeID] = slices.Compact(nodeTags[nodeID])
+	}
 	candidates := make([]candidate, 0)
 	for _, node := range graph.Nodes {
+		if domain.IsTagNodeID(node.ID) {
+			continue
+		}
 		id := strings.ToLower(string(node.ID))
 		title := strings.ToLower(node.Title)
 		content := strings.ToLower(node.Content)
+		tags := strings.ToLower(strings.Join(nodeTags[node.ID], "\n"))
 		fileLocations := strings.Builder{}
 		for _, item := range node.Files {
 			fileLocations.WriteString("\n")
@@ -1317,17 +1367,17 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 			fileLocations.WriteString(strings.ToLower(item.Method))
 		}
 		files := fileLocations.String()
-		searchable := id + "\n" + title + "\n" + content + files
+		searchable := id + "\n" + title + "\n" + content + "\n" + tags + files
+		if !matches(searchable) {
+			continue
+		}
 		matchedTerms := 0
 		for _, term := range terms {
 			if strings.Contains(searchable, term) {
 				matchedTerms++
 			}
 		}
-		if matchedTerms == 0 {
-			continue
-		}
-		fields := make([]string, 0, 4)
+		fields := make([]string, 0, 5)
 		score := 0
 		if containsAny(id, terms) {
 			fields = append(fields, "id")
@@ -1345,10 +1395,14 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 			fields = append(fields, "files")
 			score += 15
 		}
-		if id == normalizedQuery {
+		if containsAny(tags, terms) {
+			fields = append(fields, "tags")
+			score += 15
+		}
+		if id == exactQuery {
 			score += 200
 		}
-		if title == normalizedQuery {
+		if title == exactQuery {
 			score += 160
 		}
 		candidates = append(candidates, candidate{
@@ -1370,6 +1424,7 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 	})
 	result := SearchResultDTO{
 		ProjectID: graph.ProjectID, SessionID: graph.SessionID, Query: query,
+		TagRevision: formatTagRevision(graph.UpdatedAt), NodeTags: nodeTags,
 		TotalMatches: len(candidates), Truncated: len(candidates) > limit,
 	}
 	if len(candidates) > limit {
@@ -1383,6 +1438,9 @@ func searchGraph(graph GraphDTO, query string, limit int) SearchResultDTO {
 	}
 	relatedIDs := make(map[domain.NodeID]struct{})
 	for _, edge := range graph.Edges {
+		if domain.IsTagNodeID(edge.SourceID) || domain.IsTagNodeID(edge.TargetID) {
+			continue
+		}
 		_, sourceMatched := matchedIDs[edge.SourceID]
 		_, targetMatched := matchedIDs[edge.TargetID]
 		if !sourceMatched && !targetMatched {

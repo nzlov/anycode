@@ -928,6 +928,13 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if searchSchema["required"].([]string)[0] != "query" {
 		t.Fatalf("search schema = %#v", searchSchema)
 	}
+	searchDescription, _ := queryOnly[5]["description"].(string)
+	searchProperties := searchSchema["properties"].(map[string]any)
+	queryDescription, _ := searchProperties["query"].(map[string]any)["description"].(string)
+	limitDescription, _ := searchProperties["limit"].(map[string]any)["description"].(string)
+	if !strings.Contains(searchDescription, "tagRevision") || !strings.Contains(queryDescription, "AND binds more tightly than OR") || !strings.Contains(queryDescription, "parentheses override precedence") || !strings.Contains(limitDescription, "Defaults to 5") {
+		t.Fatalf("search contract = description:%q query:%q limit:%q", searchDescription, queryDescription, limitDescription)
+	}
 	realtime := anyCodeDynamicTools(process.DynamicToolMindMapSearch, process.DynamicToolMindMapTags, process.DynamicToolMindMapUpdate)
 	if len(realtime) != 8 || realtime[6]["name"] != string(process.DynamicToolMindMapTags) || realtime[7]["name"] != string(process.DynamicToolMindMapUpdate) {
 		t.Fatalf("realtime tools = %#v", realtime)
@@ -939,6 +946,10 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if !strings.Contains(description, "Every node upsert must provide its complete desired tag-name list") ||
 		!strings.Contains(description, "Nodes that reference implementation code must include a non-empty files list") {
 		t.Fatalf("mind map update description lacks managed tag or code location rules = %q", description)
+	}
+	tagsDescription, _ := realtime[6]["description"].(string)
+	if !strings.Contains(tagsDescription, "compact JSON text") || !strings.Contains(description, "most recent mind_map_search or mind_map_tags") {
+		t.Fatalf("mind map revision contract = tags:%q update:%q", tagsDescription, description)
 	}
 	updateSchema := realtime[7]["inputSchema"].(map[string]any)
 	required := updateSchema["required"].([]string)
