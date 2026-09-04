@@ -144,7 +144,7 @@
         row-key="id"
         :loading="loading"
         v-model:pagination="pagination"
-        :rows-per-page-options="[15, 25, 50]"
+        :rows-per-page-options="[20, 25, 50]"
         binary-state-sort
         class="session-table"
         @request="onTableRequest"
@@ -269,7 +269,7 @@ const {
   loadSessions,
 } = useSessionsPage({
   page: 1,
-  pageSize: 15,
+  pageSize: 20,
   sort: 'updated_at desc',
 });
 

@@ -14,7 +14,7 @@ interface UseSessionsPageInput extends ListSessionsInput {
 
 const defaultPageInfo: PageInfo = {
   page: 1,
-  pageSize: 8,
+  pageSize: 20,
   total: 0,
   nextCursor: '',
 };
@@ -29,7 +29,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   const olderThanDays = ref(defaultInput.olderThanDays ?? 0);
   const projectId = ref(defaultInput.projectId ?? '');
   const page = ref(defaultInput.page ?? 1);
-  const pageSize = ref(defaultInput.pageSize ?? 8);
+  const pageSize = ref(defaultInput.pageSize ?? 20);
   const sort = ref(defaultInput.sort ?? 'updated_at desc');
   const loadRequests = createLatestRequestTracker();
 

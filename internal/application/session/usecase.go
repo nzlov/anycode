@@ -8703,9 +8703,6 @@ func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInpu
 		if candidate.Status != domain.StatusClosed {
 			return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "cleanup matched a session that is not closed").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
 		}
-		if strings.TrimSpace(candidate.BaseBranch) != "" && candidate.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
-			return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session worktree cleanup must finish before history cleanup").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
-		}
 		if s.mindMaps != nil {
 			task, found, err := s.mindMaps.FindTaskBySession(ctx, mindmapdomain.SessionID(candidate.ID))
 			if err != nil {
@@ -8715,6 +8712,13 @@ func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInpu
 				return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "mind map task must finish before history cleanup").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
 			}
 		}
+	}
+	for index, candidate := range candidates {
+		current, err := s.finishWorktreeCleanupBeforeHistoryCleanup(ctx, candidate)
+		if err != nil {
+			return 0, err
+		}
+		candidates[index] = current
 	}
 
 	for _, candidate := range candidates {
@@ -8733,6 +8737,59 @@ func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInpu
 		return 0, fmt.Errorf("purge session history: %w", err)
 	}
 	return len(ids), nil
+}
+
+func (s *Service) finishWorktreeCleanupBeforeHistoryCleanup(ctx context.Context, candidate domain.Session) (domain.Session, error) {
+	if strings.TrimSpace(candidate.BaseBranch) == "" || candidate.WorktreeCleanup.Status == domain.WorktreeCleanupCleaned {
+		return candidate, nil
+	}
+	if s.worktrees == nil || s.projects == nil {
+		return domain.Session{}, errors.New("session worktree cleanup is not configured")
+	}
+
+	current := candidate
+	err := s.withSessionLock(ctx, candidate.ID, func(ctx context.Context) error {
+		var err error
+		current, err = s.repo.Find(ctx, candidate.ID)
+		if err != nil {
+			return fmt.Errorf("find session before history cleanup: %w", err)
+		}
+		if current.Status != domain.StatusClosed {
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "cleanup matched a session that is not closed").WithDetails(map[string]any{"sessionId": string(current.ID)})
+		}
+		if strings.TrimSpace(current.BaseBranch) == "" || current.WorktreeCleanup.Status == domain.WorktreeCleanupCleaned {
+			return nil
+		}
+		if !worktreeCleanupDue(current, s.now()) {
+			return unfinishedWorktreeCleanupError(current)
+		}
+		if err := s.cleanupSessionWorktree(ctx, current); err != nil {
+			return fmt.Errorf("finish session worktree cleanup before history cleanup: %w", err)
+		}
+		current, err = s.repo.Find(ctx, candidate.ID)
+		if err != nil {
+			return fmt.Errorf("find session after worktree cleanup: %w", err)
+		}
+		if current.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
+			return unfinishedWorktreeCleanupError(current)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Session{}, err
+	}
+	return current, nil
+}
+
+func unfinishedWorktreeCleanupError(session domain.Session) error {
+	details := map[string]any{
+		"sessionId":             string(session.ID),
+		"worktreeCleanupStatus": string(session.WorktreeCleanup.Status),
+	}
+	if session.WorktreeCleanup.ErrorCode != "" {
+		details["worktreeCleanupErrorCode"] = session.WorktreeCleanup.ErrorCode
+	}
+	return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session worktree cleanup must finish before history cleanup").WithDetails(details)
 }
 
 func (s *Service) olderThanCutoff(days int) (*time.Time, error) {

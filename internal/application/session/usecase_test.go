@@ -4503,22 +4503,39 @@ func TestCleanupSessionsDeletesFilteredHistoryAndCodexSessions(t *testing.T) {
 	}
 }
 
-func TestCleanupSessionsRejectsPendingWorktreeCleanup(t *testing.T) {
+func TestCleanupSessionsFinishesPendingWorktreeCleanupBeforePurgingHistory(t *testing.T) {
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
-	repo := newFakeRepository()
-	repo.listSessions = []domain.Session{{
+	confirmedAt := now.Add(-9 * 24 * time.Hour)
+	old := domain.Session{
 		ID: "session-1", ProjectID: "project-1", Status: domain.StatusClosed, BaseBranch: "main",
-		WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupPending}, UpdatedAt: now.Add(-8 * 24 * time.Hour),
-	}}
+		WorktreePath: "/data/worktrees/project-1/session-1", WorktreeBranch: "session-1", WorktreeHeadCommit: "closed-head",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status: domain.WorktreeCleanupPending, OwnershipToken: "test-owner-token", OwnershipConfirmedAt: &confirmedAt,
+		},
+		UpdatedAt: now.Add(-8 * 24 * time.Hour),
+	}
+	repo := newFakeRepository()
+	repo.listSessions = []domain.Session{old}
+	repo.sessions[old.ID] = old
+	projects := newFakeProjectRepository()
+	projects.projects[projectdomain.ID(old.ProjectID)] = projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/workspace/project-1"}, IsGit: true}
+	worktrees := newFakeWorktreeManager()
 	purger := &fakeSessionHistoryPurger{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithSessionHistoryPurger(purger))
+	service := New(repo, projects, WithWorktrees(worktrees), WithSessionHistoryPurger(purger))
 	service.now = func() time.Time { return now }
 
-	if _, err := service.CleanupSessions(context.Background(), CleanupSessionsInput{Scope: "closed", OlderThanDays: 7}); err == nil {
-		t.Fatal("CleanupSessions() error = nil")
+	count, err := service.CleanupSessions(context.Background(), CleanupSessionsInput{Scope: "closed", OlderThanDays: 7})
+	if err != nil {
+		t.Fatalf("CleanupSessions() error = %v", err)
 	}
-	if len(purger.ids) != 0 {
-		t.Fatalf("purged ids = %#v", purger.ids)
+	if count != 1 || !slices.Equal(purger.ids, []domain.ID{old.ID}) {
+		t.Fatalf("CleanupSessions() = %d, ids = %#v", count, purger.ids)
+	}
+	if saved := repo.sessions[old.ID]; saved.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
+		t.Fatalf("worktree cleanup = %#v", saved.WorktreeCleanup)
+	}
+	if !slices.Equal(worktrees.operations, []string{"retain", "remove", "delete_branch", "release_ownership"}) {
+		t.Fatalf("worktree cleanup operations = %#v", worktrees.operations)
 	}
 }
 
