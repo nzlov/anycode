@@ -131,6 +131,18 @@ func TestUnavailableThreadResumeErrorRequiresMissingRollout(t *testing.T) {
 	}
 }
 
+func TestCompleteTurnClassifiesHTTP429AsRateLimited(t *testing.T) {
+	runtime := &appServerRuntime{}
+	route := &appServerRun{finished: make(chan process.ExitResult, 1)}
+
+	runtime.completeTurn(route, json.RawMessage(`{"turn":{"status":"failed","error":{"message":"rate limit exceeded","codexErrorInfo":{"httpStatusCode":429}}}}`))
+
+	result := <-route.finished
+	if result.FailureCode != process.FailureCodeRateLimited || result.FailureReason != "rate limit exceeded" {
+		t.Fatalf("turn result = %#v", result)
+	}
+}
+
 func TestRuntimeCompletesDynamicToolOnOriginalTurn(t *testing.T) {
 	codexHome := t.TempDir()
 	responses := filepath.Join(t.TempDir(), "responses")

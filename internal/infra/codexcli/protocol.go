@@ -3,6 +3,7 @@ package codexcli
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
@@ -55,9 +56,15 @@ func (r *appServerRuntime) completeTurn(route *appServerRun, raw json.RawMessage
 	switch params.Turn.Status {
 	case "failed":
 		result.FailureCode = "turn_failed"
+		if isRateLimitedTurnError(params.Turn.Error) {
+			result.FailureCode = process.FailureCodeRateLimited
+		}
 		result.FailureReason = stringValue(params.Turn.Error, "message")
 		if result.FailureReason == "" {
 			result.FailureReason = "Codex turn failed"
+			if result.FailureCode == process.FailureCodeRateLimited {
+				result.FailureReason = "Codex request was rate limited (HTTP 429)"
+			}
 		}
 	case "interrupted":
 		result.FailureCode = "turn_interrupted"
@@ -67,6 +74,15 @@ func (r *appServerRuntime) completeTurn(route *appServerRun, raw json.RawMessage
 		return
 	}
 	route.finish(result)
+}
+
+func isRateLimitedTurnError(turnError map[string]any) bool {
+	codexErrorInfo, ok := turnError["codexErrorInfo"].(map[string]any)
+	if !ok {
+		return false
+	}
+	statusCode, ok := codexErrorInfo["httpStatusCode"].(float64)
+	return ok && int(statusCode) == http.StatusTooManyRequests
 }
 
 func stringValue(value map[string]any, keys ...string) string {

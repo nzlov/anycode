@@ -9256,6 +9256,77 @@ func TestSessionModeMarksParamRejectedExitFailed(t *testing.T) {
 	}
 }
 
+func TestSessionModeInvalidatesRateLimitedCodexSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{
+		Type: processdomain.CodexEventProcessExit,
+		Content: processdomain.ExitResult{
+			ExitCode:      intPointer(1),
+			FailureCode:   processdomain.FailureCodeRateLimited,
+			FailureReason: "rate limit exceeded",
+		},
+	}
+	close(source)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-rate-limited"}, events: source}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{
+		"process-run-1",
+		"event-starting",
+		"event-transcript-bound",
+		"event-running",
+		"event-process-exit",
+		"event-codex",
+		"event-process-exited",
+		"event-failed",
+	}
+	service.generateID = func() (domain.ID, error) {
+		if len(ids) == 0 {
+			t.Fatal("generateID called more than expected")
+		}
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	got := waitForEventType(t, events, "session.failed")
+	if repo.sessions["session-1"].Status != domain.StatusFailed || repo.sessions["session-1"].CodexSessionID != "" {
+		t.Fatalf("rate-limited session = %#v", repo.sessions["session-1"])
+	}
+	if got.Payload["failureCode"] != processdomain.FailureCodeRateLimited || got.Payload["codexSessionUnavailable"] != true {
+		t.Fatalf("session failed payload = %#v", got.Payload)
+	}
+
+	freshCodex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-new"}}
+	freshService := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, freshCodex))
+	freshService.generateID = func() (domain.ID, error) { return "process-run-2", nil }
+	restarted, err := freshService.ExecuteSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("ExecuteSession() after rate limit: %v", err)
+	}
+	if restarted.Status != domain.StatusRunning || restarted.CodexSessionID != "codex-session-new" {
+		t.Fatalf("restarted session = %#v", restarted)
+	}
+	if !freshCodex.startCalled || freshCodex.resumeCalled {
+		t.Fatalf("rate-limited session reused Codex: start=%#v resume=%#v", freshCodex.startInput, freshCodex.resumeInput)
+	}
+}
+
 func TestStartSessionReturnsCurrentSessionWhenProcessIsAlreadyActive(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -12361,6 +12432,61 @@ func TestHandleCodexProcessExitStopsRetryingWhenServiceCloses(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("handleCodexProcessExit() did not stop after service close")
+	}
+}
+
+func TestWorkflowRateLimitedExitStartsFreshCodexSession(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "continue workflow",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusRunning,
+		CodexSessionID: "codex-session-rate-limited",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	workflowNodeRunID := domain.NodeRunID("node-run-1")
+	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
+		SessionID:     "session-1",
+		NodeRunID:     &workflowNodeRunID,
+		RequiresCodex: true,
+		Prompt:        "Retry the workflow node",
+	}}
+	events := &fakeEventStore{}
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{CodexSessionID: "codex-session-new"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	nodeRunID := processdomain.NodeRunID("node-run-1")
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &nodeRunID},
+		processdomain.ExitResult{FailureCode: processdomain.FailureCodeRateLimited, FailureReason: "rate limit exceeded"},
+		nil,
+	)
+
+	queued := repo.sessions["session-1"]
+	if queued.Status != domain.StatusQueued || queued.CodexSessionID != "" || queued.Queue.ResumeCodexSessionID != "" {
+		t.Fatalf("rate-limited workflow session = %#v", queued)
+	}
+	if workflows.failInput.Code != processdomain.FailureCodeRateLimited {
+		t.Fatalf("workflow failure input = %#v", workflows.failInput)
+	}
+	if _, err := service.DrainQueuedSessions(context.Background()); err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if !codex.startCalled || codex.resumeCalled {
+		t.Fatalf("rate-limited workflow reused Codex: start=%#v resume=%#v", codex.startInput, codex.resumeInput)
 	}
 }
 

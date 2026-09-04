@@ -13,6 +13,8 @@ var (
 	ErrThreadUnavailable          = errors.New("codex thread is unavailable")
 )
 
+const FailureCodeRateLimited = "codex_rate_limited"
+
 type RunID string
 type SessionID string
 type NodeRunID string

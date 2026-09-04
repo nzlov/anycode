@@ -5271,7 +5271,8 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	if ok && active.ID != handle.ProcessRunID {
 		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
 	}
-	if current.Status == domain.StatusRunning && ok && options.questionAnswerContinuation.resumeRequired {
+	rateLimited := exitResult.FailureCode == processdomain.FailureCodeRateLimited
+	if current.Status == domain.StatusRunning && ok && options.questionAnswerContinuation.resumeRequired && !rateLimited {
 		queued, err := s.persistQuestionAnswerResumeAfterProcessExit(ctx, current, active, exitResult, processEvent)
 		if err != nil {
 			return domain.Session{}, false, err
@@ -5279,6 +5280,9 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		if queued {
 			return current, false, nil
 		}
+	}
+	if rateLimited {
+		current.CodexSessionID = ""
 	}
 	if current.Mode == domain.ModeWorkflow && options.sessionID != "" && options.nodeRunID != nil &&
 		options.resumeCodexSessionID != "" && !options.resumeAcknowledged &&
@@ -5309,7 +5313,7 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 			processEvent,
 			{eventType: "workflow.exit_pending", payload: workflowProcessExitPayload(workflowExitInput)},
 		}
-		saveSession := false
+		saveSession := rateLimited
 		if current.Status == domain.StatusStopping {
 			if err := transitionSession(&current, domain.StatusStopped, exitResult.FinishedAt); err != nil {
 				return domain.Session{}, false, err
@@ -5361,6 +5365,9 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		}
 		payload := processExitPayload(handle.ProcessRunID, exitResult)
 		payload["reason"] = "process_exited"
+		if rateLimited {
+			payload["codexSessionUnavailable"] = true
+		}
 		if eventType == "session.stopped" {
 			payload["cause"] = "completed"
 			if wasStopping {
