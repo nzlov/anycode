@@ -192,6 +192,7 @@
               dense
               icon="download"
               aria-label="下载文件"
+              :loading="downloadingId === selected.id"
               @click="download(selected)"
             >
               <q-tooltip>下载</q-tooltip>
@@ -206,6 +207,18 @@
           v-if="$q.screen.lt.md && !annotationToolbarVisible"
           class="artifact-preview-dialog__mobile-actions"
         >
+          <q-btn
+            v-if="selected"
+            :loading="downloadingId === selected.id"
+            flat
+            round
+            dense
+            icon="download"
+            aria-label="下载文件"
+            @click="download(selected)"
+          >
+            <q-tooltip>下载</q-tooltip>
+          </q-btn>
           <q-btn
             v-close-popup
             round
@@ -232,12 +245,13 @@
           </template>
           <template v-if="annotationToolbarVisible" #toolbar-actions>
             <q-btn
-              v-if="!$q.screen.lt.md && selected"
+              v-if="selected"
               flat
               round
               dense
               icon="download"
               aria-label="下载文件"
+              :loading="downloadingId === selected.id"
               @click="download(selected)"
             >
               <q-tooltip>下载</q-tooltip>
@@ -630,6 +644,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px
     max(8px, env(safe-area-inset-left));
 }

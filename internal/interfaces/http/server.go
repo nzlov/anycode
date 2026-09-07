@@ -117,12 +117,15 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
 	mux.Handle("GET /api/terminals/{id}/ws", newTerminalWebSocketHandler(opts.sessions, opts.terminal, cfg.AccessKey))
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
-	previewTokens := newFilePreviewTokens(cfg.AccessKey)
-	mux.Handle("POST /files/{id}/preview-token", bearerAuth(cfg.AccessKey, attachmentHandler.previewToken(previewTokens)))
-	mux.Handle("GET /files/{id}/preview", filePreviewAuth(cfg.AccessKey, previewTokens, attachmentHandler.preview()))
-	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
+	fileTokens := newFileAccessTokens(cfg.AccessKey)
+	mux.Handle("POST /files/{id}/preview-token", bearerAuth(cfg.AccessKey, attachmentHandler.accessToken(fileTokens, attachmentapp.OpenPreview)))
+	mux.Handle("GET /files/{id}/preview", fileAccessAuth(cfg.AccessKey, fileTokens, attachmentHandler.preview()))
+	mux.Handle("POST /files/{id}/download-token", bearerAuth(cfg.AccessKey, attachmentHandler.accessToken(fileTokens, attachmentapp.OpenDownload)))
+	mux.Handle("GET /files/{id}/download", fileAccessAuth(cfg.AccessKey, fileTokens, attachmentHandler.download()))
 	mux.Handle("GET /api/sessions/{id}/diff-media", bearerAuth(cfg.AccessKey, diffMediaHandler{useCase: opts.diff, previewMaxBytes: attachmentHandler.previewMaxBytes}))
-	mux.Handle("GET /api/sessions/{id}/workspace-file", bearerAuth(cfg.AccessKey, workspaceFileHandler{useCase: opts.workspaceFiles, previewMaxBytes: attachmentHandler.previewMaxBytes}))
+	workspaceHandler := workspaceFileHandler{useCase: opts.workspaceFiles, previewMaxBytes: attachmentHandler.previewMaxBytes}
+	mux.Handle("POST /api/sessions/{id}/workspace-file/download-token", bearerAuth(cfg.AccessKey, workspaceHandler.downloadToken(fileTokens)))
+	mux.Handle("GET /api/sessions/{id}/workspace-file", fileAccessAuth(cfg.AccessKey, fileTokens, workspaceHandler))
 	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveAppearanceWallpaper(w, r, opts.settings)
 	})))
@@ -166,7 +169,7 @@ func (h workspaceFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	defer stream.Reader.Close()
 	download := r.URL.Query().Has("download")
-	if !download && stream.Size > h.previewMaxBytes {
+	if !download && r.Method != http.MethodHead && stream.Size > h.previewMaxBytes {
 		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "workspace file is too large to preview"))
 		return
 	}
@@ -411,11 +414,6 @@ func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode at
 		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "file is too large to preview"))
 		return
 	}
-	if mode == attachmentapp.OpenPreview && r.URL.Query().Has("token") {
-		w.Header().Set("Cache-Control", "private, no-store")
-		w.Header().Set("Referrer-Policy", "no-referrer")
-	}
-
 	if stream.MimeType != "" {
 		w.Header().Set("Content-Type", stream.MimeType)
 	}

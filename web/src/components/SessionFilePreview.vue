@@ -184,7 +184,7 @@ async function load(file: SessionFilePreviewData | null) {
   try {
     if (file.previewKind === 'image') {
       if (file.previewRequiresBearer) {
-        const blob = await fetchSessionFile(file, 'preview', request.signal);
+        const blob = await fetchSessionFile(file, request.signal);
         if (controller !== request || props.file?.id !== file.id) return;
         objectURL.value = URL.createObjectURL(blob);
         imageURL.value = objectURL.value;
@@ -197,7 +197,7 @@ async function load(file: SessionFilePreviewData | null) {
       waitForImage = true;
       return;
     }
-    const blob = await fetchSessionFile(file, 'preview', request.signal);
+    const blob = await fetchSessionFile(file, request.signal);
     if (controller !== request || props.file?.id !== file.id) return;
     if (file.previewKind === 'text') {
       const content = await blob.text();

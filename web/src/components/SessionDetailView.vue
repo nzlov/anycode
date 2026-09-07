@@ -597,7 +597,7 @@
           </div>
           <div class="event-resource-dialog__header-action">
             <q-btn
-              v-if="!isMobileLayout && eventResourceKind === 'file' && eventResourceFile"
+              v-if="eventResourceKind === 'file' && eventResourceFile"
               flat
               round
               dense

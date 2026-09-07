@@ -79,7 +79,6 @@ test('images use short-lived direct preview URLs while other previews keep authe
   assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
   assert.match(service, /\/files\/\$\{encodeURIComponent\(file\.id\)\}\/preview-token/);
   assert.match(service, /method: 'POST'/);
-  assert.match(service, /URL\.revokeObjectURL\(url\)/);
   assert.match(preview, /URL\.revokeObjectURL\(objectURL\.value\)/);
   assert.match(preview, /requestSessionFilePreviewURL\(file, request\.signal\)/);
   assert.match(preview, /:src="imageURL"/);

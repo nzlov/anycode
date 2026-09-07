@@ -47,6 +47,17 @@
           class="artifact-event-preview__header"
         >
           <span>{{ filename }}</span>
+          <q-btn
+            :loading="downloading"
+            flat
+            round
+            dense
+            icon="download"
+            aria-label="下载文件"
+            @click="download"
+          >
+            <q-tooltip>下载</q-tooltip>
+          </q-btn>
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
         </q-card-section>
         <q-separator v-if="!$q.screen.lt.md && !annotationToolbarVisible" />
@@ -54,6 +65,17 @@
           v-if="$q.screen.lt.md && !annotationToolbarVisible"
           class="artifact-event-preview__mobile-actions"
         >
+          <q-btn
+            :loading="downloading"
+            flat
+            round
+            dense
+            icon="download"
+            aria-label="下载文件"
+            @click="download"
+          >
+            <q-tooltip>下载</q-tooltip>
+          </q-btn>
           <q-btn
             v-close-popup
             round
@@ -73,6 +95,17 @@
             <span class="artifact-event-preview__title">{{ filename }}</span>
           </template>
           <template v-if="annotationToolbarVisible" #toolbar-actions>
+            <q-btn
+              :loading="downloading"
+              flat
+              round
+              dense
+              icon="download"
+              aria-label="下载文件"
+              @click="download"
+            >
+              <q-tooltip>下载</q-tooltip>
+            </q-btn>
             <q-btn
               v-close-popup
               :flat="!$q.screen.lt.md"
@@ -239,6 +272,7 @@ function payloadString(key: string, fallback = '') {
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px
     max(8px, env(safe-area-inset-left));
 }
@@ -247,6 +281,15 @@ function payloadString(key: string, fallback = '') {
   color: var(--ac-text);
   background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
   box-shadow: var(--ac-shadow-card);
+}
+
+.artifact-event-preview__header > span {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.artifact-event-preview__header > .q-btn {
+  flex: 0 0 auto;
 }
 
 .artifact-event-preview__header {

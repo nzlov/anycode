@@ -143,12 +143,8 @@ export async function deleteSessionFile(id: string): Promise<boolean> {
   return data.deleteSessionFile;
 }
 
-export async function fetchSessionFile(
-  file: SessionFileAccess,
-  mode: 'preview' | 'download',
-  signal?: AbortSignal,
-) {
-  const url = mode === 'preview' ? file.previewUrl : file.downloadUrl;
+export async function fetchSessionFile(file: SessionFileAccess, signal?: AbortSignal) {
+  const url = file.previewUrl;
   if (!url) throw new Error('当前文件不支持预览');
   const headers = sessionFileHeaders();
   const response = await fetch(url, { headers, signal: signal ?? null });
@@ -181,14 +177,36 @@ function sessionFileHeaders() {
 }
 
 export async function downloadSessionFile(file: SessionFileAccess) {
-  const blob = await fetchSessionFile(file, 'download');
-  const url = URL.createObjectURL(blob);
+  const target = new URL(file.downloadUrl, window.location.origin);
+  if (
+    target.origin !== window.location.origin ||
+    (!/^\/files\/[^/]+\/download$/.test(target.pathname) &&
+      !/^\/api\/sessions\/[^/]+\/workspace-file$/.test(target.pathname))
+  ) {
+    throw new Error('文件下载地址无效');
+  }
+  const tokenPath = target.pathname.endsWith('/download')
+    ? `${target.pathname}-token`
+    : `${target.pathname}/download-token`;
+  const response = await fetch(`${tokenPath}${target.search}`, {
+    method: 'POST',
+    headers: sessionFileHeaders(),
+  });
+  if (!response.ok) throw new Error(`获取文件下载凭据失败：HTTP ${response.status}`);
+  const payload = (await response.json()) as { url?: unknown };
+  if (typeof payload.url !== 'string') throw new Error('文件下载凭据响应无效');
+  const url = new URL(payload.url, window.location.origin);
+  if (url.origin !== target.origin || url.pathname !== target.pathname) {
+    throw new Error('文件下载凭据响应无效');
+  }
+  const anchor = document.createElement('a');
+  anchor.href = url.href;
+  anchor.download = file.filename;
+  anchor.rel = 'noreferrer';
+  document.body.appendChild(anchor);
   try {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = file.filename;
     anchor.click();
   } finally {
-    URL.revokeObjectURL(url);
+    anchor.remove();
   }
 }

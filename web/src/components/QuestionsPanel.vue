@@ -162,6 +162,18 @@
           <div class="question-file-preview-dialog__title ellipsis">
             {{ selectedFile?.filename || '文件预览' }}
           </div>
+          <q-btn
+            v-if="selectedFile"
+            :loading="fileDownloading"
+            flat
+            round
+            dense
+            icon="download"
+            aria-label="下载文件"
+            @click="downloadFile"
+          >
+            <q-tooltip>下载</q-tooltip>
+          </q-btn>
           <q-btn flat round dense icon="close" aria-label="关闭文件预览" @click="closeFilePreview">
             <q-tooltip v-if="!$q.platform.is.mobile">关闭</q-tooltip>
           </q-btn>
@@ -174,6 +186,18 @@
             </div>
           </template>
           <template v-if="annotationToolbarVisible" #toolbar-actions>
+            <q-btn
+              v-if="selectedFile"
+              :loading="fileDownloading"
+              flat
+              round
+              dense
+              icon="download"
+              aria-label="下载文件"
+              @click="downloadFile"
+            >
+              <q-tooltip>下载</q-tooltip>
+            </q-btn>
             <q-btn
               flat
               round
@@ -193,9 +217,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { Notify } from 'quasar';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import { supportsPreviewAnnotations } from '@/services/previewAnnotations';
+import { downloadSessionFile } from '@/services/sessionFiles';
 import type {
   AgentQuestion,
   QuestionAnswerInput,
@@ -226,6 +252,7 @@ const activeQuestionId = ref('');
 const drafts = ref<Record<string, DraftAnswer>>({});
 const filePreviewOpen = ref(false);
 const selectedFile = ref<QuestionFile | null>(null);
+const fileDownloading = ref(false);
 const annotationToolbarVisible = computed(() =>
   supportsPreviewAnnotations(selectedFile.value?.previewKind),
 );
@@ -308,6 +335,21 @@ function fileIcon(file: QuestionFile) {
 function openFilePreview(file: QuestionFile) {
   selectedFile.value = file;
   filePreviewOpen.value = true;
+}
+
+async function downloadFile() {
+  if (!selectedFile.value) return;
+  fileDownloading.value = true;
+  try {
+    await downloadSessionFile(selectedFile.value);
+  } catch (err) {
+    Notify.create({
+      type: 'negative',
+      message: err instanceof Error ? err.message : '下载文件失败',
+    });
+  } finally {
+    fileDownloading.value = false;
+  }
 }
 
 function closeFilePreview() {
