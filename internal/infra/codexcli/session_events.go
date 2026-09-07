@@ -217,6 +217,9 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 	createdAt := parseSessionTimestamp(record.Timestamp)
 	var events []codexLogEvent
 	switch record.Type {
+	case "token_usage_record":
+		// token_count remains the transcript's usage source.
+		return nil
 	case "session_meta":
 		threadID := stringValue(payload, "session_id", "id")
 		events = []codexLogEvent{{

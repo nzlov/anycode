@@ -136,6 +136,28 @@ func TestParseSessionLogLineFiltersCanonicalItemLifecycleMirrors(t *testing.T) {
 	}
 }
 
+func TestParseSessionLogLineFiltersTokenUsageRecordAndPreservesTokenCount(t *testing.T) {
+	lines := []string{
+		`{"timestamp":"2026-09-07T00:21:26Z","type":"token_usage_record","payload":{"thread_id":"thread-1","turn_id":"turn-1","usage":{"input_tokens":50,"output_tokens":5,"total_tokens":55}}}`,
+		`{"timestamp":"2026-09-07T00:21:27Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":10,"total_tokens":110},"last_token_usage":{"input_tokens":50,"output_tokens":5,"total_tokens":55},"model_context_window":258400}}}`,
+	}
+	var events []codexLogEvent
+	for index, line := range lines {
+		events = append(events, parseSessionLogLine([]byte(line), "/workspace", "rollout.jsonl", int64(index))...)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %#v, want only token_count", events)
+	}
+	event := canonicalCodexEvent(events[0])
+	usage, ok := event.Content.(process.CodexUsageContent)
+	if event.Type != process.CodexEventUsage || !ok {
+		t.Fatalf("event = %#v, want usage", event)
+	}
+	if usage.InputTokens != 100 || usage.OutputTokens != 10 || usage.TotalTokens != 110 || usage.CurrentTotalTokens != 55 || usage.ContextWindow != 258400 {
+		t.Fatalf("usage = %#v, want original token_count values", usage)
+	}
+}
+
 func TestCommandProjectorHidesWaitProgressAndEmitsResultOnlyTerminal(t *testing.T) {
 	lines := []string{
 		`{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"exec-1","name":"exec","input":"const r = await tools.exec_command({\"cmd\":\"go test ./...\",\"workdir\":\"/workspace\",\"yield_time_ms\":1000}); text(r);"}}`,
