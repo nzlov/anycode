@@ -1,5 +1,8 @@
 <template>
-  <q-page class="surface-page surface-page--wide">
+  <q-page
+    class="surface-page surface-page--wide artifact-page"
+    :style-fn="(offset, height) => ({ height: `${height - offset}px` })"
+  >
     <q-card flat class="surface-page__card">
       <q-card-section class="surface-page__header">
         <div class="text-subtitle1 text-weight-bold ellipsis">{{ file?.filename || '文件预览' }}</div>
@@ -75,3 +78,22 @@ async function download() {
   }
 }
 </script>
+
+<style scoped>
+.artifact-page,
+.artifact-page .surface-page__card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.artifact-page .surface-page__card,
+.artifact-page .surface-page__body {
+  flex: 1 1 auto;
+}
+
+.artifact-page .surface-page__body :deep(.session-file-preview) {
+  min-height: 0;
+}
+</style>

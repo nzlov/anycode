@@ -46,6 +46,7 @@
                 <SessionFilePreview
                   v-if="file.previewKind === 'image'"
                   :file="file"
+                  :annotatable="false"
                   class="question-file-thumbnail"
                 />
                 <q-icon v-else :name="fileIcon(file)" size="18px" />
@@ -64,6 +65,7 @@
                   <SessionFilePreview
                     v-if="hoveredFileId === file.id"
                     :file="file"
+                    :annotatable="false"
                     class="question-file-hover-preview"
                   />
                 </q-tooltip>
@@ -518,6 +520,17 @@ function submit() {
 
 .question-file-hover-preview :deep(.session-file-preview__frame) {
   min-height: 160px;
+}
+
+.question-file-preview-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.question-file-preview-dialog :deep(.session-file-preview) {
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .question-file-preview-dialog__header {

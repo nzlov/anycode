@@ -166,7 +166,7 @@ test('full-size artifact previews fit media and support mouse or touch dragging'
     preview,
     /\.session-file-preview__zoom-surface--enabled\s*\{[^}]*touch-action:\s*none/s,
   );
-  assert.match(preview, /\.session-file-preview__image,[\s\S]*?max-height:\s*min\(72dvh,\s*100%\)/);
+  assert.match(preview, /\.session-file-preview__image,[\s\S]*?max-height:\s*100%/);
 });
 
 test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {

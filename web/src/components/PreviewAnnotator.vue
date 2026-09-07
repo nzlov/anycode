@@ -834,6 +834,7 @@ onBeforeUnmount(() => {
   display: flex;
   min-width: 0;
   min-height: 40px;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
@@ -880,6 +881,8 @@ onBeforeUnmount(() => {
 
 .preview-annotator--image .preview-annotator__surface {
   display: grid;
+  /* Keep intrinsic image dimensions from expanding the centered grid track. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 

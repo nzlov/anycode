@@ -241,6 +241,7 @@ function failImageLoad(event: Event) {
 }
 
 function startGesture(event: PointerEvent) {
+  if ((event.target as Element).closest('[role="toolbar"]')) return;
   if (!props.zoomable || (event.pointerType === 'mouse' && event.button !== 0)) return;
   if (event.pointerType === 'mouse' && scale.value <= 1) return;
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -286,6 +287,7 @@ function endGesture(event: PointerEvent) {
 }
 
 function zoomWithWheel(event: WheelEvent) {
+  if ((event.target as Element).closest('[role="toolbar"]')) return;
   if (!props.zoomable) return;
   event.preventDefault();
   scale.value = Math.min(4, Math.max(1, scale.value * (event.deltaY < 0 ? 1.2 : 1 / 1.2)));
@@ -303,8 +305,8 @@ function setDragStart(x: number, y: number) {
 }
 
 function clampOffset() {
-  const surface = zoomSurface.value;
   const media = mediaElement.value;
+  const surface = props.file?.previewKind === 'image' ? media?.parentElement : zoomSurface.value;
   if (!surface || !media || scale.value <= 1) {
     offsetX.value = 0;
     offsetY.value = 0;
@@ -347,6 +349,7 @@ onBeforeUnmount(clear);
   max-width: 100%;
   max-height: 100%;
   height: 100%;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   overflow: auto;
   background: var(--ac-surface-muted);
@@ -373,7 +376,7 @@ onBeforeUnmount(clear);
 .session-file-preview__media {
   display: block;
   max-width: 100%;
-  max-height: min(72dvh, 100%);
+  max-height: 100%;
   object-fit: contain;
   transform-origin: center;
   user-select: none;
@@ -387,12 +390,17 @@ onBeforeUnmount(clear);
   height: 100%;
   min-height: 0;
   max-height: 100%;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   overflow: clip;
 }
 
 .session-file-preview__zoom-surface :deep(.preview-annotator) {
   height: 100%;
+}
+
+.session-file-preview__zoom-surface :deep(.preview-annotator__surface) {
+  overflow: clip;
 }
 
 .session-file-preview__loading {
