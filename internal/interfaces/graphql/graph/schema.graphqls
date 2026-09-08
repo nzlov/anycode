@@ -163,12 +163,22 @@ type SessionSideRun {
 input StartSessionSideInput {
   sessionId: ID!
   prompt: String!
+  config: SessionSideConfigInput
+  files: [Upload!]
 }
 
 input ContinueSessionSideInput {
   sessionId: ID!
   codexSessionId: ID!
   prompt: String!
+  config: SessionSideConfigInput
+  files: [Upload!]
+}
+
+input SessionSideConfigInput {
+  codexModel: String!
+  reasoningEffort: String!
+  fastMode: Boolean!
 }
 
 type MindMapUpdateEvent {

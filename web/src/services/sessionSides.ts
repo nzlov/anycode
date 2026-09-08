@@ -1,5 +1,6 @@
 import {
   graphqlFetch,
+  graphqlMultipartFetch,
   graphqlSubscribe,
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
@@ -16,37 +17,70 @@ export interface SessionSideRun {
   turnId: string;
 }
 
-export async function startSessionSide(sessionId: string, prompt: string) {
-  const data = await graphqlFetch<
-    { startSessionSide: SessionSideRun },
-    { input: { sessionId: string; prompt: string } }
-  >({
-    query: `
+export interface SessionSideConfig {
+  codexModel: string;
+  reasoningEffort: string;
+  fastMode: boolean;
+}
+
+export interface SessionSideMessage {
+  prompt: string;
+  files: File[];
+  config: SessionSideConfig;
+}
+
+async function sendSideMessage<TData>(
+  query: string,
+  input: { sessionId: string; codexSessionId?: string; prompt: string; config: SessionSideConfig },
+  files: File[],
+) {
+  const { codexModel, reasoningEffort, fastMode } = input.config;
+  input = { ...input, config: { codexModel, reasoningEffort, fastMode } };
+  if (!files.length) return graphqlFetch<TData>({ query, variables: { input } });
+  const body = new FormData();
+  body.append(
+    'operations',
+    JSON.stringify({ query, variables: { input: { ...input, files: files.map(() => null) } } }),
+  );
+  body.append(
+    'map',
+    JSON.stringify(
+      Object.fromEntries(
+        files.map((_, index) => [String(index), [`variables.input.files.${index}`]]),
+      ),
+    ),
+  );
+  files.forEach((file, index) => body.append(String(index), file, file.name));
+  return graphqlMultipartFetch<TData>(body);
+}
+
+export async function startSessionSide(sessionId: string, message: SessionSideMessage) {
+  const data = await sendSideMessage<{ startSessionSide: SessionSideRun }>(
+    `
       mutation StartSessionSide($input: StartSessionSideInput!) {
         startSessionSide(input: $input) { codexSessionId processRunId turnId }
       }
     `,
-    variables: { input: { sessionId, prompt } },
-  });
+    { sessionId, prompt: message.prompt, config: message.config },
+    message.files,
+  );
   return data.startSessionSide;
 }
 
 export async function continueSessionSide(
   sessionId: string,
   codexSessionId: string,
-  prompt: string,
+  message: SessionSideMessage,
 ) {
-  const data = await graphqlFetch<
-    { continueSessionSide: SessionSideRun },
-    { input: { sessionId: string; codexSessionId: string; prompt: string } }
-  >({
-    query: `
+  const data = await sendSideMessage<{ continueSessionSide: SessionSideRun }>(
+    `
       mutation ContinueSessionSide($input: ContinueSessionSideInput!) {
         continueSessionSide(input: $input) { codexSessionId processRunId turnId }
       }
     `,
-    variables: { input: { sessionId, codexSessionId, prompt } },
-  });
+    { sessionId, codexSessionId, prompt: message.prompt, config: message.config },
+    message.files,
+  );
   return data.continueSessionSide;
 }
 

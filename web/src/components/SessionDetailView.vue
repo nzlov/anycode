@@ -656,7 +656,12 @@
         </q-card-section>
       </q-card>
     </q-dialog>
-    <SessionSideDialog v-model="sideDialogOpen" :session-id="sessionId" />
+    <SessionSideDialog
+      v-if="session"
+      v-model="sideDialogOpen"
+      :session-id="sessionId"
+      :config="session.config"
+    />
   </component>
 </template>
 
@@ -676,6 +681,7 @@ import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import SessionForkButton from '@/components/SessionForkButton.vue';
 import SessionSideDialog from '@/components/SessionSideDialog.vue';
+import { useEventStreamScroll } from '@/composables/useEventStreamScroll';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -803,8 +809,10 @@ const eventResourceDownloading = ref(false);
 let eventResourceRequest = 0;
 let mounted = false;
 let preservingOlderEventScroll = false;
-let previousEventScrollTop = Number.POSITIVE_INFINITY;
-let followingLatestEvent = true;
+const { updateEventScroll, scrollEventsToBottom, followLatestEvent } = useEventStreamScroll(
+  streamBodyRef,
+  () => loadingOlderEvents.value || preservingOlderEventScroll,
+);
 
 function readPreferredRightPanelWidth() {
   try {
@@ -1442,14 +1450,7 @@ async function submitAnswers(requestId: string, answers: QuestionAnswerInput[]) 
   await submitPendingAnswers(requestId, answers);
 }
 
-function isEventStreamAtBottom(body: HTMLElement) {
-  return body.scrollHeight - body.scrollTop - body.clientHeight <= 1;
-}
-
-watch(latestStreamEvent, () => {
-  if (loadingOlderEvents.value || preservingOlderEventScroll) return;
-  if (followingLatestEvent) void scrollEventsToBottom();
-});
+watch(latestStreamEvent, followLatestEvent);
 
 watch(latestTunnelEventId, (eventId) => {
   if (eventId) void refreshSessionTunnels();
@@ -1519,11 +1520,7 @@ async function onEventScroll() {
   const body = streamBodyRef.value;
   if (!body) return;
   const currentScrollTop = body.scrollTop;
-  if (!loadingOlderEvents.value && !preservingOlderEventScroll) {
-    followingLatestEvent = isEventStreamAtBottom(body);
-  }
-  const scrollingUp = currentScrollTop < previousEventScrollTop;
-  previousEventScrollTop = currentScrollTop;
+  const scrollingUp = updateEventScroll();
   if (!scrollingUp || currentScrollTop > 64) return;
   if (loadingOlderEvents.value || preservingOlderEventScroll) return;
   const previousHeight = body.scrollHeight;
@@ -1542,7 +1539,7 @@ async function onEventScroll() {
       body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
     }
   } finally {
-    previousEventScrollTop = body.scrollTop;
+    updateEventScroll();
     preservingOlderEventScroll = false;
   }
 }
@@ -1571,16 +1568,6 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
   const currentOffset = item.getBoundingClientRect().top - body.getBoundingClientRect().top;
   body.scrollTop += currentOffset - anchor.offsetTop;
   return true;
-}
-
-async function scrollEventsToBottom(force = false) {
-  await nextTick();
-  if (!force && !followingLatestEvent) return;
-  const body = streamBodyRef.value;
-  if (!body) return;
-  body.scrollTop = body.scrollHeight;
-  previousEventScrollTop = body.scrollTop;
-  followingLatestEvent = true;
 }
 </script>
 

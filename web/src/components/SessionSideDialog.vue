@@ -1,5 +1,9 @@
 <template>
-  <q-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
+  <q-dialog
+    :model-value="modelValue"
+    @update:model-value="emit('update:modelValue', $event)"
+    @show="scrollEventsToBottom(true)"
+  >
     <q-card class="side-dialog app-content-dialog">
       <q-card-section class="side-dialog__header">
         <q-btn
@@ -29,7 +33,7 @@
       <q-separator />
 
       <div v-if="selectedSide" class="side-dialog__detail">
-        <div class="side-dialog__events">
+        <div ref="eventsBodyRef" class="side-dialog__events" @scroll="updateEventScroll">
           <div v-if="selectedEvents.length" class="side-dialog__event-list">
             <SessionEventMessage
               v-for="event in selectedEvents"
@@ -52,7 +56,7 @@
         </q-banner>
         <div class="side-dialog__follow-up">
           <SessionSidePromptInput
-            v-model="followUpPrompt"
+            v-model="selectedSide.draft"
             label="继续追问"
             :loading="submitting"
             :disabled="selectedSide.status === 'running'"
@@ -101,7 +105,7 @@
       </div>
 
       <q-card-section v-else class="side-dialog__initial-prompt">
-        <SessionSidePromptInput v-model="newPrompt" :loading="submitting" @submit="startSide" />
+        <SessionSidePromptInput v-model="newMessage" :loading="submitting" @submit="startSide" />
       </q-card-section>
     </q-card>
   </q-dialog>
@@ -110,14 +114,16 @@
     <q-card class="side-composer-dialog">
       <q-card-section class="text-subtitle2 text-weight-bold">新建 Side 提问</q-card-section>
       <q-card-section>
-        <SessionSidePromptInput v-model="newPrompt" :loading="submitting" @submit="startSide" />
+        <SessionSidePromptInput v-model="newMessage" :loading="submitting" @submit="startSide" />
       </q-card-section>
     </q-card>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref } from 'vue';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+
+import { useEventStreamScroll } from '@/composables/useEventStreamScroll';
 
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionSidePromptInput from '@/components/SessionSidePromptInput.vue';
@@ -128,6 +134,8 @@ import {
   stopSessionSide,
   subscribeSessionSideEvents,
   type SessionSideRun,
+  type SessionSideConfig,
+  type SessionSideMessage,
 } from '@/services/sessionSides';
 import type { TranscriptEvent, TranscriptItem } from '@/services/sessionTimeline';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
@@ -140,16 +148,20 @@ interface SideRecord extends SessionSideRun {
   status: SideStatus;
   error: string;
   followUps: string[];
+  draft: SessionSideMessage;
   subscription?: { unsubscribe: () => void };
 }
 
-const props = defineProps<{ modelValue: boolean; sessionId: string }>();
+const props = defineProps<{ modelValue: boolean; sessionId: string; config: SessionSideConfig }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
 
 const sides = ref<SideRecord[]>([]);
 const selectedSideId = ref('');
-const newPrompt = ref('');
-const followUpPrompt = ref('');
+const newMessage = ref<SessionSideMessage>({ prompt: '', files: [], config: { ...props.config } });
+const eventsBodyRef = ref<HTMLElement | null>(null);
+const { updateEventScroll, scrollEventsToBottom, followLatestEvent } =
+  useEventStreamScroll(eventsBodyRef);
+let disposed = false;
 const composerOpen = ref(false);
 const submitting = ref(false);
 const selectedSide = computed(
@@ -159,12 +171,29 @@ const selectedEvents = computed<TranscriptItem[]>(() =>
   reduceTranscriptEvents(selectedSide.value?.events ?? []),
 );
 
+watch(() => selectedSide.value?.events.at(-1), followLatestEvent);
+watch(selectedSideId, () => {
+  void scrollEventsToBottom(true);
+});
+
+function messagePrompt(message: SessionSideMessage) {
+  return (
+    message.prompt.trim() ||
+    (message.files.length ? `请查看附件：${message.files.map((file) => file.name).join('、')}` : '')
+  );
+}
+
 async function startSide() {
-  const prompt = newPrompt.value.trim();
+  const message = newMessage.value;
+  const prompt = messagePrompt(message);
   if (!prompt || submitting.value) return;
   submitting.value = true;
   try {
-    const run = await startSessionSide(props.sessionId, prompt);
+    const run = await startSessionSide(props.sessionId, { ...message, prompt });
+    if (disposed) {
+      await stopSessionSide(run.processRunId);
+      return;
+    }
     const side = reactive<SideRecord>({
       ...run,
       prompt,
@@ -172,12 +201,15 @@ async function startSide() {
       status: 'running',
       error: '',
       followUps: [],
+      draft: { prompt: '', files: [], config: { ...message.config } },
     });
     sides.value.push(side);
     selectedSideId.value = side.codexSessionId;
-    newPrompt.value = '';
+    newMessage.value = { prompt: '', files: [], config: { ...props.config } };
     composerOpen.value = false;
     subscribeToSide(side);
+  } catch {
+    // The request client displays the error; keep the draft and files for retry.
   } finally {
     submitting.value = false;
   }
@@ -185,19 +217,30 @@ async function startSide() {
 
 async function continueSelectedSide() {
   const side = selectedSide.value;
-  const prompt = followUpPrompt.value.trim();
-  if (!side || !prompt || side.status === 'running' || submitting.value) return;
+  if (!side || side.status === 'running' || submitting.value) return;
+  const message = side.draft;
+  const prompt = messagePrompt(message);
+  if (!prompt) return;
   submitting.value = true;
   try {
+    const run = await continueSessionSide(props.sessionId, side.codexSessionId, {
+      ...message,
+      prompt,
+    });
+    if (disposed || !sides.value.includes(side)) {
+      await stopSessionSide(run.processRunId);
+      return;
+    }
     side.subscription?.unsubscribe();
-    const run = await continueSessionSide(props.sessionId, side.codexSessionId, prompt);
     side.processRunId = run.processRunId;
     side.turnId = run.turnId;
     side.status = 'running';
     side.error = '';
     side.followUps.push(prompt);
-    followUpPrompt.value = '';
+    side.draft = { prompt: '', files: [], config: { ...message.config } };
     subscribeToSide(side);
+  } catch {
+    // The request client displays the error; keep the draft and files for retry.
   } finally {
     submitting.value = false;
   }
@@ -218,12 +261,11 @@ function subscribeToSide(side: SideRecord) {
 
 function openSide(codexSessionId: string) {
   selectedSideId.value = codexSessionId;
-  followUpPrompt.value = '';
 }
 
 function closeSide(side: SideRecord) {
   side.subscription?.unsubscribe();
-  if (side.status === 'running') void stopSessionSide(side.processRunId).catch(() => undefined);
+  void stopSessionSide(side.processRunId).catch(() => undefined);
   sides.value = sides.value.filter((candidate) => candidate !== side);
   if (selectedSideId.value === side.codexSessionId) selectedSideId.value = '';
 }
@@ -235,9 +277,10 @@ function sideStatusLabel(status: SideStatus) {
 }
 
 onUnmounted(() => {
+  disposed = true;
   for (const side of sides.value) {
     side.subscription?.unsubscribe();
-    if (side.status === 'running') void stopSessionSide(side.processRunId).catch(() => undefined);
+    void stopSessionSide(side.processRunId).catch(() => undefined);
   }
 });
 </script>
@@ -297,6 +340,13 @@ onUnmounted(() => {
   padding: 16px;
 }
 
+.side-dialog__initial-prompt,
+.side-dialog__follow-up {
+  min-height: 0;
+  max-height: min(420px, 55dvh);
+  overflow-y: auto;
+}
+
 .side-dialog__thinking {
   padding: 0 16px 8px;
 }
@@ -322,6 +372,11 @@ onUnmounted(() => {
   position: absolute;
   right: 20px;
   bottom: 20px;
+}
+
+.side-composer-dialog > .q-card__section:last-child {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .side-composer-dialog {

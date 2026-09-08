@@ -246,6 +246,7 @@
         :fast="fast"
         :disabled="disabled"
         :readonly-config="readonlyConfig"
+        :readonly-permission="readonlyPermission"
         @update:model="emit('update:model', $event)"
         @update:effort="emit('update:effort', $event)"
         @update:permission="emit('update:permission', $event)"
@@ -269,6 +270,7 @@
             :fast="fast"
             :disabled="disabled"
             :readonly-config="readonlyConfig"
+            :readonly-permission="readonlyPermission"
             @update:model="emit('update:model', $event)"
             @update:effort="emit('update:effort', $event)"
             @update:permission="emit('update:permission', $event)"
@@ -392,6 +394,7 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
+    readonlyPermission?: boolean;
     showConfig?: boolean;
     allowAttachments?: boolean;
     collapsible?: boolean;
@@ -413,6 +416,7 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    readonlyPermission: false,
     showConfig: true,
     allowAttachments: true,
     collapsible: false,

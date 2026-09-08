@@ -4829,6 +4829,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionCommitHistoryInput,
 		ec.unmarshalInputSessionConfigInput,
 		ec.unmarshalInputSessionDiffInput,
+		ec.unmarshalInputSessionSideConfigInput,
 		ec.unmarshalInputSessionTranscriptEventInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
@@ -5108,12 +5109,22 @@ type SessionSideRun {
 input StartSessionSideInput {
   sessionId: ID!
   prompt: String!
+  config: SessionSideConfigInput
+  files: [Upload!]
 }
 
 input ContinueSessionSideInput {
   sessionId: ID!
   codexSessionId: ID!
   prompt: String!
+  config: SessionSideConfigInput
+  files: [Upload!]
+}
+
+input SessionSideConfigInput {
+  codexModel: String!
+  reasoningEffort: String!
+  fastMode: Boolean!
 }
 
 type MindMapUpdateEvent {
@@ -28316,7 +28327,7 @@ func (ec *executionContext) unmarshalInputContinueSessionSideInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "codexSessionId", "prompt"}
+	fieldsInOrder := [...]string{"sessionId", "codexSessionId", "prompt", "config", "files"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28344,6 +28355,20 @@ func (ec *executionContext) unmarshalInputContinueSessionSideInput(ctx context.C
 				return it, err
 			}
 			it.Prompt = data
+		case "config":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
+			data, err := ec.unmarshalOSessionSideConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Config = data
+		case "files":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("files"))
+			data, err := ec.unmarshalOUpload2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUploadᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Files = data
 		}
 	}
 	return it, nil
@@ -29785,6 +29810,50 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputSessionSideConfigInput(ctx context.Context, obj any) (model.SessionSideConfigInput, error) {
+	var it model.SessionSideConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"codexModel", "reasoningEffort", "fastMode"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "codexModel":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexModel"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexModel = data
+		case "reasoningEffort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reasoningEffort"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReasoningEffort = data
+		case "fastMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fastMode"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FastMode = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSessionTranscriptEventInput(ctx context.Context, obj any) (model.SessionTranscriptEventInput, error) {
 	var it model.SessionTranscriptEventInput
 	if obj == nil {
@@ -29951,7 +30020,7 @@ func (ec *executionContext) unmarshalInputStartSessionSideInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "prompt"}
+	fieldsInOrder := [...]string{"sessionId", "prompt", "config", "files"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29972,6 +30041,20 @@ func (ec *executionContext) unmarshalInputStartSessionSideInput(ctx context.Cont
 				return it, err
 			}
 			it.Prompt = data
+		case "config":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
+			data, err := ec.unmarshalOSessionSideConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Config = data
+		case "files":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("files"))
+			data, err := ec.unmarshalOUpload2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUploadᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Files = data
 		}
 	}
 	return it, nil
@@ -39759,6 +39842,28 @@ func (ec *executionContext) marshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋg
 	return res
 }
 
+func (ec *executionContext) unmarshalNUpload2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx context.Context, v any) (*graphql.Upload, error) {
+	res, err := graphql.UnmarshalUpload(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUpload2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx context.Context, sel ast.SelectionSet, v *graphql.Upload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	_ = sel
+	res := graphql.MarshalUpload(*v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
 func (ec *executionContext) unmarshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx context.Context, v any) (model.WallpaperColorScheme, error) {
 	var res model.WallpaperColorScheme
 	err := res.UnmarshalGQL(v)
@@ -40446,6 +40551,14 @@ func (ec *executionContext) unmarshalOSessionConfigInput2ᚖgithubᚗcomᚋnzlov
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalOSessionSideConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideConfigInput(ctx context.Context, v any) (*model.SessionSideConfigInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputSessionSideConfigInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalOSessionStatusUpdate2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStatusUpdate(ctx context.Context, sel ast.SelectionSet, v *model.SessionStatusUpdate) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -40558,6 +40671,42 @@ func (ec *executionContext) marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlov
 		return graphql.Null
 	}
 	return ec._TranscriptTokenUsage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOUpload2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUploadᚄ(ctx context.Context, v any) ([]*graphql.Upload, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*graphql.Upload, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNUpload2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOUpload2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUploadᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql.Upload) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNUpload2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalOWorkflowCondition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowCondition(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowCondition) graphql.Marshaler {

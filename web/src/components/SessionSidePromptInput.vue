@@ -1,16 +1,20 @@
 <template>
-  <PromptComposer
+  <CodexPromptComposer
+    v-model:prompt="message.prompt"
+    v-model:files="message.files"
+    v-model:model="message.config.codexModel"
+    v-model:effort="message.config.reasoningEffort"
+    v-model:fast="message.config.fastMode"
     class="side-prompt-input"
-    :prompt="modelValue"
+    permission="read-only"
+    readonly-permission
+    force-config-menu
     :placeholder="label"
     :disabled="disabled || loading"
     compact
     collapsible
     :collapsed="collapsed"
     :show-badge="false"
-    :show-config="false"
-    :allow-attachments="false"
-    @update:prompt="emit('update:modelValue', $event)"
     @update:collapsed="collapsed = $event"
     @submit="submit"
   >
@@ -22,23 +26,25 @@
         icon="send"
         aria-label="发送 Side 提问"
         :loading="loading"
-        :disable="disabled || !modelValue.trim()"
+        :disable="disabled || !canSubmit"
         @click="submit"
       >
         <q-tooltip>发送 Side 提问</q-tooltip>
       </q-btn>
     </template>
-  </PromptComposer>
+  </CodexPromptComposer>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-import PromptComposer from '@/components/PromptComposer.vue';
+import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
+import type { SessionSideMessage } from '@/services/sessionSides';
+
+const message = defineModel<SessionSideMessage>({ required: true });
 
 const props = withDefaults(
   defineProps<{
-    modelValue: string;
     label?: string;
     loading?: boolean;
     disabled?: boolean;
@@ -47,13 +53,15 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string];
   submit: [];
 }>();
 const collapsed = ref(false);
+const canSubmit = computed(() =>
+  Boolean(message.value.prompt.trim() || message.value.files.length),
+);
 
 function submit() {
-  if (props.disabled || props.loading || !props.modelValue.trim()) return;
+  if (props.disabled || props.loading || !canSubmit.value) return;
   emit('submit');
 }
 </script>

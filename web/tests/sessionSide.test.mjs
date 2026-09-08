@@ -42,12 +42,14 @@ test('Side dialog shows direct input when empty, a closeable list, and FAB compo
   assert.match(inputSource, /aria-label="发送 Side 提问"/);
 });
 
-test('Side uses the collapsible common composer without unsupported run controls', () => {
-  assert.match(inputSource, /<PromptComposer/);
+test('Side shares the configured composer and locks only permissions', () => {
+  assert.match(inputSource, /<CodexPromptComposer/);
   assert.match(inputSource, /\bcollapsible\b/);
-  assert.match(inputSource, /:show-config="false"/);
-  assert.match(inputSource, /:allow-attachments="false"/);
-  assert.doesNotMatch(inputSource, /\b(model|effort|permission)=/);
+  assert.match(inputSource, /readonly-permission/);
+  assert.match(inputSource, /v-model:files="message\.files"/);
+  assert.match(inputSource, /permission="read-only"/);
+  assert.match(inputSource, /v-model:model="message\.config\.codexModel"/);
+  assert.match(inputSource, /v-model:effort="message\.config\.reasoningEffort"/);
   assert.match(promptComposerSource, /showConfig\?: boolean/);
   assert.match(promptComposerSource, /allowAttachments\?: boolean/);
 });
@@ -62,4 +64,11 @@ test('Side history remains current-page memory only', () => {
   assert.doesNotMatch(dialogSource, /localStorage|sessionStorage|indexedDB/);
   assert.doesNotMatch(serviceSource, /localStorage|sessionStorage|indexedDB/);
   assert.match(dialogSource, /sides\.value = sides\.value\.filter/);
+});
+
+test('Side uses the same follow-bottom behavior as the card transcript', () => {
+  assert.match(dialogSource, /useEventStreamScroll\(eventsBodyRef\)/);
+  assert.match(dialogSource, /@scroll="updateEventScroll"/);
+  assert.match(dialogSource, /followLatestEvent/);
+  assert.match(dialogSource, /@show="scrollEventsToBottom\(true\)"/);
 });

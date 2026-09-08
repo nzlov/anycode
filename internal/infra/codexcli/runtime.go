@@ -60,10 +60,19 @@ type appServerRuntime struct {
 	routesMu sync.Mutex
 	routes   map[process.RunID]*appServerRun
 	threads  map[string]*appServerRun
+	// Temporary input files belong to the Side thread, including between turns.
+	ephemeralThreads map[string]*ephemeralThread
 
 	userAgent string
 	exitErr   error
 	closeOnce sync.Once
+}
+
+type ephemeralThread struct {
+	sessionID process.SessionID
+	lastRunID process.RunID
+	cleanups  []func()
+	closing   bool
 }
 
 type appServerRun struct {
@@ -341,8 +350,8 @@ func (r *appServerRuntime) finish(readErr error) {
 			readErr = fmt.Errorf("%w: %s", readErr, message)
 		}
 		r.exitErr = readErr
-		close(r.done)
 		r.failRoutes(readErr)
+		close(r.done)
 	})
 }
 
@@ -353,7 +362,14 @@ func (r *appServerRuntime) failRoutes(cause error) {
 		routes = append(routes, route)
 	}
 	r.threads = map[string]*appServerRun{}
+	ephemeral := r.ephemeralThreads
+	r.ephemeralThreads = nil
 	r.routesMu.Unlock()
+	for _, thread := range ephemeral {
+		for _, cleanup := range thread.cleanups {
+			cleanup()
+		}
+	}
 	for _, route := range routes {
 		reason := "codex app-server exited"
 		if cause != nil {
@@ -390,11 +406,28 @@ func (r *appServerRuntime) close() error {
 	return r.exitErr
 }
 
-func (r *appServerRuntime) register(route *appServerRun) {
+func (r *appServerRuntime) register(route *appServerRun) error {
 	r.routesMu.Lock()
+	defer r.routesMu.Unlock()
+	if route.directEvents {
+		if r.ephemeralThreads == nil {
+			r.ephemeralThreads = make(map[string]*ephemeralThread)
+		}
+		threadID := route.handle.CodexSessionID
+		thread := r.ephemeralThreads[threadID]
+		if thread != nil && (thread.sessionID != route.sessionID || thread.closing) {
+			return process.ErrThreadUnavailable
+		}
+		if active := r.threads[threadID]; active != nil && !active.isClosed() {
+			return errors.New("temporary Side already has an active turn")
+		}
+		if thread == nil {
+			r.ephemeralThreads[threadID] = &ephemeralThread{sessionID: route.sessionID}
+		}
+	}
 	r.routes[route.handle.ProcessRunID] = route
 	r.threads[route.handle.CodexSessionID] = route
-	r.routesMu.Unlock()
+	return nil
 }
 
 func (r *appServerRuntime) routeForThread(threadID string) *appServerRun {
@@ -422,7 +455,23 @@ func (r *appServerRuntime) completeRoute(route *appServerRun) {
 	if route.claimed {
 		delete(r.routes, route.handle.ProcessRunID)
 	}
+	if thread := r.ephemeralThreads[route.handle.CodexSessionID]; thread != nil && thread.closing {
+		for _, cleanup := range thread.cleanups {
+			cleanup()
+		}
+		delete(r.ephemeralThreads, route.handle.CodexSessionID)
+	}
 	r.routesMu.Unlock()
+}
+
+func (r *appServerRuntime) retainEphemeralInput(threadID string, cleanup func()) {
+	r.routesMu.Lock()
+	defer r.routesMu.Unlock()
+	if thread := r.ephemeralThreads[threadID]; thread != nil {
+		thread.cleanups = append(thread.cleanups, cleanup)
+	} else {
+		cleanup()
+	}
 }
 
 func (r *appServerRuntime) claimEvents(runID process.RunID) (<-chan process.CodexEvent, bool) {

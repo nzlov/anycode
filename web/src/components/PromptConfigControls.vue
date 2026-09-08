@@ -1,6 +1,6 @@
 <template>
   <div class="prompt-config-controls">
-    <div v-if="readonlyConfig" class="prompt-config-chip">
+    <div v-if="readonlyConfig || readonlyPermission" class="prompt-config-chip">
       <q-icon :name="permissionIcon" />
       <span>{{ permissionLabel }}</span>
       <q-tooltip>运行权限</q-tooltip>
@@ -60,10 +60,12 @@ const props = withDefaults(
     fast: boolean;
     disabled?: boolean;
     readonlyConfig?: boolean;
+    readonlyPermission?: boolean;
   }>(),
   {
     disabled: false,
     readonlyConfig: false,
+    readonlyPermission: false,
   },
 );
 

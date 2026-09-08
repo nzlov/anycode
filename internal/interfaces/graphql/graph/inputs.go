@@ -20,6 +20,21 @@ func buildSessionConfig(input *model.SessionConfigInput) sessionapp.ConfigInput 
 	}
 }
 
+func sideInput(sessionID, threadID, prompt string, config *model.SessionSideConfigInput, files []*graphql.Upload) sessionapp.SideInput {
+	input := sessionapp.SideInput{SessionID: sessiondomain.ID(sessionID), CodexSessionID: threadID, Prompt: prompt}
+	if config != nil {
+		input.Config = &sessionapp.SideConfigInput{
+			CodexModel: config.CodexModel, ReasoningEffort: config.ReasoningEffort, FastMode: config.FastMode,
+		}
+	}
+	for _, file := range files {
+		if file != nil {
+			input.Files = append(input.Files, sessionapp.SideFileInput{Filename: file.Filename, MimeType: file.ContentType, Reader: file.File})
+		}
+	}
+	return input
+}
+
 func promptMentionsFromInput(input []*model.PromptMentionInput) []sessiondomain.PromptMention {
 	mentions := make([]sessiondomain.PromptMention, 0, len(input))
 	for _, mention := range input {

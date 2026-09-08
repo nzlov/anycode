@@ -53,7 +53,14 @@ func (c *Client) ContinueLoaded(ctx context.Context, input process.CodexResumeIn
 	if err != nil {
 		return process.CodexHandle{}, err
 	}
-	return runtime.beginTurn(ctx, input.ProcessRunID, input.SessionID, threadID, input.Workdir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, newWorkspaceWriteSettings(input.PermissionMode, input.WritableRoots, input.ArtifactDir), true, "", 0)
+	runtime.routesMu.Lock()
+	thread := runtime.ephemeralThreads[threadID]
+	available := thread != nil && thread.sessionID == input.SessionID && !thread.closing
+	runtime.routesMu.Unlock()
+	if !available {
+		return process.CodexHandle{}, process.ErrThreadUnavailable
+	}
+	return runtime.beginTurn(ctx, input.ProcessRunID, input.SessionID, threadID, input.Workdir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, newWorkspaceWriteSettings(input.PermissionMode, input.WritableRoots, input.ArtifactDir), true, "", 0)
 }
 
 func (c *Client) start(
@@ -153,7 +160,7 @@ func (c *Client) start(
 		}
 		transcriptOffset = info.Size()
 	}
-	return runtime.beginTurn(ctx, runID, sessionID, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, ephemeral, transcriptPath, transcriptOffset)
+	return runtime.beginTurn(ctx, runID, sessionID, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, fastMode, workspaceWrite, ephemeral, transcriptPath, transcriptOffset)
 }
 
 func (r *appServerRuntime) beginTurn(
@@ -169,6 +176,7 @@ func (r *appServerRuntime) beginTurn(
 	model string,
 	reasoningEffort string,
 	permissionMode string,
+	fastMode bool,
 	workspaceWrite *workspaceWriteSettings,
 	directEvents bool,
 	transcriptPath string,
@@ -180,14 +188,28 @@ func (r *appServerRuntime) beginTurn(
 		handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel,
 		directEvents: directEvents, events: make(chan process.CodexEvent, 1024), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
 	}
-	r.register(route)
+	if err := r.register(route); err != nil {
+		route.close()
+		return process.CodexHandle{}, err
+	}
 	if !directEvents {
 		go r.followSessionLog(route, transcriptPath, transcriptOffset)
 	}
-	turnID, active, err := r.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite, route.retainInputCleanup)
+	retainInputCleanup := route.retainInputCleanup
+	if directEvents {
+		retainInputCleanup = func(cleanup func()) { r.retainEphemeralInput(threadID, cleanup) }
+	}
+	turnID, active, err := r.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, fastMode, workspaceWrite, retainInputCleanup)
 	if err != nil {
 		r.removeRoute(route)
 		return process.CodexHandle{}, err
+	}
+	if directEvents {
+		r.routesMu.Lock()
+		if thread := r.ephemeralThreads[threadID]; thread != nil {
+			thread.lastRunID = runID
+		}
+		r.routesMu.Unlock()
 	}
 	route.setTurnID(turnID)
 	handle.TurnID = turnID
@@ -444,7 +466,7 @@ func mindMapOperationSchema(kind string, required []string, fields map[string]an
 	}
 }
 
-func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string, workspaceWrite *workspaceWriteSettings, retainInputCleanup func(func())) (string, bool, error) {
+func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string, fastMode bool, workspaceWrite *workspaceWriteSettings, retainInputCleanup func(func())) (string, bool, error) {
 	switch action {
 	case process.CodexActionCompact:
 		if err := r.request(ctx, "thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
@@ -498,6 +520,13 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 		return "", false, nil
 	}
 	params := map[string]any{"threadId": threadID, "input": items}
+	if model != "" {
+		params["model"] = model
+	}
+	params["serviceTier"] = "default"
+	if fastMode {
+		params["serviceTier"] = "priority"
+	}
 	if collaborationMode != nil {
 		params["collaborationMode"] = collaborationMode
 	} else if reasoningEffort != "" {
@@ -529,7 +558,7 @@ func appServerInput(input []process.CodexInputItem, workdir string) ([]map[strin
 	}
 	for _, item := range input {
 		path := item.Path
-		if len(item.Data) > 0 {
+		if item.Data != nil {
 			extension := filepath.Ext(filepath.Base(item.Name))
 			if len(extension) > 16 {
 				extension = ""
@@ -681,11 +710,37 @@ func (c *Client) StopEphemeral(ctx context.Context, runID process.RunID) error {
 	if runtime == nil || !runtime.alive() {
 		return process.ErrProcessNotFound
 	}
-	route := runtime.routeForRun(runID)
-	if route == nil || !route.directEvents {
+	runtime.routesMu.Lock()
+	threadID := ""
+	for id, thread := range runtime.ephemeralThreads {
+		if thread.lastRunID == runID {
+			threadID = id
+			break
+		}
+	}
+	runtime.routesMu.Unlock()
+	if threadID == "" {
 		return process.ErrProcessNotFound
 	}
-	return c.Stop(ctx, runID)
+	if route := runtime.routeForThread(threadID); route != nil && !route.isClosed() {
+		if err := c.Stop(ctx, route.handle.ProcessRunID); err != nil && !errors.Is(err, process.ErrProcessNotFound) {
+			return err
+		}
+	}
+	runtime.routesMu.Lock()
+	defer runtime.routesMu.Unlock()
+	thread := runtime.ephemeralThreads[threadID]
+	if thread == nil {
+		return nil
+	}
+	thread.closing = true
+	if route := runtime.threads[threadID]; route == nil || route.isClosed() {
+		for _, cleanup := range thread.cleanups {
+			cleanup()
+		}
+		delete(runtime.ephemeralThreads, threadID)
+	}
+	return nil
 }
 
 func (c *Client) Stop(ctx context.Context, runID process.RunID) error {
@@ -766,6 +821,9 @@ func (r *appServerRuntime) removeRoute(route *appServerRun) {
 	delete(r.routes, route.handle.ProcessRunID)
 	if r.threads[route.handle.CodexSessionID] == route {
 		delete(r.threads, route.handle.CodexSessionID)
+	}
+	if thread := r.ephemeralThreads[route.handle.CodexSessionID]; thread != nil && thread.lastRunID == "" {
+		delete(r.ephemeralThreads, route.handle.CodexSessionID)
 	}
 	r.routesMu.Unlock()
 	route.close()

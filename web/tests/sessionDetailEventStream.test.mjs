@@ -374,17 +374,9 @@ test('subscription refresh does not force a scrolled transcript back to the bott
     pageSource,
     /async function initializeSessionDetail\(\)[\s\S]*?startLiveUpdates\(\);[\s\S]*?await scrollEventsToBottom\(true\)/,
   );
-  assert.match(pageSource, /let followingLatestEvent = true/);
-  assert.match(
-    pageSource,
-    /if \(!loadingOlderEvents\.value && !preservingOlderEventScroll\) \{\s*followingLatestEvent = isEventStreamAtBottom\(body\);\s*\}/,
-  );
-  assert.match(
-    pageSource,
-    /watch\(latestStreamEvent,[\s\S]*?if \(followingLatestEvent\) void scrollEventsToBottom\(\)/,
-  );
-  assert.match(pageSource, /async function scrollEventsToBottom\(force = false\)/);
-  assert.match(pageSource, /if \(!force && !followingLatestEvent\) return/);
+  assert.match(pageSource, /useEventStreamScroll\(/);
+  assert.match(pageSource, /watch\(latestStreamEvent, followLatestEvent\)/);
+  assert.match(pageSource, /const scrollingUp = updateEventScroll\(\)/);
   assert.doesNotMatch(pageSource, /< 96/);
   assert.match(pageSource, /let preservingOlderEventScroll = false/);
   assert.match(
@@ -393,7 +385,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
   assert.match(
     pageSource,
-    /preservingOlderEventScroll = true;[\s\S]*?finally \{\s*previousEventScrollTop = body\.scrollTop;\s*preservingOlderEventScroll = false;/,
+    /preservingOlderEventScroll = true;[\s\S]*?finally \{\s*updateEventScroll\(\);\s*preservingOlderEventScroll = false;/,
   );
 });
 
@@ -412,10 +404,7 @@ test('running session detail keeps a rotating thought at the fixed bottom of the
     streamCard,
     /<\/div>\s*<SessionThinkingPhrase\s+v-if="session\?\.status === 'running'"[\s\S]*?:refresh-key="latestStreamEvent"/,
   );
-  assert.match(
-    pageSource,
-    /\.stream-card__thinking\s*{[^}]*flex:\s*0 0 auto[^}]*border-top:/s,
-  );
+  assert.match(pageSource, /\.stream-card__thinking\s*{[^}]*flex:\s*0 0 auto[^}]*border-top:/s);
 });
 
 test('exec and shell events share a type-only header and group command input and output', () => {
@@ -544,7 +533,10 @@ test('terminal phases and status details remain visible', () => {
   assert.match(presentationSource, /failed: \{ icon: 'error_outline', color: 'negative'/);
   assert.match(presentationSource, /cancelled: \{ icon: 'cancel', color: 'grey-7'/);
   assert.match(statusSource, /Object\.keys\(content\.value\.details\)/);
-  assert.match(statusSource, /<StructuredContent v-if="expanded && !loading" :content="detailsContent"/);
+  assert.match(
+    statusSource,
+    /<StructuredContent v-if="expanded && !loading" :content="detailsContent"/,
+  );
   assert.match(statusSource, /status-event--error/);
 });
 
@@ -601,8 +593,9 @@ test('initial transcript loading fills the viewport before waiting for upward sc
     new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
-  const match =
-    /async function initializeSessionDetail\(\) \{(?<body>[\s\S]*?)\n\}/.exec(pageSource);
+  const match = /async function initializeSessionDetail\(\) \{(?<body>[\s\S]*?)\n\}/.exec(
+    pageSource,
+  );
 
   assert.ok(match?.groups?.body);
   assert.match(match.groups.body, /await nextTick\(\)/);
@@ -632,12 +625,12 @@ test('older event loading ignores follow-up layout scroll events', () => {
     'utf8',
   );
 
-  assert.match(pageSource, /let previousEventScrollTop = Number\.POSITIVE_INFINITY/);
-  assert.match(pageSource, /const scrollingUp = currentScrollTop < previousEventScrollTop/);
+  assert.match(pageSource, /useEventStreamScroll/);
+  assert.match(pageSource, /const scrollingUp = updateEventScroll\(\)/);
   assert.match(pageSource, /if \(!scrollingUp \|\| currentScrollTop > 64/);
   assert.match(
     pageSource,
-    /finally \{\s*previousEventScrollTop = body\.scrollTop;\s*preservingOlderEventScroll = false;/,
+    /finally \{\s*updateEventScroll\(\);\s*preservingOlderEventScroll = false;/,
   );
 });
 

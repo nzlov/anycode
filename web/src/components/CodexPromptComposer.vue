@@ -16,6 +16,7 @@
     :show-badge="showBadge"
     :force-config-menu="forceConfigMenu"
     :readonly-config="readonlyConfig"
+    :readonly-permission="readonlyPermission"
     :collapsible="collapsible"
     :collapsed="collapsed"
     :completion-project-id="completionProjectId"
@@ -137,6 +138,7 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
+    readonlyPermission?: boolean;
     collapsible?: boolean;
     collapsed?: boolean;
     completionProjectId?: string;
@@ -152,6 +154,7 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    readonlyPermission: false,
     collapsible: false,
     collapsed: false,
     completionProjectId: '',

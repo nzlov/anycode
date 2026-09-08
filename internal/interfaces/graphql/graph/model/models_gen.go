@@ -8,6 +8,8 @@ import (
 	"io"
 	"strconv"
 	"time"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
 type TranscriptContent interface {
@@ -123,9 +125,11 @@ type CommitRecordPage struct {
 }
 
 type ContinueSessionSideInput struct {
-	SessionID      string `json:"sessionId"`
-	CodexSessionID string `json:"codexSessionId"`
-	Prompt         string `json:"prompt"`
+	SessionID      string                  `json:"sessionId"`
+	CodexSessionID string                  `json:"codexSessionId"`
+	Prompt         string                  `json:"prompt"`
+	Config         *SessionSideConfigInput `json:"config,omitempty"`
+	Files          []*graphql.Upload       `json:"files,omitempty"`
 }
 
 type CreateProjectInput struct {
@@ -744,6 +748,12 @@ type SessionFile struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type SessionSideConfigInput struct {
+	CodexModel      string `json:"codexModel"`
+	ReasoningEffort string `json:"reasoningEffort"`
+	FastMode        bool   `json:"fastMode"`
+}
+
 type SessionSideRun struct {
 	CodexSessionID string `json:"codexSessionId"`
 	ProcessRunID   string `json:"processRunId"`
@@ -795,8 +805,10 @@ type StageAnnotationInput struct {
 }
 
 type StartSessionSideInput struct {
-	SessionID string `json:"sessionId"`
-	Prompt    string `json:"prompt"`
+	SessionID string                  `json:"sessionId"`
+	Prompt    string                  `json:"prompt"`
+	Config    *SessionSideConfigInput `json:"config,omitempty"`
+	Files     []*graphql.Upload       `json:"files,omitempty"`
 }
 
 type StatisticsDashboard struct {

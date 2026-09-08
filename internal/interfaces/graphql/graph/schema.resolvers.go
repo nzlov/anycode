@@ -363,10 +363,7 @@ func (r *mutationResolver) StartSessionSide(ctx context.Context, input model.Sta
 	if r.UseCases.SessionSides == nil {
 		return nil, missingUseCase("session sides")
 	}
-	run, err := r.UseCases.SessionSides.StartSide(ctx, sessionapp.StartSideInput{
-		SessionID: sessiondomain.ID(input.SessionID),
-		Prompt:    input.Prompt,
-	})
+	run, err := r.UseCases.SessionSides.StartSide(ctx, sideInput(input.SessionID, "", input.Prompt, input.Config, input.Files))
 	if err != nil {
 		return nil, err
 	}
@@ -382,11 +379,7 @@ func (r *mutationResolver) ContinueSessionSide(ctx context.Context, input model.
 	if r.UseCases.SessionSides == nil {
 		return nil, missingUseCase("session sides")
 	}
-	run, err := r.UseCases.SessionSides.ContinueSide(ctx, sessionapp.ContinueSideInput{
-		SessionID:      sessiondomain.ID(input.SessionID),
-		CodexSessionID: input.CodexSessionID,
-		Prompt:         input.Prompt,
-	})
+	run, err := r.UseCases.SessionSides.ContinueSide(ctx, sideInput(input.SessionID, input.CodexSessionID, input.Prompt, input.Config, input.Files))
 	if err != nil {
 		return nil, err
 	}

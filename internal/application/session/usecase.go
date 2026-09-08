@@ -4213,7 +4213,7 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 			continue
 		}
 		path := strings.TrimSpace(file.Path)
-		if path == "" && len(file.InlineData) == 0 {
+		if path == "" && file.InlineData == nil {
 			continue
 		}
 		key := sessionFileDedupKey(file)
@@ -4235,7 +4235,7 @@ func codexInput(prompt string, files []domain.SessionFile, mentions []domain.Pro
 			if name == "" {
 				name = filepath.Base(path)
 			}
-			if len(file.InlineData) > 0 {
+			if file.InlineData != nil {
 				fileInput = append(fileInput, processdomain.CodexInputItem{Type: "mention", Path: path, Name: name, Data: file.InlineData})
 			} else {
 				localFiles = append(localFiles, fmt.Sprintf("- name=%q path=%q mime=%q", name, path, strings.TrimSpace(file.MimeType)))
