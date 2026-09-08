@@ -41,6 +41,10 @@ func TestAnyCodeDeveloperInstructionsDoNotExposeArtifactPath(t *testing.T) {
 	if !strings.Contains(got, "临时文件") || strings.Contains(got, "产物") {
 		t.Fatalf("artifact guidance label = %q", got)
 	}
+	if !strings.Contains(got, "正式素材，允许在用户请求或授权范围内复制、移动或生成到项目工作树") ||
+		!strings.Contains(got, "已有授权无需重复确认") || strings.Contains(got, "不要把生成物写入项目工作树") {
+		t.Fatalf("artifact guidance must allow authorized project assets: %q", got)
+	}
 	if strings.Contains(got, "/data/attachments/outputs/session-1") {
 		t.Fatalf("artifact guidance exposed disk path: %q", got)
 	}
