@@ -1228,6 +1228,27 @@ func TestMutationUpdatePromptAppendForwardsTargetAndReturnsDTO(t *testing.T) {
 	}
 }
 
+func TestMutationCloseSessionForwardsWorktreeConfirmation(t *testing.T) {
+	confirmed := true
+	sessions := &fakeSessionUseCase{closeResult: sessionapp.DTO{ID: "session-1"}}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.CloseSession(context.Background(), model.CloseSessionInput{
+		SessionID:            "session-1",
+		Reason:               string(sessiondomain.CloseReasonMergedClosed),
+		ConfirmWorktreeClose: &confirmed,
+	})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.ID != "session-1" {
+		t.Fatalf("CloseSession() = %#v", got)
+	}
+	if sessions.gotClose.SessionID != "session-1" || sessions.gotClose.Reason != sessiondomain.CloseReasonMergedClosed || !sessions.gotClose.ConfirmWorktreeClose {
+		t.Fatalf("CloseSession() input = %#v", sessions.gotClose)
+	}
+}
+
 func TestMutationUpdatePromptAppendPresentsStartedErrorExtensions(t *testing.T) {
 	sessions := &fakeSessionUseCase{err: apperror.New(
 		apperror.CodePromptEditAfterStart,
@@ -1685,6 +1706,8 @@ type fakeSessionUseCase struct {
 	retryCleanupResult        sessionapp.DTO
 	gotRetryInitializationID  sessiondomain.ID
 	retryInitializationResult sessionapp.DTO
+	gotClose                  sessionapp.CloseSessionInput
+	closeResult               sessionapp.DTO
 	gotDeleteSessionFileID    sessiondomain.SessionFileID
 	gotCleanup                sessionapp.CleanupSessionsInput
 	cleanupResult             int
@@ -1756,6 +1779,11 @@ func (f *fakeSessionUseCase) ResumeSession(_ context.Context, id sessiondomain.I
 func (f *fakeSessionUseCase) ResumeSessionWithOptions(_ context.Context, id sessiondomain.ID, _ sessionapp.StartSessionOptions) (sessionapp.DTO, error) {
 	f.gotResumeID = id
 	return f.resumeResult, f.err
+}
+
+func (f *fakeSessionUseCase) CloseSession(_ context.Context, input sessionapp.CloseSessionInput) (sessionapp.DTO, error) {
+	f.gotClose = input
+	return f.closeResult, f.err
 }
 
 func (f *fakeSessionUseCase) StopProjectSessions(_ context.Context, projectID sessiondomain.ProjectID) (int, error) {

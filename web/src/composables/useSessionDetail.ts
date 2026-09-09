@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 
+import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionClose';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { deleteStagedAttachment } from '@/services/attachments';
 import {
@@ -11,7 +12,6 @@ import {
 import { olderTranscriptCursor } from '@/services/sessionEventPaging';
 import {
   appendPrompt,
-  closeSession as closeSessionRequest,
   getPendingQuestionRequests,
   getSession,
   subscribeSessionEvents,
@@ -201,8 +201,13 @@ export function useSessionDetail(sessionId: string) {
     closing.value = true;
     error.value = '';
     try {
-      await closeSessionRequest(sessionId, mergeMindMap ? 'merged_closed' : 'user_closed');
-      await loadSessionState();
+      const closed = await closeSessionWithConfirmation(
+        sessionId,
+        mergeMindMap ? 'merged_closed' : 'user_closed',
+      );
+      if (closed) {
+        await loadSessionState();
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : '关闭会话失败';
       throw err;

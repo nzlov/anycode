@@ -6111,6 +6111,108 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 }
 
+func TestCloseSessionRequiresConfirmationForUncommittedWorktreeChanges(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:              "session-1",
+		ProjectID:       "project-1",
+		Status:          domain.StatusCreated,
+		BaseBranch:      "main",
+		WorktreePath:    "/data/worktrees/project-1/session-1",
+		WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupActive},
+	}
+	worktrees := &fakeWorktreeManager{headCommit: "base", hasUncommittedChanges: true}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorktrees(worktrees))
+
+	_, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeWorktreeCloseConfirmationRequired {
+		t.Fatalf("CloseSession() error = %#v", err)
+	}
+	if appErr.UserAction != "confirm_worktree_close" || appErr.Details["sessionId"] != "session-1" {
+		t.Fatalf("confirmation error = %#v", appErr)
+	}
+	if got := repo.sessions["session-1"].Status; got != domain.StatusCreated {
+		t.Fatalf("session status after unconfirmed close = %q", got)
+	}
+	if worktrees.uncommittedChangesCalls != 1 || worktrees.uncommittedChangesPath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("worktree inspection = calls %d, path %q", worktrees.uncommittedChangesCalls, worktrees.uncommittedChangesPath)
+	}
+
+	closed, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1", ConfirmWorktreeClose: true})
+	if err != nil {
+		t.Fatalf("confirmed CloseSession() error = %v", err)
+	}
+	if closed.Status != domain.StatusClosed {
+		t.Fatalf("confirmed CloseSession() status = %q", closed.Status)
+	}
+	if worktrees.uncommittedChangesCalls != 1 {
+		t.Fatalf("confirmed close rechecked worktree = %d calls", worktrees.uncommittedChangesCalls)
+	}
+}
+
+func TestCloseSessionChecksUncommittedChangesBeforeStoppingAnActiveSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:              "session-1",
+		ProjectID:       "project-1",
+		Status:          domain.StatusRunning,
+		BaseBranch:      "main",
+		WorktreePath:    "/data/worktrees/project-1/session-1",
+		WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupActive},
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	worktrees := &fakeWorktreeManager{hasUncommittedChanges: true}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{}),
+		WithWorktrees(worktrees),
+	)
+
+	_, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeWorktreeCloseConfirmationRequired {
+		t.Fatalf("CloseSession() error = %#v", err)
+	}
+	if processes.exitedID != "" {
+		t.Fatalf("dirty worktree close stopped process %q before confirmation", processes.exitedID)
+	}
+}
+
+func TestWorkflowCloseDoesNotWaitForWorktreeConfirmation(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:              "session-1",
+		ProjectID:       "project-1",
+		Status:          domain.StatusCreated,
+		BaseBranch:      "main",
+		WorktreePath:    "/data/worktrees/project-1/session-1",
+		WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupActive},
+	}
+	worktrees := &fakeWorktreeManager{headCommit: "base", hasUncommittedChanges: true}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorktrees(worktrees))
+
+	closed, err := service.closeWorkflowSession(ctx, CloseSessionInput{
+		SessionID: "session-1",
+		Reason:    domain.CloseReasonWorkflowClosed,
+	})
+	if err != nil {
+		t.Fatalf("closeWorkflowSession() error = %v", err)
+	}
+	if closed.Status != domain.StatusClosed {
+		t.Fatalf("closeWorkflowSession() status = %q", closed.Status)
+	}
+	if worktrees.uncommittedChangesCalls != 0 {
+		t.Fatalf("workflow close inspected changes %d times", worktrees.uncommittedChangesCalls)
+	}
+}
+
 func TestCloseSessionEnqueuesAsyncMindMapTask(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -13392,39 +13494,43 @@ func (s *fakeAttachmentStore) Open(context.Context, string) (domain.AttachmentSt
 }
 
 type fakeWorktreeManager struct {
-	path                  string
-	headCommit            string
-	baseBranchMissing     bool
-	createErr             error
-	headCommitErr         error
-	removeErr             error
-	deleteBranchErr       error
-	retainCommitErr       error
-	releaseOwnerErr       error
-	statErr               error
-	inspectErr            error
-	ownership             *domain.WorktreeOwnership
-	createCalled          bool
-	baseBranchProjectPath string
-	baseBranchName        string
-	createProjectPath     string
-	createProjectID       domain.ProjectID
-	createSessionID       domain.ID
-	createBaseBranch      string
-	snapshotSourcePath    string
-	snapshotTargetPath    string
-	snapshotErr           error
-	headCommitPath        string
-	headCommitRef         string
-	removed               []string
-	deletedBranches       []string
-	retainedCommits       []string
-	releasedOwnership     []string
-	operations            []string
-	missingPaths          map[string]bool
-	onCreate              func()
-	createStarted         chan struct{}
-	releaseCreate         <-chan struct{}
+	path                    string
+	headCommit              string
+	baseBranchMissing       bool
+	createErr               error
+	headCommitErr           error
+	hasUncommittedChanges   bool
+	hasUncommittedErr       error
+	removeErr               error
+	deleteBranchErr         error
+	retainCommitErr         error
+	releaseOwnerErr         error
+	statErr                 error
+	inspectErr              error
+	ownership               *domain.WorktreeOwnership
+	createCalled            bool
+	baseBranchProjectPath   string
+	baseBranchName          string
+	createProjectPath       string
+	createProjectID         domain.ProjectID
+	createSessionID         domain.ID
+	createBaseBranch        string
+	snapshotSourcePath      string
+	snapshotTargetPath      string
+	snapshotErr             error
+	headCommitPath          string
+	headCommitRef           string
+	uncommittedChangesPath  string
+	uncommittedChangesCalls int
+	removed                 []string
+	deletedBranches         []string
+	retainedCommits         []string
+	releasedOwnership       []string
+	operations              []string
+	missingPaths            map[string]bool
+	onCreate                func()
+	createStarted           chan struct{}
+	releaseCreate           <-chan struct{}
 }
 
 type fakeWorktreeInitializer struct {
@@ -13504,6 +13610,15 @@ func (m *fakeWorktreeManager) HeadCommit(_ context.Context, path string, ref str
 		return "", m.headCommitErr
 	}
 	return m.headCommit, nil
+}
+
+func (m *fakeWorktreeManager) HasUncommittedChanges(_ context.Context, path string) (bool, error) {
+	m.uncommittedChangesCalls++
+	m.uncommittedChangesPath = path
+	if m.hasUncommittedErr != nil {
+		return false, m.hasUncommittedErr
+	}
+	return m.hasUncommittedChanges, nil
 }
 
 func (m *fakeWorktreeManager) InspectOwnership(_ context.Context, _ string, path string, _ string, _ string) (domain.WorktreeOwnership, error) {

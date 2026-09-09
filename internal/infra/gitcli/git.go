@@ -206,6 +206,24 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
+func (c *Client) HasUncommittedChanges(ctx context.Context, path string) (bool, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	out, err := c.run(ctx, path, "status", "--porcelain=v1", "--untracked-files=all")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 func (c *Client) BaseBranchExists(ctx context.Context, projectPath string, branch string) (bool, error) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {

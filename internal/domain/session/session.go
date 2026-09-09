@@ -835,6 +835,7 @@ type WorktreeManager interface {
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, branch string, baseBranch string, ownershipToken string) (string, error)
 	SnapshotChanges(ctx context.Context, sourcePath string, targetPath string) error
 	InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (WorktreeOwnership, error)
+	HasUncommittedChanges(ctx context.Context, path string) (bool, error)
 	HeadCommit(ctx context.Context, path string, ref string) (string, error)
 	RetainCommit(ctx context.Context, projectPath string, sessionID ID, commit string) error
 	Remove(ctx context.Context, path string) error

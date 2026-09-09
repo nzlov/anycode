@@ -1134,6 +1134,7 @@ input SessionConfigInput {
 input CloseSessionInput {
   sessionId: ID!
   reason: String!
+  confirmWorktreeClose: Boolean
 }
 
 input SetSessionPriorityInput {

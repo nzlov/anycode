@@ -80,8 +80,9 @@ type CloneProjectInput struct {
 }
 
 type CloseSessionInput struct {
-	SessionID string `json:"sessionId"`
-	Reason    string `json:"reason"`
+	SessionID            string `json:"sessionId"`
+	Reason               string `json:"reason"`
+	ConfirmWorktreeClose *bool  `json:"confirmWorktreeClose,omitempty"`
 }
 
 type CodexModelOption struct {

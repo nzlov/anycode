@@ -499,8 +499,9 @@ func (r *mutationResolver) CloseSession(ctx context.Context, input model.CloseSe
 		return nil, missingUseCase("sessions")
 	}
 	dto, err := r.UseCases.Sessions.CloseSession(ctx, sessionapp.CloseSessionInput{
-		SessionID: sessiondomain.ID(input.SessionID),
-		Reason:    sessiondomain.CloseReason(input.Reason),
+		SessionID:            sessiondomain.ID(input.SessionID),
+		Reason:               sessiondomain.CloseReason(input.Reason),
+		ConfirmWorktreeClose: input.ConfirmWorktreeClose != nil && *input.ConfirmWorktreeClose,
 	})
 	if err != nil {
 		return nil, err

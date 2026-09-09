@@ -111,6 +111,54 @@ func TestHeadCommitReturnsEmptyForUnbornHead(t *testing.T) {
 	}
 }
 
+func TestHasUncommittedChangesIncludesUntrackedStagedAndUnstagedFiles(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
+	client := New("")
+
+	for _, item := range []struct {
+		name  string
+		setup func()
+	}{
+		{name: "untracked", setup: func() {
+			if err := os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("new"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "staged", setup: func() { runGit(t, dir, "add", "untracked.txt") }},
+		{name: "unstaged", setup: func() {
+			if err := os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("changed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			item.setup()
+			dirty, err := client.HasUncommittedChanges(ctx, dir)
+			if err != nil {
+				t.Fatalf("HasUncommittedChanges() error = %v", err)
+			}
+			if !dirty {
+				t.Fatal("HasUncommittedChanges() = false, want true")
+			}
+		})
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	dirty, err := client.HasUncommittedChanges(ctx, dir)
+	if err == nil || dirty {
+		t.Fatalf("HasUncommittedChanges(non-git directory) = dirty %v, err %v", dirty, err)
+	}
+}
+
 func TestBaseBranchExistsRequiresExactBranchRef(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")

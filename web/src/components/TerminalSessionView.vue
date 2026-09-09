@@ -124,8 +124,8 @@ import { useRouter } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
 import TerminalView from '@/components/TerminalView.vue';
+import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionClose';
 import {
-  closeSession,
   executeSession,
   getSession,
   stopSession,
@@ -214,8 +214,10 @@ async function stop() {
 async function close() {
   action.value = 'close';
   try {
-    await closeSession(props.sessionId);
-    await router.push({ name: 'overview' });
+    const closed = await closeSessionWithConfirmation(props.sessionId);
+    if (closed) {
+      await router.push({ name: 'overview' });
+    }
   } finally {
     action.value = '';
   }

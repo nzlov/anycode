@@ -491,6 +491,7 @@ import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
+import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionClose';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { useTunnelUpdates } from '@/composables/useTunnelUpdates';
 import { useSessionsPage } from '@/composables/useSessionsPage';
@@ -509,7 +510,6 @@ import {
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import {
-  closeSession,
   createSession,
   executeSession,
   getPendingQuestionRequests,
@@ -1171,8 +1171,13 @@ async function closeCard(card: SessionCard, mergeMindMap = false) {
   if (!card.availableActions.includes('close') || activeCloseSessionId.value) return;
   activeCloseSessionId.value = card.id;
   try {
-    await closeSession(card.id, mergeMindMap ? 'merged_closed' : 'user_closed');
-    latestRows.value = latestRows.value.filter((item) => item.id !== card.id);
+    const closed = await closeSessionWithConfirmation(
+      card.id,
+      mergeMindMap ? 'merged_closed' : 'user_closed',
+    );
+    if (closed) {
+      latestRows.value = latestRows.value.filter((item) => item.id !== card.id);
+    }
   } finally {
     activeCloseSessionId.value = '';
   }

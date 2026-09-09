@@ -105,9 +105,11 @@ type StartSessionOptions struct {
 }
 
 type CloseSessionInput struct {
-	SessionID              domain.ID
-	Reason                 domain.CloseReason
-	appliedSystemCommandID string
+	SessionID                   domain.ID
+	Reason                      domain.CloseReason
+	ConfirmWorktreeClose        bool
+	appliedSystemCommandID      string
+	requireWorktreeConfirmation bool
 }
 
 type CleanupSessionsInput struct {
@@ -7271,6 +7273,7 @@ func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bo
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
+	input.requireWorktreeConfirmation = true
 	for {
 		if err := ctx.Err(); err != nil {
 			return DTO{}, err
@@ -7321,6 +7324,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			s.scheduleWorktreeCleanup()
 		}
 		return toDTO(session), nil
+	}
+	if err := s.requireWorktreeCloseConfirmation(ctx, session, input); err != nil {
+		return DTO{}, err
 	}
 	if session.Mode == domain.ModeTerminal {
 		switch session.Status {
@@ -7450,6 +7456,32 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		s.mindMapQueueScheduler()
 	}
 	return toDTO(session), nil
+}
+
+func (s *Service) requireWorktreeCloseConfirmation(ctx context.Context, session domain.Session, input CloseSessionInput) error {
+	if !input.requireWorktreeConfirmation || input.ConfirmWorktreeClose || s.worktrees == nil {
+		return nil
+	}
+	if strings.TrimSpace(session.WorktreePath) == "" || session.WorktreeCleanup.Status == domain.WorktreeCleanupCleaned {
+		return nil
+	}
+	dirty, err := s.worktrees.HasUncommittedChanges(ctx, session.WorktreePath)
+	if err != nil {
+		return apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "inspect session worktree changes failed").WithDetails(map[string]any{
+			"sessionId": string(session.ID),
+		}).WithRetryable(true)
+	}
+	if !dirty {
+		return nil
+	}
+	return apperror.New(
+		apperror.CodeWorktreeCloseConfirmationRequired,
+		apperror.CategoryUserActionRequired,
+		"工作树有未提交的文件。确认后关闭会清理工作树并丢弃这些修改。",
+	).WithDetails(map[string]any{
+		"sessionId":                     string(session.ID),
+		"worktreeHasUncommittedChanges": true,
+	}).WithUserAction("confirm_worktree_close")
 }
 
 func (s *Service) captureSessionWorktreeHead(ctx context.Context, session domain.Session) (string, error) {

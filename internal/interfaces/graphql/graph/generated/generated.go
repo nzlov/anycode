@@ -6080,6 +6080,7 @@ input SessionConfigInput {
 input CloseSessionInput {
   sessionId: ID!
   reason: String!
+  confirmWorktreeClose: Boolean
 }
 
 input SetSessionPriorityInput {
@@ -28290,7 +28291,7 @@ func (ec *executionContext) unmarshalInputCloseSessionInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "reason"}
+	fieldsInOrder := [...]string{"sessionId", "reason", "confirmWorktreeClose"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28311,6 +28312,13 @@ func (ec *executionContext) unmarshalInputCloseSessionInput(ctx context.Context,
 				return it, err
 			}
 			it.Reason = data
+		case "confirmWorktreeClose":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("confirmWorktreeClose"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConfirmWorktreeClose = data
 		}
 	}
 	return it, nil

@@ -479,7 +479,7 @@ test('realtime cards have merge-close while async cards use ordinary close', () 
     detail,
     /v-if="mindMapRealtime"[\s\S]*class="session-detail-close-button app-command-btn app-on-primary"[\s\S]*unelevated[\s\S]*color="primary"[\s\S]*label="合并思维图并关闭"[\s\S]*:loading="closing"[\s\S]*:disable="!canClose \|\| isClosed \|\| loading \|\| closing"/,
   );
-  assert.match(sessions, /reason: 'user_closed' \| 'merged_closed'/);
+  assert.match(sessions, /type CloseSessionReason = 'user_closed' \| 'merged_closed'/);
 });
 
 test('GraphQL exposes project main and card graphs plus async task state', () => {
