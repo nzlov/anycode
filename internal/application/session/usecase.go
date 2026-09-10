@@ -7462,7 +7462,7 @@ func (s *Service) requireWorktreeCloseConfirmation(ctx context.Context, session 
 	if !input.requireWorktreeConfirmation || input.ConfirmWorktreeClose || s.worktrees == nil {
 		return nil
 	}
-	if strings.TrimSpace(session.WorktreePath) == "" || session.WorktreeCleanup.Status == domain.WorktreeCleanupCleaned {
+	if strings.TrimSpace(session.BaseBranch) == "" || strings.TrimSpace(session.WorktreePath) == "" || session.WorktreeCleanup.Status == domain.WorktreeCleanupCleaned {
 		return nil
 	}
 	dirty, err := s.worktrees.HasUncommittedChanges(ctx, session.WorktreePath)

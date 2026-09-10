@@ -6111,6 +6111,54 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 }
 
+func TestCloseSessionWorktreeInspectionFailureAppliesOnlyToGitSessions(t *testing.T) {
+	for _, baseBranch := range []string{"", "main"} {
+		name := "non-git"
+		if baseBranch != "" {
+			name = "git"
+		}
+		t.Run(name, func(t *testing.T) {
+			repo := newFakeRepository()
+			cleanupStatus := domain.WorktreeCleanupNotApplicable
+			if baseBranch != "" {
+				cleanupStatus = domain.WorktreeCleanupActive
+			}
+			repo.sessions["session-1"] = domain.Session{
+				ID:              "session-1",
+				ProjectID:       "project-1",
+				Status:          domain.StatusCreated,
+				BaseBranch:      baseBranch,
+				WorktreePath:    "/workspace/project-1",
+				WorktreeCleanup: domain.WorktreeCleanup{Status: cleanupStatus},
+			}
+			inspectErr := errors.New("git status failed")
+			worktrees := &fakeWorktreeManager{hasUncommittedErr: inspectErr}
+			service := New(repo, newFakeProjectRepository("project-1"), WithWorktrees(worktrees))
+
+			closed, err := service.CloseSession(context.Background(), CloseSessionInput{SessionID: "session-1"})
+			if baseBranch != "" {
+				appErr, ok := apperror.From(err)
+				if !ok || appErr.Code != apperror.CodeCloseFailed || !errors.Is(err, inspectErr) {
+					t.Fatalf("CloseSession() error = %v, want inspection failure", err)
+				}
+				if repo.sessions["session-1"].Status != domain.StatusCreated || worktrees.uncommittedChangesCalls != 1 {
+					t.Fatal("Git inspection failure should preserve the open session")
+				}
+				return
+			}
+			if err != nil || closed.Status != domain.StatusClosed {
+				t.Fatalf("CloseSession() status = %q, error = %v", closed.Status, err)
+			}
+			if worktrees.uncommittedChangesCalls != 0 {
+				t.Fatalf("non-Git close inspected changes %d times", worktrees.uncommittedChangesCalls)
+			}
+			if repo.sessions["session-1"].WorktreeCleanup.Status != domain.WorktreeCleanupNotApplicable {
+				t.Fatal("non-Git project should retain its cleanup status")
+			}
+		})
+	}
+}
+
 func TestCloseSessionRequiresConfirmationForUncommittedWorktreeChanges(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
