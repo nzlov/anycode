@@ -62,8 +62,10 @@ test('new session mobile entry uses a direct page with page-owned scrolling', ()
   assert.match(stylesSource, /\.new-session-body\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(
     stylesSource,
-    /\.new-session-page-content\s*{[^}]*overflow:\s*visible[^}]*background:\s*transparent/s,
+    /\.new-session-page-content\s*{[^}]*overflow:\s*visible/s,
   );
+  assert.match(stylesSource, /\.new-session-dialog\s*{[^}]*background:\s*var\(--ac-surface\)/s);
+  assert.doesNotMatch(stylesSource, /\.new-session-page-content\s*{[^}]*background:/s);
   assert.match(
     stylesSource,
     /\.new-session-page-content \.new-session-body\s*{[^}]*padding:\s*0[^}]*overflow-y:\s*visible/s,
