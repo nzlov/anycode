@@ -425,6 +425,8 @@ export function useSessionDetail(sessionId: string) {
 
   function reconcileLiveState() {
     if (liveStopped) return;
+    diffUpdateVersion.value += 1;
+    artifactUpdateVersion.value += 1;
     void Promise.all([
       loadSessionDetail({ mergeEvents: true, background: true }),
       loadPendingQuestions(),

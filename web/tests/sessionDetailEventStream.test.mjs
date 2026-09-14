@@ -292,7 +292,7 @@ test('session subscriptions refresh current state and merge the latest transcrip
   );
   assert.match(
     composableSource,
-    /function reconcileLiveState\(\) \{\s*if \(liveStopped\) return;\s*void Promise\.all/,
+    /function reconcileLiveState\(\) \{\s*if \(liveStopped\) return;\s*diffUpdateVersion\.value \+= 1;\s*artifactUpdateVersion\.value \+= 1;\s*void Promise\.all/,
   );
 });
 
