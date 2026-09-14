@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -122,7 +123,13 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("GET /files/{id}/preview", fileAccessAuth(cfg.AccessKey, fileTokens, attachmentHandler.preview()))
 	mux.Handle("POST /files/{id}/download-token", bearerAuth(cfg.AccessKey, attachmentHandler.accessToken(fileTokens, attachmentapp.OpenDownload)))
 	mux.Handle("GET /files/{id}/download", fileAccessAuth(cfg.AccessKey, fileTokens, attachmentHandler.download()))
-	mux.Handle("GET /api/sessions/{id}/diff-media", bearerAuth(cfg.AccessKey, diffMediaHandler{useCase: opts.diff, previewMaxBytes: attachmentHandler.previewMaxBytes}))
+	mux.Handle("POST /api/sessions/{id}/diff-media/preview-token", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileTokens.writeURL(w, url.URL{Path: "/api/sessions/" + r.PathValue("id") + "/diff-media", RawQuery: url.Values{"path": {r.URL.Query().Get("path")}, "version": {r.URL.Query().Get("version")}}.Encode()})
+	})))
+	mux.Handle("POST /api/sessions/{id}/workspace-file/preview-token", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileTokens.writeURL(w, url.URL{Path: "/api/sessions/" + r.PathValue("id") + "/workspace-file", RawQuery: url.Values{"path": {r.URL.Query().Get("path")}}.Encode()})
+	})))
+	mux.Handle("GET /api/sessions/{id}/diff-media", fileAccessAuth(cfg.AccessKey, fileTokens, diffMediaHandler{useCase: opts.diff, previewMaxBytes: attachmentHandler.previewMaxBytes}))
 	workspaceHandler := workspaceFileHandler{useCase: opts.workspaceFiles, previewMaxBytes: attachmentHandler.previewMaxBytes}
 	mux.Handle("POST /api/sessions/{id}/workspace-file/download-token", bearerAuth(cfg.AccessKey, workspaceHandler.downloadToken(fileTokens)))
 	mux.Handle("GET /api/sessions/{id}/workspace-file", fileAccessAuth(cfg.AccessKey, fileTokens, workspaceHandler))

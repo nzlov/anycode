@@ -22,6 +22,7 @@
       >
         <img
           :src="states[version].url"
+          @error="states[version].error = '加载图片失败，请重新打开预览'"
           :alt="`${version === 'old' ? '旧' : '新'}版本 ${filePath}`"
           class="diff-media-preview__image"
         />
@@ -29,6 +30,7 @@
       <video
         v-else-if="kind === 'video'"
         :src="states[version].url"
+        @error="states[version].error = '加载视频失败，请重新打开预览'"
         class="diff-media-preview__video"
         controls
         preload="metadata"
@@ -48,6 +50,7 @@
       <audio
         v-else
         :src="states[version].url"
+        @error="states[version].error = '加载音频失败，请重新打开预览'"
         class="diff-media-preview__audio"
         controls
         preload="metadata"
@@ -60,7 +63,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, reactive, watch } from 'vue';
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
-import { fetchDiffMedia } from '@/services/diffMedia';
+import { requestDiffMediaPreviewURL } from '@/services/diffMedia';
 import { diffMediaVersions } from '@/services/diffMediaModel';
 import type { DiffMediaKind, DiffMediaVersion } from '@/services/diffMediaModel';
 import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
@@ -105,7 +108,6 @@ function clear() {
   controller?.abort();
   controller = null;
   for (const state of Object.values(states)) {
-    if (state.url) URL.revokeObjectURL(state.url);
     state.loading = false;
     state.error = '';
     state.url = '';
@@ -121,9 +123,14 @@ async function load() {
       const state = states[version];
       state.loading = true;
       try {
-        const blob = await fetchDiffMedia(props.sessionId, props.filePath, version, request.signal);
+        const url = await requestDiffMediaPreviewURL(
+          props.sessionId,
+          props.filePath,
+          version,
+          request.signal,
+        );
         if (controller !== request) return;
-        state.url = URL.createObjectURL(blob);
+        state.url = url;
       } catch (err) {
         if (controller === request && !request.signal.aborted) {
           state.error = err instanceof Error ? err.message : '读取多媒体版本失败';

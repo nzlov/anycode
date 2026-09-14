@@ -71,13 +71,13 @@
     <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
     <q-spinner v-else-if="loading" color="primary" size="32px" />
     <iframe
-      v-else-if="file?.previewKind === 'pdf' && objectURL"
-      :src="objectURL"
+      v-else-if="file?.previewKind === 'pdf' && previewURL"
+      :src="previewURL"
       class="session-file-preview__frame"
       title="PDF 预览"
     />
     <div
-      v-else-if="file?.previewKind === 'video' && objectURL"
+      v-else-if="file?.previewKind === 'video' && previewURL"
       ref="zoomSurface"
       class="session-file-preview__zoom-surface"
       :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
@@ -89,22 +89,26 @@
     >
       <video
         ref="mediaElement"
-        :src="objectURL"
+        :src="previewURL"
         draggable="false"
         class="session-file-preview__media"
         :style="mediaTransform"
         controls
+        preload="metadata"
+        @error="failMediaLoad($event)"
       />
     </div>
     <audio
-      v-else-if="file?.previewKind === 'audio' && objectURL"
-      :src="objectURL"
+      v-else-if="file?.previewKind === 'audio' && previewURL"
+      :src="previewURL"
       class="session-file-preview__audio"
+      @error="failMediaLoad($event)"
+      preload="metadata"
       controls
     />
     <ModelFilePreview
-      v-else-if="file?.previewKind === 'model' && objectURL"
-      :src="objectURL"
+      v-else-if="file?.previewKind === 'model' && previewURL"
+      :src="previewURL"
       :filename="file.filename"
       class="session-file-preview__model"
     />
@@ -120,11 +124,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import type { PreviewAnnotation } from '@/services/previewAnnotations';
-import {
-  fetchSessionFile,
-  requestSessionFilePreviewURL,
-  type SessionFilePreviewData,
-} from '@/services/sessionFiles';
+import { requestSessionFilePreviewURL, type SessionFilePreviewData } from '@/services/sessionFiles';
 
 const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
 
@@ -150,7 +150,7 @@ const props = withDefaults(
 const loading = ref(false);
 const error = ref('');
 const imageURL = ref('');
-const objectURL = ref('');
+const previewURL = ref('');
 const text = ref('');
 const scale = ref(1);
 const offsetX = ref(0);
@@ -182,27 +182,35 @@ async function load(file: SessionFilePreviewData | null) {
   loading.value = true;
   let waitForImage = false;
   try {
+    const url = await requestSessionFilePreviewURL(file, request.signal);
+    if (controller !== request || props.file?.id !== file.id) return;
     if (file.previewKind === 'image') {
-      if (file.previewRequiresBearer) {
-        const blob = await fetchSessionFile(file, request.signal);
-        if (controller !== request || props.file?.id !== file.id) return;
-        objectURL.value = URL.createObjectURL(blob);
-        imageURL.value = objectURL.value;
-        waitForImage = true;
-        return;
-      }
-      const url = await requestSessionFilePreviewURL(file, request.signal);
-      if (controller !== request || props.file?.id !== file.id) return;
       imageURL.value = url;
       waitForImage = true;
-      return;
-    }
-    const blob = await fetchSessionFile(file, request.signal);
-    if (controller !== request || props.file?.id !== file.id) return;
-    if (file.previewKind === 'text') {
-      const content = await blob.text();
-      if (controller === request && props.file?.id === file.id) text.value = content;
-    } else objectURL.value = URL.createObjectURL(blob);
+    } else if (file.previewKind === 'text') {
+      const response = await fetch(url, { signal: request.signal });
+      if (!response.ok) throw new Error(`读取文件失败：HTTP ${response.status}`);
+      if (!response.body) throw new Error('文本响应为空');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      loading.value = false;
+      let bytes = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (controller !== request || props.file?.id !== file.id) return;
+          if (done) {
+            text.value += decoder.decode();
+            break;
+          }
+          bytes += value.byteLength;
+          if (bytes > 1 << 20) throw new Error('文本超过 1 MiB，请下载查看');
+          text.value += decoder.decode(value, { stream: true });
+        }
+      } finally {
+        await reader.cancel();
+      }
+    } else previewURL.value = url;
   } catch (err) {
     if (!isAbortError(err) && controller === request) {
       error.value = errorMessage(err, '预览文件失败');
@@ -219,9 +227,8 @@ function clear() {
   controller?.abort();
   controller = null;
   loading.value = false;
-  if (objectURL.value) URL.revokeObjectURL(objectURL.value);
   imageURL.value = '';
-  objectURL.value = '';
+  previewURL.value = '';
   text.value = '';
   error.value = '';
   resetZoom();
@@ -238,6 +245,18 @@ function failImageLoad(event: Event) {
   controller = null;
   loading.value = false;
   error.value = '预览图片失败';
+}
+
+function failMediaLoad(event: Event) {
+  const element = event.currentTarget as HTMLMediaElement;
+  if (
+    !element.isConnected ||
+    element.tagName.toLowerCase() !== props.file?.previewKind ||
+    !previewURL.value ||
+    element.src !== new URL(previewURL.value, window.location.href).href
+  )
+    return;
+  error.value = '加载媒体失败，请重新打开预览';
 }
 
 function startGesture(event: PointerEvent) {

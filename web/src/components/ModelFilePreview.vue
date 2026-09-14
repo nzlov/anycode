@@ -131,7 +131,13 @@ async function loadModel() {
 async function readModel(source: string, format: NonNullable<ReturnType<typeof modelFileFormat>>) {
   const manager = new THREE.LoadingManager();
   manager.setURLModifier((url) => {
-    if (url === source || url.startsWith('blob:') || url.startsWith('data:')) return url;
+    if (
+      url === source ||
+      url === new URL(source, window.location.href).href ||
+      url.startsWith('blob:') ||
+      url.startsWith('data:')
+    )
+      return url;
     throw new Error('模型引用了不支持的外部资源');
   });
   switch (format) {

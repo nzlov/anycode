@@ -75,11 +75,11 @@ test('session artifacts use one unpaginated latest-version query and unified fil
   assert.match(panel, /downloadSessionFile/);
 });
 
-test('images use short-lived direct preview URLs while other previews keep authenticated blobs', () => {
+test('all server file previews use direct authenticated URLs', () => {
   assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
   assert.match(service, /\/files\/\$\{encodeURIComponent\(file\.id\)\}\/preview-token/);
   assert.match(service, /method: 'POST'/);
-  assert.match(preview, /URL\.revokeObjectURL\(objectURL\.value\)/);
+  assert.doesNotMatch(preview, /createObjectURL|response\.blob\(/);
   assert.match(preview, /requestSessionFilePreviewURL\(file, request\.signal\)/);
   assert.match(preview, /:src="imageURL"/);
   assert.match(preview, /@load="finishImageLoad\(\$event\)"/);
@@ -205,7 +205,7 @@ test('artifact controls and file actions reflow from the panel width', () => {
 
 test('artifact requests ignore stale responses and follow live artifact events', () => {
   assert.match(service, /signal\?: AbortSignal/);
-  assert.match(service, /fetch\(url, \{ headers, signal: signal \?\? null \}\)/);
+  assert.match(service, /signal: signal \?\? null/);
   assert.match(panel, /const request = \+\+loadRequest/);
   assert.match(panel, /request !== loadRequest/);
   assert.match(preview, /controller\?\.abort\(\)/);

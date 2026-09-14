@@ -143,27 +143,29 @@ export async function deleteSessionFile(id: string): Promise<boolean> {
   return data.deleteSessionFile;
 }
 
-export async function fetchSessionFile(file: SessionFileAccess, signal?: AbortSignal) {
-  const url = file.previewUrl;
-  if (!url) throw new Error('当前文件不支持预览');
-  const headers = sessionFileHeaders();
-  const response = await fetch(url, { headers, signal: signal ?? null });
-  if (!response.ok) throw new Error(`读取文件失败：HTTP ${response.status}`);
-  return response.blob();
-}
-
 export async function requestSessionFilePreviewURL(
   file: SessionFilePreviewData,
   signal?: AbortSignal,
 ) {
-  const response = await fetch(`/files/${encodeURIComponent(file.id)}/preview-token`, {
+  const target = new URL(file.previewUrl || '', window.location.origin);
+  if (target.origin !== window.location.origin || !file.previewUrl) {
+    throw new Error('文件预览地址无效');
+  }
+  const tokenURL = file.previewRequiresBearer
+    ? `${target.pathname}/preview-token${target.search}`
+    : `/files/${encodeURIComponent(file.id)}/preview-token`;
+  const response = await fetch(tokenURL, {
     method: 'POST',
     headers: sessionFileHeaders(),
     signal: signal ?? null,
   });
   if (!response.ok) throw new Error(`获取文件预览凭据失败：HTTP ${response.status}`);
   const payload = (await response.json()) as { url?: unknown };
-  if (typeof payload.url !== 'string' || !payload.url.startsWith('/files/')) {
+  if (
+    typeof payload.url !== 'string' ||
+    new URL(payload.url, window.location.origin).origin !== target.origin ||
+    new URL(payload.url, window.location.origin).pathname !== target.pathname
+  ) {
     throw new Error('文件预览凭据响应无效');
   }
   return payload.url;

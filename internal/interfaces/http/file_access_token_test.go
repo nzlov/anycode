@@ -11,7 +11,9 @@ import (
 	"time"
 
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	"github.com/nzlov/anycode/internal/infra/config"
+	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 )
 
 func TestFilePreviewTokenAuthorizesOnlyBoundFile(t *testing.T) {
@@ -245,4 +247,57 @@ func requestFileToken(t *testing.T, handler http.Handler, endpoint string) strin
 		t.Fatalf("invalid token response headers=%v body=%s", rec.Header(), rec.Body.String())
 	}
 	return payload.URL
+}
+
+func TestDirectPreviewTokensBindResourceAndSupportRange(t *testing.T) {
+	for _, kind := range []string{"workspace-file", "diff-media"} {
+		t.Run(kind, func(t *testing.T) {
+			reader := newReadSeekCloser("0123456789")
+			diff := &fakeDiffMediaUseCase{stream: diffapp.FileStream{Filename: "clip.mp4", MimeType: "video/mp4", Size: 10, Reader: reader, Seeker: reader}}
+			workspace := &fakeWorkspaceFileUseCase{}
+			handler := NewHandler(config.Config{AccessKey: "secret"}, WithWorkspaceFileUseCase(workspace), WithGraphQLUseCases(graph.UseCases{Diff: diff}))
+			endpoint := "/api/sessions/session-1/" + kind + "/preview-token?path=src%2Fa+b%23.txt"
+			if kind == "diff-media" {
+				endpoint += "&version=old"
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, endpoint, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("unauthenticated issue: %d", rec.Code)
+			}
+			target := requestFileToken(t, handler, endpoint)
+			if diff.calls != 0 || workspace.calls != 0 {
+				t.Fatal("token issue read file content")
+			}
+			for _, mutate := range []func(*url.URL){
+				func(u *url.URL) { u.Path = strings.Replace(u.Path, "session-1", "session-2", 1) },
+				func(u *url.URL) { q := u.Query(); q.Set("path", "other.txt"); u.RawQuery = q.Encode() },
+				func(u *url.URL) { q := u.Query(); q.Set("download", "1"); u.RawQuery = q.Encode() },
+				func(u *url.URL) { q := u.Query(); q.Set("version", "new"); u.RawQuery = q.Encode() },
+				func(u *url.URL) { q := u.Query(); q.Del("token"); u.RawQuery = q.Encode() },
+			} {
+				u, _ := url.Parse(target)
+				mutate(u)
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, u.String(), nil))
+				if rec.Code != http.StatusUnauthorized {
+					t.Fatalf("tampered target: %d", rec.Code)
+				}
+			}
+			if diff.calls != 0 || workspace.calls != 0 {
+				t.Fatal("unauthorized request opened file")
+			}
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			req.Header.Set("Range", "bytes=2-5")
+			rec = httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			want := "2345"
+			if kind == "workspace-file" {
+				want = "ass "
+			}
+			if rec.Code != http.StatusPartialContent || rec.Body.String() != want {
+				t.Fatalf("range: %d %q", rec.Code, rec.Body.String())
+			}
+		})
+	}
 }
