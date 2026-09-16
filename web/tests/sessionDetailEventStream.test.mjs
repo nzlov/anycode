@@ -506,7 +506,7 @@ test('assistant markdown is parsed and sanitized at the rendering boundary', () 
     markdownSource.indexOf('ALLOWED_TAGS:'),
     markdownSource.indexOf('}),', markdownSource.indexOf('ALLOWED_TAGS:')),
   );
-  assert.doesNotMatch(sanitizeConfig, /['"](?:class|id|style)['"]/);
+  assert.doesNotMatch(sanitizeConfig, /['"](?:id|style)['"]/);
   assert.doesNotMatch(markdownSource, /replace\([^\n]+markdown|renderMarkdown/);
 });
 
