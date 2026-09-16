@@ -16,6 +16,8 @@ type Tx struct {
 	DailyStatistic *DailyStatisticClient
 	// EventRecord is the client for interacting with the EventRecord builders.
 	EventRecord *EventRecordClient
+	// MCPEntry is the client for interacting with the MCPEntry builders.
+	MCPEntry *MCPEntryClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
 	// MindMapEdge is the client for interacting with the MindMapEdge builders.
@@ -189,6 +191,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.DailyStatistic = NewDailyStatisticClient(tx.config)
 	tx.EventRecord = NewEventRecordClient(tx.config)
+	tx.MCPEntry = NewMCPEntryClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
 	tx.MindMapEdge = NewMindMapEdgeClient(tx.config)
 	tx.MindMapGraph = NewMindMapGraphClient(tx.config)

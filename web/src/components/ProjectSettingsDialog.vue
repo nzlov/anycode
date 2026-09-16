@@ -28,6 +28,7 @@
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs">
         <q-tab name="general" icon="tune" label="常规" />
+        <q-tab name="mcp" icon="extension" label="MCP 服务" />
         <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
       </q-tabs>
 
@@ -57,6 +58,9 @@
           </q-item-section>
         </q-item>
       </q-card-section>
+      <q-card-section v-else-if="activeSection === 'mcp'" class="project-settings-dialog__body"
+        ><MCPServiceManager v-if="project" kind="project" :scope-id="project.id"
+      /></q-card-section>
       <q-card-section
         v-else
         class="project-settings-dialog__body project-settings-dialog__commands"
@@ -100,6 +104,7 @@
 import { computed, ref, watch } from 'vue';
 import { QDialog, useQuasar } from 'quasar';
 
+import MCPServiceManager from '@/components/MCPServiceManager.vue';
 import QuickCommandManager from '@/components/QuickCommandManager.vue';
 import { useProjects } from '@/composables/useProjects';
 import type { ProjectSummary } from '@/services/projects';
@@ -117,7 +122,7 @@ const emit = defineEmits<{
 
 const $q = useQuasar();
 const { updateProjectSettingsById } = useProjects();
-const activeSection = ref<'general' | 'quick_commands'>('general');
+const activeSection = ref<'general' | 'mcp' | 'quick_commands'>('general');
 const worktreeInitCommand = ref('');
 const mindMapEnabled = ref(false);
 const globalSettings = ref<GeneralSettings | null>(null);

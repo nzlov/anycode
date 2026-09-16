@@ -17,6 +17,7 @@
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
         <q-tab name="general" icon="tune" label="常规" />
+        <q-tab name="mcp" icon="extension" label="MCP 服务" />
         <q-tab name="codex" icon="memory" label="Codex" />
         <q-tab name="writable_roots" icon="folder_open" label="白名单目录" />
         <q-tab name="appearance" icon="palette" label="外观" />
@@ -37,6 +38,15 @@
                 <q-icon name="tune" />
               </q-item-section>
               <q-item-section>常规</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'mcp'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'mcp'"
+            >
+              <q-item-section avatar><q-icon name="extension" /></q-item-section
+              ><q-item-section>MCP 服务</q-item-section>
             </q-item>
             <q-item
               clickable
@@ -281,6 +291,9 @@
           </div>
         </section>
 
+        <section v-else-if="activeSection === 'mcp'" class="global-settings-panel">
+          <MCPServiceManager kind="global" />
+        </section>
         <section v-else-if="activeSection === 'codex'" class="global-settings-panel">
           <q-banner v-if="codexError" dense class="quick-command-error">
             <template #avatar>
@@ -787,6 +800,7 @@ import { QDialog } from 'quasar';
 
 import CodexModelSelector from '@/components/CodexModelSelector.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import MCPServiceManager from '@/components/MCPServiceManager.vue';
 import QuickCommandManager from '@/components/QuickCommandManager.vue';
 import WritableRootEditor from '@/components/WritableRootEditor.vue';
 import { useGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
@@ -838,7 +852,7 @@ const emit = defineEmits<{
 const { thinkingPhrasesEnabled, thinkingPhraseStyle } = useSessionThinkingPhrases();
 const generalSettingsInvalidation = useGeneralSettingsInvalidation();
 const activeSection = ref<
-  'general' | 'codex' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
+  'general' | 'mcp' | 'codex' | 'writable_roots' | 'appearance' | 'notifications' | 'quick_commands'
 >('general');
 const defaultGeneral: GeneralSettings = {
   agentWritableRoots: [],
@@ -954,8 +968,7 @@ const mindMapSettingsValid = computed(
       mindMapMaxConcurrentValid.value),
 );
 const generalSettingsValid = computed(
-  () =>
-    agentWritableRootsValid.value && mindMapSettingsValid.value,
+  () => agentWritableRootsValid.value && mindMapSettingsValid.value,
 );
 const generalSettingsChanged = computed(
   () =>
@@ -1289,10 +1302,7 @@ watch(activeSection, (section) => {
   if (section === 'notifications' && props.modelValue) void refreshNotifications();
 });
 
-watch(
-  [() => general.value.sendShortcut, agentWritableRoots],
-  scheduleGeneralSettingsSave,
-);
+watch([() => general.value.sendShortcut, agentWritableRoots], scheduleGeneralSettingsSave);
 
 watch(
   [

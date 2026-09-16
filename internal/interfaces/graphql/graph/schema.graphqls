@@ -5,6 +5,7 @@ scalar Upload
 scalar Int64
 
 type Query {
+  mcpServices(scope: MCPScopeInput!): [MCPService!]!
   codexModelOptions: [CodexModelOption!]!
   codexSlashCommands: [CodexSlashCommand!]!
   promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
@@ -87,6 +88,10 @@ input PromptFileMatchInput {
 }
 
 type Mutation {
+  saveMCPService(scope: MCPScopeInput!, name: String!, definition: JSON, enabled: Boolean): Boolean!
+  deleteMCPService(scope: MCPScopeInput!, name: String!): Boolean!
+  checkMCPService(scope: MCPScopeInput!, name: String!): Int!
+
   updateGeneralSettings(input: UpdateGeneralSettingsInput!): GeneralSettings!
   updateCodexSettings(input: UpdateCodexSettingsInput!): CodexSettings!
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
@@ -1310,4 +1315,16 @@ input QuestionAnswerInput {
   selectedOptionId: ID
   customAnswer: String
   payload: JSON
+}
+
+input MCPScopeInput {
+  kind: String!
+  id: ID
+}
+type MCPService {
+  name: String!
+  enabled: Boolean!
+  source: String!
+  overridden: Boolean!
+  definition: JSON
 }

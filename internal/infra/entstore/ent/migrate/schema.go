@@ -82,6 +82,28 @@ var (
 			},
 		},
 	}
+	// McpEntriesColumns holds the columns for the "mcp_entries" table.
+	McpEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "scope_kind", Type: field.TypeString},
+		{Name: "scope_id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "definition", Type: field.TypeJSON, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Nullable: true},
+	}
+	// McpEntriesTable holds the schema information for the "mcp_entries" table.
+	McpEntriesTable = &schema.Table{
+		Name:       "mcp_entries",
+		Columns:    McpEntriesColumns,
+		PrimaryKey: []*schema.Column{McpEntriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mcpentry_scope_kind_scope_id_name",
+				Unique:  true,
+				Columns: []*schema.Column{McpEntriesColumns[1], McpEntriesColumns[2], McpEntriesColumns[3]},
+			},
+		},
+	}
 	// MergeRecordsColumns holds the columns for the "merge_records" table.
 	MergeRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -699,6 +721,7 @@ var (
 	Tables = []*schema.Table{
 		DailyStatisticsTable,
 		EventRecordsTable,
+		McpEntriesTable,
 		MergeRecordsTable,
 		MindMapEdgesTable,
 		MindMapGraphsTable,

@@ -8,6 +8,7 @@ import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	authapp "github.com/nzlov/anycode/internal/application/auth"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	mcpapp "github.com/nzlov/anycode/internal/application/mcp"
 	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -30,6 +31,7 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type UseCases struct {
+	MCP              *mcpapp.Service
 	Auth             authapp.UseCase
 	Projects         projectapp.UseCase
 	MindMaps         mindmapapp.UseCase

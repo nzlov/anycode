@@ -8,6 +8,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/port"
 	"github.com/nzlov/anycode/internal/domain/session"
 	enteventrecord "github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
+	entmcpentry "github.com/nzlov/anycode/internal/infra/entstore/ent/mcpentry"
 	entmergerecord "github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	entmindmapedge "github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	entmindmapnode "github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapnode"
@@ -57,6 +58,11 @@ func (s *Store) PurgeSessions(ctx context.Context, ids []session.ID) error {
 	if err == nil {
 		if _, deleteErr := client.EventRecord.Delete().Where(enteventrecord.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
 			err = fmt.Errorf("delete event records: %w", deleteErr)
+		}
+	}
+	if err == nil {
+		if _, deleteErr := client.MCPEntry.Delete().Where(entmcpentry.ScopeKindEQ("session"), entmcpentry.ScopeIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete MCP card switches: %w", deleteErr)
 		}
 	}
 	if err == nil {

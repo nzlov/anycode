@@ -300,6 +300,10 @@ func (r *appServerRuntime) handleServerRequest(envelope appServerEnvelope) {
 	if err != nil {
 		result = process.DynamicToolResult{Success: false, Content: []process.DynamicToolContent{{Type: "inputText", Text: err.Error()}}}
 	}
+	category := "dynamic"
+	if params.Tool == "mcp_discover" || params.Tool == "mcp_call" {
+		category = "mcp"
+	}
 	response := dynamicToolResponse(result)
 	if err := r.write(map[string]any{"id": envelope.ID, "result": response}); err != nil {
 		return
@@ -313,7 +317,7 @@ func (r *appServerRuntime) handleServerRequest(envelope appServerEnvelope) {
 		EventID: "dynamic-tool:" + params.TurnID + ":" + params.CallID, Type: process.CodexEventTool,
 		CorrelationID: params.CallID, TurnID: params.TurnID, Phase: phase,
 		Content: process.CodexToolContent{
-			QualifiedName: params.Tool, Category: "dynamic",
+			QualifiedName: params.Tool, Category: category,
 			Input:  process.CodexStructuredText{Format: process.CodexTextJSON, Text: string(params.Arguments)},
 			Output: process.CodexStructuredText{Format: process.CodexTextJSON, Text: jsonText(response["contentItems"])},
 		},

@@ -444,7 +444,7 @@ cat >/dev/null
 			} `json:"dynamicTools"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.ServiceTier != "default" || len(request.Params.DynamicTools) != 5 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" || request.Params.DynamicTools[2].Name != "tunnel_create" || request.Params.DynamicTools[3].Name != "tunnel_list" || request.Params.DynamicTools[4].Name != "tunnel_close" {
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.ServiceTier != "default" || len(request.Params.DynamicTools) != 7 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" || request.Params.DynamicTools[2].Name != "tunnel_create" || request.Params.DynamicTools[3].Name != "tunnel_list" || request.Params.DynamicTools[4].Name != "tunnel_close" {
 		t.Fatalf("resume request = %s", content)
 	}
 }
@@ -929,18 +929,18 @@ func TestTunnelCreateDynamicToolRequiresName(t *testing.T) {
 
 func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	base := anyCodeDynamicTools()
-	if len(base) != 5 {
+	if len(base) != 7 {
 		t.Fatalf("base dynamic tools = %#v", base)
 	}
 	queryOnly := anyCodeDynamicTools(process.DynamicToolMindMapSearch)
-	if len(queryOnly) != 6 || queryOnly[5]["name"] != string(process.DynamicToolMindMapSearch) {
+	if len(queryOnly) != 8 || queryOnly[7]["name"] != string(process.DynamicToolMindMapSearch) {
 		t.Fatalf("query tools = %#v", queryOnly)
 	}
-	searchSchema := queryOnly[5]["inputSchema"].(map[string]any)
+	searchSchema := queryOnly[7]["inputSchema"].(map[string]any)
 	if searchSchema["required"].([]string)[0] != "query" {
 		t.Fatalf("search schema = %#v", searchSchema)
 	}
-	searchDescription, _ := queryOnly[5]["description"].(string)
+	searchDescription, _ := queryOnly[7]["description"].(string)
 	searchProperties := searchSchema["properties"].(map[string]any)
 	queryDescription, _ := searchProperties["query"].(map[string]any)["description"].(string)
 	limitDescription, _ := searchProperties["limit"].(map[string]any)["description"].(string)
@@ -948,10 +948,10 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("search contract = description:%q query:%q limit:%q", searchDescription, queryDescription, limitDescription)
 	}
 	realtime := anyCodeDynamicTools(process.DynamicToolMindMapSearch, process.DynamicToolMindMapTags, process.DynamicToolMindMapUpdate)
-	if len(realtime) != 8 || realtime[6]["name"] != string(process.DynamicToolMindMapTags) || realtime[7]["name"] != string(process.DynamicToolMindMapUpdate) {
+	if len(realtime) != 10 || realtime[8]["name"] != string(process.DynamicToolMindMapTags) || realtime[9]["name"] != string(process.DynamicToolMindMapUpdate) {
 		t.Fatalf("realtime tools = %#v", realtime)
 	}
-	description, _ := realtime[7]["description"].(string)
+	description, _ := realtime[9]["description"].(string)
 	if !strings.Contains(description, "Each node must express exactly one durable concept") {
 		t.Fatalf("mind map update description = %q", description)
 	}
@@ -959,11 +959,11 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 		!strings.Contains(description, "Nodes that reference implementation code must include a non-empty files list") {
 		t.Fatalf("mind map update description lacks managed tag or code location rules = %q", description)
 	}
-	tagsDescription, _ := realtime[6]["description"].(string)
+	tagsDescription, _ := realtime[8]["description"].(string)
 	if !strings.Contains(tagsDescription, "compact JSON text") || !strings.Contains(description, "most recent mind_map_search or mind_map_tags") {
 		t.Fatalf("mind map revision contract = tags:%q update:%q", tagsDescription, description)
 	}
-	updateSchema := realtime[7]["inputSchema"].(map[string]any)
+	updateSchema := realtime[9]["inputSchema"].(map[string]any)
 	required := updateSchema["required"].([]string)
 	if len(required) != 2 || required[0] != "tagRevision" || required[1] != "operations" {
 		t.Fatalf("mind map update required fields = %#v", required)

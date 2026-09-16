@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mcpentry"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
@@ -97,6 +98,7 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			dailystatistic.Table:            dailystatistic.ValidColumn,
 			eventrecord.Table:               eventrecord.ValidColumn,
+			mcpentry.Table:                  mcpentry.ValidColumn,
 			mergerecord.Table:               mergerecord.ValidColumn,
 			mindmapedge.Table:               mindmapedge.ValidColumn,
 			mindmapgraph.Table:              mindmapgraph.ValidColumn,

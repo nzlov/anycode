@@ -366,6 +366,11 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 			},
 		},
 	}
+	tools = append(tools,
+		map[string]any{"type": "function", "name": "mcp_discover", "description": "Discover the MCP tools currently enabled for this AnyCode card. Returns server names, instructions, tool descriptions and input schemas. Call this before using mcp_call, and rediscover when services change. Disabled services are omitted. No server argument discovers all enabled services.", "inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"server": map[string]any{"type": "string"}}}},
+		map[string]any{"type": "function", "name": "mcp_call", "description": "Call a currently enabled AnyCode-managed MCP tool using the server, tool name and arguments from mcp_discover. Availability is checked on every call.", "inputSchema": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"server", "tool", "arguments"}, "properties": map[string]any{"server": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object"}}}},
+	)
+
 	for _, name := range enabled {
 		switch name {
 		case process.DynamicToolMindMapSearch:

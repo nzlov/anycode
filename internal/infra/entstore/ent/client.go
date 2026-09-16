@@ -16,6 +16,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mcpentry"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapedge"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mindmapgraph"
@@ -47,6 +48,8 @@ type Client struct {
 	DailyStatistic *DailyStatisticClient
 	// EventRecord is the client for interacting with the EventRecord builders.
 	EventRecord *EventRecordClient
+	// MCPEntry is the client for interacting with the MCPEntry builders.
+	MCPEntry *MCPEntryClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
 	// MindMapEdge is the client for interacting with the MindMapEdge builders.
@@ -100,6 +103,7 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.DailyStatistic = NewDailyStatisticClient(c.config)
 	c.EventRecord = NewEventRecordClient(c.config)
+	c.MCPEntry = NewMCPEntryClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.MindMapEdge = NewMindMapEdgeClient(c.config)
 	c.MindMapGraph = NewMindMapGraphClient(c.config)
@@ -214,6 +218,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:                    cfg,
 		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
+		MCPEntry:                  NewMCPEntryClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
 		MindMapEdge:               NewMindMapEdgeClient(cfg),
 		MindMapGraph:              NewMindMapGraphClient(cfg),
@@ -255,6 +260,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:                    cfg,
 		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
+		MCPEntry:                  NewMCPEntryClient(cfg),
 		MergeRecord:               NewMergeRecordClient(cfg),
 		MindMapEdge:               NewMindMapEdgeClient(cfg),
 		MindMapGraph:              NewMindMapGraphClient(cfg),
@@ -304,8 +310,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.DailyStatistic, c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph,
-		c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
+		c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord, c.MindMapEdge,
+		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
 		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
 		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
 		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
@@ -319,8 +325,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.DailyStatistic, c.EventRecord, c.MergeRecord, c.MindMapEdge, c.MindMapGraph,
-		c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
+		c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord, c.MindMapEdge,
+		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
 		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
 		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
 		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
@@ -337,6 +343,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.DailyStatistic.mutate(ctx, m)
 	case *EventRecordMutation:
 		return c.EventRecord.mutate(ctx, m)
+	case *MCPEntryMutation:
+		return c.MCPEntry.mutate(ctx, m)
 	case *MergeRecordMutation:
 		return c.MergeRecord.mutate(ctx, m)
 	case *MindMapEdgeMutation:
@@ -645,6 +653,139 @@ func (c *EventRecordClient) mutate(ctx context.Context, m *EventRecordMutation) 
 		return (&EventRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown EventRecord mutation op: %q", m.Op())
+	}
+}
+
+// MCPEntryClient is a client for the MCPEntry schema.
+type MCPEntryClient struct {
+	config
+}
+
+// NewMCPEntryClient returns a client for the MCPEntry from the given config.
+func NewMCPEntryClient(c config) *MCPEntryClient {
+	return &MCPEntryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mcpentry.Hooks(f(g(h())))`.
+func (c *MCPEntryClient) Use(hooks ...Hook) {
+	c.hooks.MCPEntry = append(c.hooks.MCPEntry, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mcpentry.Intercept(f(g(h())))`.
+func (c *MCPEntryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MCPEntry = append(c.inters.MCPEntry, interceptors...)
+}
+
+// Create returns a builder for creating a MCPEntry entity.
+func (c *MCPEntryClient) Create() *MCPEntryCreate {
+	mutation := newMCPEntryMutation(c.config, OpCreate)
+	return &MCPEntryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MCPEntry entities.
+func (c *MCPEntryClient) CreateBulk(builders ...*MCPEntryCreate) *MCPEntryCreateBulk {
+	return &MCPEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MCPEntryClient) MapCreateBulk(slice any, setFunc func(*MCPEntryCreate, int)) *MCPEntryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MCPEntryCreateBulk{err: fmt.Errorf("calling to MCPEntryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MCPEntryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MCPEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MCPEntry.
+func (c *MCPEntryClient) Update() *MCPEntryUpdate {
+	mutation := newMCPEntryMutation(c.config, OpUpdate)
+	return &MCPEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MCPEntryClient) UpdateOne(_m *MCPEntry) *MCPEntryUpdateOne {
+	mutation := newMCPEntryMutation(c.config, OpUpdateOne, withMCPEntry(_m))
+	return &MCPEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MCPEntryClient) UpdateOneID(id string) *MCPEntryUpdateOne {
+	mutation := newMCPEntryMutation(c.config, OpUpdateOne, withMCPEntryID(id))
+	return &MCPEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MCPEntry.
+func (c *MCPEntryClient) Delete() *MCPEntryDelete {
+	mutation := newMCPEntryMutation(c.config, OpDelete)
+	return &MCPEntryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MCPEntryClient) DeleteOne(_m *MCPEntry) *MCPEntryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MCPEntryClient) DeleteOneID(id string) *MCPEntryDeleteOne {
+	builder := c.Delete().Where(mcpentry.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MCPEntryDeleteOne{builder}
+}
+
+// Query returns a query builder for MCPEntry.
+func (c *MCPEntryClient) Query() *MCPEntryQuery {
+	return &MCPEntryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMCPEntry},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MCPEntry entity by its id.
+func (c *MCPEntryClient) Get(ctx context.Context, id string) (*MCPEntry, error) {
+	return c.Query().Where(mcpentry.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MCPEntryClient) GetX(ctx context.Context, id string) *MCPEntry {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MCPEntryClient) Hooks() []Hook {
+	return c.hooks.MCPEntry
+}
+
+// Interceptors returns the client interceptors.
+func (c *MCPEntryClient) Interceptors() []Interceptor {
+	return c.inters.MCPEntry
+}
+
+func (c *MCPEntryClient) mutate(ctx context.Context, m *MCPEntryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MCPEntryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MCPEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MCPEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MCPEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MCPEntry mutation op: %q", m.Op())
 	}
 }
 
@@ -3311,14 +3452,14 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		DailyStatistic, EventRecord, MergeRecord, MindMapEdge, MindMapGraph,
+		DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge, MindMapGraph,
 		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
 		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		DailyStatistic, EventRecord, MergeRecord, MindMapEdge, MindMapGraph,
+		DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge, MindMapGraph,
 		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,

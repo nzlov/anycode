@@ -134,6 +134,16 @@
                   flat
                   round
                   class="app-icon-btn"
+                  icon="extension"
+                  aria-label="卡片 MCP 服务"
+                  :disable="!session || isClosed"
+                  @click="mcpDialogOpen = true"
+                  ><q-tooltip>MCP 服务</q-tooltip></q-btn
+                >
+                <q-btn
+                  flat
+                  round
+                  class="app-icon-btn"
                   icon="call_split"
                   aria-label="Side 临时提问"
                   :disable="!session?.codexSessionId || isClosed"
@@ -562,6 +572,22 @@
       </q-tab>
     </q-tabs>
 
+    <q-dialog v-model="mcpDialogOpen">
+      <q-card class="app-content-dialog" style="width: 600px; max-width: calc(100vw - 24px)">
+        <q-card-section class="row items-center q-pb-sm"
+          ><div class="text-subtitle1 text-weight-bold">卡片工具</div>
+          <q-space /><q-btn
+            v-close-popup
+            flat
+            round
+            dense
+            class="app-icon-btn"
+            icon="close"
+            aria-label="关闭卡片工具"
+        /></q-card-section>
+        <q-card-section><MCPServiceManager kind="session" :scope-id="sessionId" /></q-card-section>
+      </q-card>
+    </q-dialog>
     <q-dialog v-model="promptEditDialogOpen" :persistent="promptEditSaving">
       <PromptAppendEditPanel
         v-model:body="promptEditBody"
@@ -666,6 +692,7 @@
 </template>
 
 <script setup lang="ts">
+import MCPServiceManager from '@/components/MCPServiceManager.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Notify, QPage, useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
@@ -784,6 +811,7 @@ const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerFast = ref(false);
 const composerCollapsed = ref(true);
 const sideDialogOpen = ref(false);
+const mcpDialogOpen = ref(false);
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes' | 'artifacts'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.

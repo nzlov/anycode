@@ -262,6 +262,19 @@ type ListTranscriptEventsInput struct {
 	Limit        *int    `json:"limit,omitempty"`
 }
 
+type MCPScopeInput struct {
+	Kind string  `json:"kind"`
+	ID   *string `json:"id,omitempty"`
+}
+
+type MCPService struct {
+	Name       string         `json:"name"`
+	Enabled    bool           `json:"enabled"`
+	Source     string         `json:"source"`
+	Overridden bool           `json:"overridden"`
+	Definition map[string]any `json:"definition,omitempty"`
+}
+
 type MergeConfig struct {
 	Strategy string `json:"strategy"`
 }

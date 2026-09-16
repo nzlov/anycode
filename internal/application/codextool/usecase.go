@@ -58,6 +58,11 @@ type Service struct {
 	artifacts ArtifactUseCase
 	tunnels   TunnelUseCase
 	mindMaps  MindMapUseCase
+	mcp       processdomain.DynamicToolHandler
+}
+
+func WithMCP(handler processdomain.DynamicToolHandler) Option {
+	return func(s *Service) { s.mcp = handler }
 }
 
 type Option func(*Service)
@@ -80,6 +85,11 @@ func New(sessions SessionUseCase, artifacts ArtifactUseCase, options ...Option) 
 
 func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
 	switch call.Tool {
+	case "mcp_discover", "mcp_call":
+		if s.mcp == nil {
+			return processdomain.DynamicToolResult{}, errors.New("MCP service unavailable")
+		}
+		return s.mcp.HandleDynamicTool(ctx, call)
 	case questionsTool:
 		return s.questions(ctx, call)
 	case publishArtifactTool:

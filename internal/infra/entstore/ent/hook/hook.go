@@ -33,6 +33,18 @@ func (f EventRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EventRecordMutation", m)
 }
 
+// The MCPEntryFunc type is an adapter to allow the use of ordinary
+// function as MCPEntry mutator.
+type MCPEntryFunc func(context.Context, *ent.MCPEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MCPEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MCPEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MCPEntryMutation", m)
+}
+
 // The MergeRecordFunc type is an adapter to allow the use of ordinary
 // function as MergeRecord mutator.
 type MergeRecordFunc func(context.Context, *ent.MergeRecordMutation) (ent.Value, error)

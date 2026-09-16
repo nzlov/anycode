@@ -17,6 +17,7 @@ import (
 	codextoolapp "github.com/nzlov/anycode/internal/application/codextool"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
+	mcpapp "github.com/nzlov/anycode/internal/application/mcp"
 	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -42,6 +43,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/fsbrowser"
 	"github.com/nzlov/anycode/internal/infra/gitcli"
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
+	mcpinfra "github.com/nzlov/anycode/internal/infra/mcp"
 	"github.com/nzlov/anycode/internal/infra/nasawallpaper"
 	"github.com/nzlov/anycode/internal/infra/ptyruntime"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
@@ -159,6 +161,7 @@ func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUs
 }
 
 type wiredApplication struct {
+	mcp            *mcpinfra.Runtime
 	useCases       graph.UseCases
 	codex          *codexcli.Client
 	terminal       terminaldomain.Runtime
@@ -182,6 +185,9 @@ func (a *wiredApplication) Close() {
 		if err := closer.CloseAll(cleanupCtx); err != nil {
 			log.Printf("close tunnels: %s", err.Error())
 		}
+	}
+	if a.mcp != nil {
+		a.mcp.Close()
 	}
 	if a.codex != nil {
 		if err := a.codex.Close(); err != nil {
@@ -236,12 +242,15 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	mindMapService := mindmapapp.New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
 	mindMapService.SetQueueScheduler(mindMapQueue.Schedule)
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithPromptFileReader(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithStatistics(store.Statistics()), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
-	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService), codextoolapp.WithMindMaps(mindMapService)))
+	mcpRuntime := mcpinfra.New()
+	mcpService := mcpapp.New(store.MCP(), mcpRuntime, store.Projects(), store.Sessions())
+	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithMCP(mcpService), codextoolapp.WithTunnels(tunnelService), codextoolapp.WithMindMaps(mindMapService)))
 	mindMapQueue.Start()
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
 	notificationService := notificationapp.New(store.Notifications(), events, store.Sessions(), store.Projects(), pushClient, pushClient, principal.KeyHash)
 	if err := notificationService.Initialize(context.Background()); err != nil {
+		mcpRuntime.Close()
 		_ = tunnelRuntime.CloseAll(context.Background())
 		_ = codex.Close()
 		return nil, fmt.Errorf("initialize web push notifications: %w", err)
@@ -259,6 +268,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		return restartErr
 	}
 	useCases := graph.UseCases{
+		MCP:              mcpService,
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
 		Sessions:         sessionService,
@@ -279,7 +289,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,
 	}
-	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
+	return &wiredApplication{mcp: mcpRuntime, useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
 }
 
 func httpPort(addr string) int {
