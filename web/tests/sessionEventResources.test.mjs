@@ -165,7 +165,7 @@ test('event diff dialog removes viewer chrome and lets its body own vertical scr
 
   assert.match(
     detail,
-    /<DiffWorkspace[\s\S]*?v-if="eventResourceKind === 'diff'"[\s\S]*?:show-refresh="false"/,
+    /<DiffWorkspace[\s\S]*?v-else-if="eventResourceKind === 'diff'"[\s\S]*?:show-refresh="false"/,
   );
   assert.match(
     detail,
@@ -196,7 +196,7 @@ test('event diff dialog moves single-file metadata into its outer title', () => 
   const viewer = readFileSync(new URL('../src/components/DiffViewer.vue', import.meta.url), 'utf8');
 
   assert.match(detail, /const eventDiffFile = ref<DiffFile \| null>\(null\)/);
-  assert.match(detail, /const diffFile = diffResult\.value\.files\.find/);
+  assert.match(detail, /const diffFile = diffResult\.files\.find/);
   assert.match(detail, /eventDiffFile\.value = file/);
   assert.match(
     detail,

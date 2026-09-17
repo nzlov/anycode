@@ -44,6 +44,8 @@ type FileStream struct {
 }
 
 type SessionDiffInput struct {
+	Offset          int
+	Limit           int
 	SessionID       session.ID
 	Mode            string
 	FilePath        string
@@ -54,6 +56,8 @@ type SessionDiffInput struct {
 }
 
 type BranchDiffInput struct {
+	Offset          int
+	Limit           int
 	ProjectID       projectdomain.ID
 	Branch          string
 	Mode            string
@@ -150,7 +154,24 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 	if err != nil {
 		return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list session diff files failed").WithRetryable(true)
 	}
+	if filepath.IsAbs(input.FilePath) && sess.WorktreePath != "" {
+		if relative, err := filepath.Rel(sess.WorktreePath, input.FilePath); err == nil {
+			input.FilePath = filepath.ToSlash(relative)
+		}
+	}
 	dto.Files = files
+	if !input.IncludeFileDiff && !input.IncludeAllDiff && input.FilePath != "" {
+		dto.Files = []gitdiff.DiffFile{}
+		for _, file := range files {
+			if file.Path == input.FilePath {
+				dto.Files = append(dto.Files, file)
+			}
+		}
+	}
+	if input.Limit > 0 {
+		start := min(max(input.Offset, 0), len(dto.Files))
+		dto.Files = dto.Files[start : start+min(input.Limit, len(dto.Files)-start)]
+	}
 	dto.Available = true
 	if len(files) == 0 {
 		return dto, nil
@@ -364,6 +385,18 @@ func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (Ses
 	}
 
 	dto.Files = files
+	if !input.IncludeFileDiff && !input.IncludeAllDiff && input.FilePath != "" {
+		dto.Files = []gitdiff.DiffFile{}
+		for _, file := range files {
+			if file.Path == input.FilePath {
+				dto.Files = append(dto.Files, file)
+			}
+		}
+	}
+	if input.Limit > 0 {
+		start := min(max(input.Offset, 0), len(dto.Files))
+		dto.Files = dto.Files[start : start+min(input.Limit, len(dto.Files)-start)]
+	}
 	dto.Available = true
 	if len(files) == 0 {
 		return dto, nil

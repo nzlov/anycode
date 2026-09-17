@@ -224,7 +224,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	events := store.Events()
 	eventService := eventapp.New(eventapp.WithObserver(eventMetricLogger{}))
 	processes := store.Processes()
-	timelineService := timelineapp.New(eventService, store.Sessions(), codex, timelineapp.WithHistory(events))
+	timelineService := timelineapp.New(eventService, store.Sessions(), codex, timelineapp.WithHistory(events), timelineapp.WithArtifacts(files))
 	questions := store.Questions()
 	questionService := questionapp.New(questions, questionapp.WithObserver(questionMetricLogger{}))
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))

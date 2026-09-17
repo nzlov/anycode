@@ -5586,6 +5586,9 @@ input ResolveSessionArtifactsInput {
 }
 
 input ListSessionFilesInput {
+  fileId: ID
+  offset: Int
+  limit: Int
   sessionId: ID!
   kind: String
   source: String
@@ -6249,6 +6252,8 @@ input ListTranscriptEventsInput {
 }
 
 input SessionDiffInput {
+  offset: Int
+  limit: Int
   sessionId: ID!
   mode: String
   filePath: String
@@ -6257,6 +6262,8 @@ input SessionDiffInput {
 }
 
 input BranchDiffInput {
+  offset: Int
+  limit: Int
   projectId: ID!
   branch: String!
   mode: String
@@ -28607,13 +28614,27 @@ func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "contextBefore", "contextAfter"}
+	fieldsInOrder := [...]string{"offset", "limit", "projectId", "branch", "mode", "filePath", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
 		case "projectId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
 			data, err := ec.unmarshalNID2string(ctx, v)
@@ -29137,13 +29158,34 @@ func (ec *executionContext) unmarshalInputListSessionFilesInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "kind", "source", "filter", "sort"}
+	fieldsInOrder := [...]string{"fileId", "offset", "limit", "sessionId", "kind", "source", "filter", "sort"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "fileId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fileId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FileID = data
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
 		case "sessionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
 			data, err := ec.unmarshalNID2string(ctx, v)
@@ -30307,13 +30349,27 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "mode", "filePath", "contextBefore", "contextAfter"}
+	fieldsInOrder := [...]string{"offset", "limit", "sessionId", "mode", "filePath", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
 		case "sessionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
 			data, err := ec.unmarshalNID2string(ctx, v)

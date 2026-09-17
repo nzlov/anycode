@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"sort"
@@ -45,6 +46,14 @@ type CodexHistory interface {
 	HistoryEvent(ctx context.Context, input processdomain.CodexHistoryEventInput) (processdomain.CodexEvent, error)
 }
 
+type ArtifactReader interface {
+	FindArtifactByContent(context.Context, sessiondomain.ID, []byte) (sessiondomain.SessionFile, bool, error)
+}
+
+func WithArtifacts(artifacts ArtifactReader) Option {
+	return func(s *Service) { s.artifacts = artifacts }
+}
+
 type LiveEventSource interface {
 	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
 }
@@ -55,10 +64,11 @@ const (
 )
 
 type Service struct {
-	live     LiveEventSource
-	sessions SessionRepository
-	codex    CodexHistory
-	history  eventdomain.Store
+	artifacts ArtifactReader
+	live      LiveEventSource
+	sessions  SessionRepository
+	codex     CodexHistory
+	history   eventdomain.Store
 }
 
 type Option func(*Service)
@@ -97,6 +107,12 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 	})
 	if err != nil {
 		return Page{}, fmt.Errorf("list codex thread history: %w", err)
+	}
+	for index := range page.Events {
+		page.Events[index], err = s.resolveHistoryImages(ctx, current.ID, page.Events[index])
+		if err != nil {
+			return Page{}, err
+		}
 	}
 	events := historyPageEvents(page.Events, input.MessageRole)
 	if input.BeforeCursor == "" {
@@ -139,6 +155,10 @@ func (s *Service) GetSessionEvent(ctx context.Context, input GetSessionEventInpu
 	})
 	if err != nil {
 		return DTO{}, fmt.Errorf("load codex transcript event: %w", err)
+	}
+	event, err = s.resolveHistoryImages(ctx, current.ID, event)
+	if err != nil {
+		return DTO{}, err
 	}
 	event.CodexSessionID = threadID
 	item, ok := FromCodexEvent(event)
@@ -503,4 +523,57 @@ func statusContent(code string, payload map[string]any) processdomain.CodexStatu
 		}
 	}
 	return processdomain.CodexStatusContent{Code: code, Level: level, Message: message, Details: payload}
+}
+
+func (s *Service) resolveHistoryImages(ctx context.Context, sessionID sessiondomain.ID, event processdomain.CodexEvent) (processdomain.CodexEvent, error) {
+	var images []processdomain.CodexImage
+	switch content := event.Content.(type) {
+	case processdomain.CodexToolContent:
+		images = content.Images
+	case processdomain.CodexMessageContent:
+		if content.Role != "assistant" {
+			return processdomain.PrepareCodexEventForTranscript(event, false), nil
+		}
+		images = content.Images
+	}
+	stored := make([]processdomain.CodexImage, 0, len(images))
+	for _, image := range images {
+		encoded := image.Source
+		if strings.HasPrefix(encoded, "data:") {
+			header, data, ok := strings.Cut(encoded, ",")
+			if !ok || !strings.HasSuffix(strings.ToLower(header), ";base64") {
+				continue
+			}
+			encoded = data
+		} else if image.SourceKind != "inline_base64" {
+			stored = append(stored, image)
+			continue
+		}
+		if s.artifacts == nil {
+			continue
+		}
+		if base64.StdEncoding.DecodedLen(len(encoded)) > 25<<20 {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			continue
+		}
+		file, found, err := s.artifacts.FindArtifactByContent(ctx, sessionID, data)
+		if err != nil {
+			return processdomain.CodexEvent{}, fmt.Errorf("resolve transcript image: %w", err)
+		}
+		if found && file.PreviewKind == sessiondomain.PreviewKindImage {
+			stored = append(stored, processdomain.CodexImage{Source: "/files/" + string(file.ID) + "/preview", SourceKind: "stored", MimeType: file.MimeType, Detail: image.Detail})
+		}
+	}
+	switch content := event.Content.(type) {
+	case processdomain.CodexToolContent:
+		content.Images = stored
+		event.Content = content
+	case processdomain.CodexMessageContent:
+		content.Images = stored
+		event.Content = content
+	}
+	return processdomain.PrepareCodexEventForTranscript(event, false), nil
 }

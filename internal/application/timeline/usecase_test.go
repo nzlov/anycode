@@ -245,3 +245,59 @@ func (s *fakeEventHistory) After(context.Context, eventdomain.Scope, eventdomain
 func (s *fakeEventHistory) Before(context.Context, eventdomain.Scope, eventdomain.ID, int) ([]eventdomain.DomainEvent, int, bool, error) {
 	return nil, 0, false, nil
 }
+
+type fakeArtifactReader struct {
+	found     bool
+	sessionID sessiondomain.ID
+}
+
+func (r *fakeArtifactReader) FindArtifactByContent(_ context.Context, id sessiondomain.ID, data []byte) (sessiondomain.SessionFile, bool, error) {
+	r.sessionID = id
+	if string(data) != "png" {
+		return sessiondomain.SessionFile{}, false, errors.New("wrong image bytes")
+	}
+	return sessiondomain.SessionFile{ID: "image-1", PreviewKind: sessiondomain.PreviewKindImage, MimeType: "image/png"}, r.found, nil
+}
+
+func TestHistoryImagesResolveExistingFilesOnPageAndDetail(t *testing.T) {
+	for _, found := range []bool{true, false} {
+		for _, message := range []bool{true, false} {
+			images := []processdomain.CodexImage{{Source: "data:image/png;base64,cG5n", SourceKind: "inline"}}
+			var content processdomain.CodexEventContent = processdomain.CodexToolContent{Images: images}
+			if message {
+				content = processdomain.CodexMessageContent{Role: "assistant", Images: images}
+			}
+			raw := processdomain.CodexEvent{EventID: "event-1", CodexSessionID: "thread-1", Type: processdomain.CodexEventMessage, Content: content}
+			codex := &fakeCodexHistory{page: processdomain.CodexHistoryPage{Events: []processdomain.CodexEvent{raw}}, event: raw}
+			reader := &fakeArtifactReader{found: found}
+			service := New(nil, &fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", CodexSessionID: "thread-1"}}, codex, WithArtifacts(reader))
+			page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			detail, err := service.GetSessionEvent(context.Background(), GetSessionEventInput{SessionID: "session-1", EventID: "codex:thread-1:event-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range []DTO{page.Items[0], detail} {
+				var actual []processdomain.CodexImage
+				switch value := item.Content.(type) {
+				case processdomain.CodexToolContent:
+					actual = value.Images
+				case processdomain.CodexMessageContent:
+					actual = value.Images
+				}
+				if found {
+					if len(actual) != 1 || actual[0].Source != "/files/image-1/preview" {
+						t.Fatalf("images: %#v", actual)
+					}
+				} else if len(actual) != 0 {
+					t.Fatalf("missing file exposed: %#v", actual)
+				}
+			}
+			if reader.sessionID != "session-1" {
+				t.Fatal("lookup not scoped to session")
+			}
+		}
+	}
+}

@@ -157,7 +157,7 @@
         </q-list>
       </q-card>
 
-      <section class="diff-content">
+      <section class="diff-content scroll">
         <q-card v-if="loading && !diff" flat bordered class="diff-state-card">
           <q-card-section class="empty-state">
             <q-spinner color="primary" size="32px" />
@@ -172,37 +172,43 @@
           </q-card-section>
         </q-card>
 
-        <DiffViewer
-          :files="visibleFiles"
-          :file-diffs="visibleDiffs"
-          :collapsible="workspaceMode === 'all'"
-          :show-file-headers="showFileHeaders"
-          :collapsed-paths="collapseState.collapsedPaths"
-          :loading-paths="fileLoadingPaths"
-          :media-previews="mediaPreviews"
-          :annotation-session-ids="annotationSessionIds"
-          :display-annotation="displayAnnotation"
-          @expand="expandDiff"
-          @toggle-collapse="toggleFileCollapsed"
+        <q-infinite-scroll
+          :disable="!metadataFirst || loading || !hasMoreFiles"
+          :offset="200"
+          @load="loadMoreFiles"
         >
-          <template #file-title="{ file }">
-            <template v-if="file">
-              <q-btn
-                v-if="sessionPrefix(file.path)"
-                flat
-                dense
-                no-caps
-                class="session-prefix-link"
-                :label="sessionPrefix(file.path)"
-                @click.stop="openPrefixedSession(file.path)"
-                @keydown.stop
-              >
-                <q-tooltip>打开会话详情</q-tooltip>
-              </q-btn>
-              <span class="file-path">{{ filePathWithoutPrefix(file.path) }}</span>
+          <DiffViewer
+            :files="visibleFiles"
+            :file-diffs="visibleDiffs"
+            :collapsible="workspaceMode === 'all'"
+            :show-file-headers="showFileHeaders"
+            :collapsed-paths="collapseState.collapsedPaths"
+            :loading-paths="fileLoadingPaths"
+            :media-previews="mediaPreviews"
+            :annotation-session-ids="annotationSessionIds"
+            :display-annotation="displayAnnotation"
+            @expand="expandDiff"
+            @toggle-collapse="toggleFileCollapsed"
+          >
+            <template #file-title="{ file }">
+              <template v-if="file">
+                <q-btn
+                  v-if="sessionPrefix(file.path)"
+                  flat
+                  dense
+                  no-caps
+                  class="session-prefix-link"
+                  :label="sessionPrefix(file.path)"
+                  @click.stop="openPrefixedSession(file.path)"
+                  @keydown.stop
+                >
+                  <q-tooltip>打开会话详情</q-tooltip>
+                </q-btn>
+                <span class="file-path">{{ filePathWithoutPrefix(file.path) }}</span>
+              </template>
             </template>
-          </template>
-        </DiffViewer>
+          </DiffViewer>
+        </q-infinite-scroll>
       </section>
     </div>
   </div>
@@ -275,6 +281,8 @@ const $q = useQuasar();
 const router = useRouter();
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
+const hasMoreFiles = ref(false);
+const filesPageSize = 50;
 const loadingAllFiles = ref(false);
 const error = ref('');
 const sessionPrefixMap = ref<Record<string, string>>({});
@@ -359,7 +367,7 @@ const allFilesCollapsed = computed(
 );
 const fileCountLabel = computed(() => {
   if (!diff.value) return '等待加载';
-  return `共 ${diff.value.files.length} 个文件`;
+  return `${hasMoreFiles.value ? '已加载' : '共'} ${diff.value.files.length} 个文件`;
 });
 
 function sessionIdForFile(filePath: string) {
@@ -407,6 +415,7 @@ async function loadDiff() {
     const nextDiff = metadataFirst.value ? await requestDiffFiles() : await requestDiff(input);
     if (generation !== requestGeneration.value) return;
     diff.value = nextDiff;
+    hasMoreFiles.value = metadataFirst.value && nextDiff.files.length === filesPageSize;
     if (metadataFirst.value) {
       collapseState.value = collapseDiffFiles(
         initialDiffCollapseState(targetKey.value),
@@ -438,6 +447,7 @@ async function loadDiff() {
   } catch (err) {
     if (generation === requestGeneration.value) error.value = errorMessage(err, '读取 Diff 失败');
   } finally {
+    await nextTick();
     if (generation === requestGeneration.value) loading.value = false;
   }
 }
@@ -462,14 +472,47 @@ function requestDiff(input: {
     : getSessionSingleDiff(sessionInput);
 }
 
-function requestDiffFiles() {
+function requestDiffFiles(offset = 0) {
   if (props.target.kind === 'session') {
-    return getSessionDiffFiles({ sessionId: props.target.sessionId });
+    return getSessionDiffFiles({ sessionId: props.target.sessionId, offset, limit: filesPageSize });
   }
   return getBranchDiffFiles({
+    offset,
+    limit: filesPageSize,
     projectId: props.target.projectId,
     branch: props.target.branch,
   });
+}
+
+async function loadMoreFiles(_index: number, done: () => void) {
+  const generation = requestGeneration.value;
+  try {
+    if (!diff.value || loading.value || !hasMoreFiles.value) return;
+    const page = await requestDiffFiles(diff.value.files.length);
+    if (generation !== requestGeneration.value || !diff.value) return;
+    hasMoreFiles.value = page.files.length === filesPageSize;
+    const added = page.files.filter(
+      (file) => !diff.value?.files.some((existing) => existing.path === file.path),
+    );
+    diff.value.files.push(...added);
+    collapseState.value = collapseDiffFiles(
+      collapseState.value,
+      'all',
+      added.map((file) => file.path),
+    );
+    if (progressiveAllFiles.value)
+      void loadProgressiveAllDiff(
+        added.map((file) => file.path),
+        generation,
+      );
+  } catch (err) {
+    if (generation === requestGeneration.value) {
+      error.value = errorMessage(err, '读取下一页失败');
+      hasMoreFiles.value = false;
+    }
+  } finally {
+    done();
+  }
 }
 
 function requestSingleFileDiff(filePath: string) {

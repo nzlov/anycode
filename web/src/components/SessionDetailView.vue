@@ -604,7 +604,7 @@
     <q-dialog
       v-model="eventResourceDialogOpen"
       :maximized="isMobileLayout"
-      @hide="clearEventResource"
+      @before-hide="clearEventResource"
     >
       <q-card
         class="event-resource-dialog"
@@ -660,8 +660,15 @@
           class="event-resource-dialog__body"
           :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
         >
+          <div v-if="eventResourceLoading" role="status" class="event-resource-dialog__loading">
+            <q-spinner color="primary" size="32px" />
+            <span>正在加载文件…</span>
+          </div>
+          <q-banner v-else-if="eventResourceError" dense class="text-negative">{{
+            eventResourceError
+          }}</q-banner>
           <DiffWorkspace
-            v-if="eventResourceKind === 'diff'"
+            v-else-if="eventResourceKind === 'diff'"
             v-model="eventDiffState"
             :target="detailDiffTarget"
             :show-file-navigation="false"
@@ -829,6 +836,9 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
 });
 const eventDiffState = ref<DiffWorkspaceState>({ mode: 'single', filePath: '' });
 const eventDiffFile = ref<DiffFile | null>(null);
+const eventResourceLoading = ref(false);
+const eventResourceError = ref('');
+const eventResourceLabel = ref('');
 const eventResourceDialogOpen = ref(false);
 const eventResourceKind = ref<'diff' | 'file'>('file');
 const eventResourceFile = ref<SessionFile | null>(null);
@@ -919,6 +929,7 @@ provideSessionTranscriptEventLoader(sessionId);
 function openSessionEventResource(reference: string, label = '') {
   const parsed = parseSessionEventResourceReference(reference, sessionId);
   if (!parsed) return false;
+  eventResourceLabel.value = label || reference;
   void resolveSessionEventResource(parsed, label);
   return true;
 }
@@ -928,9 +939,16 @@ async function resolveSessionEventResource(
   label: string,
 ) {
   const request = ++eventResourceRequest;
+  eventResourceFile.value = null;
+  eventDiffFile.value = null;
+  eventResourceKind.value = 'file';
+  eventResourceAnnotation.value = null;
+  eventResourceLoading.value = true;
+  eventResourceError.value = '';
+  eventResourceDialogOpen.value = true;
   try {
     if (reference.kind === 'session-file') {
-      const files = await listSessionFiles({ sessionId });
+      const files = await listSessionFiles({ sessionId, fileId: reference.fileId });
       if (request !== eventResourceRequest) return;
       const file = files.find((item) => item.id === reference.fileId);
       if (file) return focusEventArtifact(file);
@@ -944,32 +962,41 @@ async function resolveSessionEventResource(
       throw new Error('临时文件已不存在');
     }
 
-    const [diffResult, artifactResult, workspaceResult] = await Promise.allSettled([
-      getSessionDiffFiles({ sessionId }),
+    const [artifactResult, workspaceResult] = await Promise.allSettled([
       reference.path.startsWith('/')
         ? Promise.resolve([])
         : resolveSessionArtifacts(sessionId, [reference.path]),
       resolveSessionWorkspaceFile(sessionId, reference.path),
     ]);
     if (request !== eventResourceRequest) return;
-    if (diffResult.status === 'fulfilled') {
-      const filePath = matchChangedFilePath(
-        reference.path,
-        diffResult.value.files.map((file) => file.path),
-      );
-      const diffFile = diffResult.value.files.find((file) => file.path === filePath);
-      if (diffFile) return openEventDiff(diffFile);
-    }
     if (artifactResult.status === 'fulfilled' && artifactResult.value[0]?.file) {
       return focusEventArtifact(artifactResult.value[0].file);
     }
-    if (workspaceResult.status === 'fulfilled') {
+    if (workspaceResult.status === 'fulfilled' && workspaceResult.value.previewKind !== 'text') {
       return focusEventArtifact(workspaceResult.value);
     }
+    const diffResult = await getSessionDiffFiles({ sessionId, filePath: reference.path }).catch(
+      (err: unknown) => {
+        if (workspaceResult.status === 'fulfilled') return null;
+        throw err;
+      },
+    );
+    if (request !== eventResourceRequest) return;
+    if (diffResult) {
+      const filePath = matchChangedFilePath(
+        reference.path,
+        diffResult.files.map((file) => file.path),
+      );
+      const diffFile = diffResult.files.find((file) => file.path === filePath);
+      if (diffFile) return openEventDiff(diffFile);
+    }
+    if (workspaceResult.status === 'fulfilled') return focusEventArtifact(workspaceResult.value);
     throw new Error(label ? `无法查看“${label}”` : '无法查看此文件');
   } catch (err) {
     if (request !== eventResourceRequest) return;
-    Notify.create({ type: 'negative', message: errorMessage(err) || '读取文件失败' });
+    eventResourceError.value = errorMessage(err) || '读取文件失败';
+  } finally {
+    if (request === eventResourceRequest) eventResourceLoading.value = false;
   }
 }
 
@@ -1002,12 +1029,19 @@ function focusAnnotatedEventArtifact(file: SessionFile, annotation: PreviewAnnot
 
 async function openPromptAnnotation(annotation: PreviewAnnotationAttachment) {
   const request = ++eventResourceRequest;
+  eventResourceFile.value = null;
+  eventDiffFile.value = null;
+  eventResourceKind.value = 'file';
+  eventResourceAnnotation.value = null;
+  eventResourceLoading.value = true;
+  eventResourceError.value = '';
+  eventResourceDialogOpen.value = true;
   try {
     const fileReference = annotation.fileReferences?.find(
       (reference) => reference.kind === 'session_file' && reference.sessionFileId,
     );
     if (fileReference?.sessionFileId) {
-      const files = await listSessionFiles({ sessionId });
+      const files = await listSessionFiles({ sessionId, fileId: fileReference.sessionFileId });
       if (request !== eventResourceRequest) return;
       const file = files.find((item) => item.id === fileReference.sessionFileId);
       if (file) return focusAnnotatedEventArtifact(file, annotation);
@@ -1016,7 +1050,7 @@ async function openPromptAnnotation(annotation: PreviewAnnotationAttachment) {
       (reference) => reference.kind === 'diff' && reference.filePath,
     );
     if (diffReference?.filePath) {
-      const result = await getSessionDiffFiles({ sessionId });
+      const result = await getSessionDiffFiles({ sessionId, filePath: diffReference.filePath });
       if (request !== eventResourceRequest) return;
       const file = result.files.find((item) => item.path === diffReference.filePath);
       if (file) return openAnnotatedEventDiff(file, annotation);
@@ -1024,7 +1058,9 @@ async function openPromptAnnotation(annotation: PreviewAnnotationAttachment) {
     throw new Error('批注原文件已不存在');
   } catch (err) {
     if (request !== eventResourceRequest) return;
-    Notify.create({ type: 'negative', message: errorMessage(err) || '读取批注原文件失败' });
+    eventResourceError.value = errorMessage(err) || '读取批注原文件失败';
+  } finally {
+    if (request === eventResourceRequest) eventResourceLoading.value = false;
   }
 }
 
@@ -1037,7 +1073,10 @@ function attachmentLabel(attachment: SessionAttachment) {
 const eventResourceTitle = computed(() =>
   eventResourceKind.value === 'diff'
     ? eventDiffState.value.filePath
-    : eventResourceFile.value?.logicalPath || eventResourceFile.value?.filename || '文件预览',
+    : eventResourceFile.value?.logicalPath ||
+      eventResourceFile.value?.filename ||
+      eventResourceLabel.value ||
+      '文件预览',
 );
 
 async function downloadEventResource() {
@@ -1067,6 +1106,9 @@ function fileIcon(file: SessionFile | null) {
 }
 
 function clearEventResource() {
+  eventResourceLoading.value = false;
+  eventResourceError.value = '';
+  eventResourceLabel.value = '';
   eventResourceRequest++;
   eventDiffFile.value = null;
   eventResourceFile.value = null;
@@ -1823,6 +1865,15 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
   flex: 1 1 auto;
   overflow: auto;
   padding: 12px;
+}
+
+.event-resource-dialog__loading {
+  display: flex;
+  min-height: min(260px, 50vh);
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
 .event-resource-dialog__body--diff {

@@ -87,7 +87,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 			if rawEvent.SourceOffset < startOffset || rawEvent.Type == "thread.started" {
 				continue
 			}
-			event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
+			event := prepareHistoryEvent(canonicalCodexEvent(rawEvent), true)
 			event.CodexSessionID = threadID
 			events = append(events, event)
 		}
@@ -99,7 +99,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 			return process.CodexHistoryPage{}, forwardErr
 		}
 		for _, rawEvent := range completed {
-			event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
+			event := prepareHistoryEvent(canonicalCodexEvent(rawEvent), true)
 			event.CodexSessionID = threadID
 			events = append(events, event)
 		}
@@ -108,7 +108,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 		if rawEvent.SourceOffset < startOffset || rawEvent.SourceOffset >= endOffset || rawEvent.Type == "thread.started" {
 			continue
 		}
-		event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
+		event := prepareHistoryEvent(canonicalCodexEvent(rawEvent), true)
 		event.CodexSessionID = threadID
 		events = append(events, event)
 	}
@@ -160,7 +160,7 @@ func (c *Client) HistoryEvent(ctx context.Context, input process.CodexHistoryEve
 		}
 		event := canonicalCodexEvent(rawEvent)
 		event.CodexSessionID = threadID
-		return process.PrepareCodexEventForTranscript(event, false), nil
+		return prepareHistoryEvent(event, false), nil
 	}
 	return process.CodexEvent{}, errors.New("codex history event reference does not match the source record")
 }
@@ -618,4 +618,20 @@ func sessionLinesFromWindow(window []byte, windowOffset int64) []sessionLogLine 
 		windowOffset += int64(newline + 1)
 	}
 	return lines
+}
+
+// GLUE: Keep image candidates inside the history port until the timeline use case
+// resolves archived files; public transcript sanitization runs after that lookup.
+func prepareHistoryEvent(event process.CodexEvent, deferLarge bool) process.CodexEvent {
+	original := event.Content
+	event = process.PrepareCodexEventForTranscript(event, deferLarge)
+	switch content := event.Content.(type) {
+	case process.CodexToolContent:
+		content.Images = original.(process.CodexToolContent).Images
+		event.Content = content
+	case process.CodexMessageContent:
+		content.Images = original.(process.CodexMessageContent).Images
+		event.Content = content
+	}
+	return event
 }

@@ -127,7 +127,12 @@ interface GraphQLSessionCommitHistory {
   };
 }
 
-export async function getSessionDiffFiles(input: { sessionId: string }): Promise<SessionDiff> {
+export async function getSessionDiffFiles(input: {
+  sessionId: string;
+  offset?: number;
+  limit?: number;
+  filePath?: string;
+}): Promise<SessionDiff> {
   const data = await graphqlFetch<
     { sessionDiff: GraphQLSessionDiff },
     { input: { sessionId: string; mode: 'all' } }
@@ -148,7 +153,7 @@ export async function getSessionDiffFiles(input: { sessionId: string }): Promise
       }
     `,
     variables: {
-      input: { sessionId: input.sessionId, mode: 'all' },
+      input: { ...input, mode: 'all' },
     },
   });
 
@@ -156,6 +161,8 @@ export async function getSessionDiffFiles(input: { sessionId: string }): Promise
 }
 
 export async function getBranchDiffFiles(input: {
+  offset?: number;
+  limit?: number;
   projectId: string;
   branch: string;
 }): Promise<SessionDiff> {
@@ -179,7 +186,7 @@ export async function getBranchDiffFiles(input: {
       }
     `,
     variables: {
-      input: { projectId: input.projectId, branch: input.branch, mode: 'all' },
+      input: { ...input, mode: 'all' },
     },
   });
 

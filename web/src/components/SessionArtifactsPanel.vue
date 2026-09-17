@@ -67,75 +67,77 @@
     </q-banner>
 
     <div class="artifact-layout">
-      <q-list bordered separator class="artifact-list">
-        <q-item v-if="loading && files.length === 0">
-          <q-item-section avatar><q-spinner color="primary" size="24px" /></q-item-section>
-          <q-item-section>正在读取临时文件</q-item-section>
-        </q-item>
-        <q-item v-else-if="files.length === 0">
-          <q-item-section avatar><q-icon name="inventory_2" class="text-muted" /></q-item-section>
-          <q-item-section>
-            <q-item-label>暂无临时文件</q-item-label>
-          </q-item-section>
-        </q-item>
-        <q-item
-          v-for="file in files"
-          :key="file.id"
-          clickable
-          class="artifact-list-item"
-          :active="focusedId === file.id || (inlinePreviewActive && selected?.id === file.id)"
-          @click="openPreview(file)"
-        >
-          <q-item-section avatar class="artifact-list-item__avatar">
-            <q-icon :name="fileIcon(file)" color="primary" />
-          </q-item-section>
-          <q-item-section class="artifact-list-item__content">
-            <q-item-label class="artifact-name">{{
-              file.logicalPath || file.filename
-            }}</q-item-label>
-            <q-item-label caption
-              >{{ formatBytes(file.size) }} · {{ file.artifactKind }}</q-item-label
-            >
-          </q-item-section>
-          <q-item-section side class="artifact-list-item__side">
-            <div class="artifact-actions">
-              <q-btn
-                v-if="allowReference"
-                flat
-                round
-                dense
-                icon="add_link"
-                aria-label="引用到当前提示"
-                @click.stop="emit('referenceArtifact', file)"
+      <q-list bordered separator class="artifact-list" :class="{ scroll: inlinePreviewActive }">
+        <q-infinite-scroll :disable="loading || !hasMore" :offset="200" @load="loadNext">
+          <q-item v-if="loading && files.length === 0">
+            <q-item-section avatar><q-spinner color="primary" size="24px" /></q-item-section>
+            <q-item-section>正在读取临时文件</q-item-section>
+          </q-item>
+          <q-item v-else-if="files.length === 0">
+            <q-item-section avatar><q-icon name="inventory_2" class="text-muted" /></q-item-section>
+            <q-item-section>
+              <q-item-label>暂无临时文件</q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-item
+            v-for="file in files"
+            :key="file.id"
+            clickable
+            class="artifact-list-item"
+            :active="focusedId === file.id || (inlinePreviewActive && selected?.id === file.id)"
+            @click="openPreview(file)"
+          >
+            <q-item-section avatar class="artifact-list-item__avatar">
+              <q-icon :name="fileIcon(file)" color="primary" />
+            </q-item-section>
+            <q-item-section class="artifact-list-item__content">
+              <q-item-label class="artifact-name">{{
+                file.logicalPath || file.filename
+              }}</q-item-label>
+              <q-item-label caption
+                >{{ formatBytes(file.size) }} · {{ file.artifactKind }}</q-item-label
               >
-                <q-tooltip>引用到当前提示</q-tooltip>
-              </q-btn>
-              <q-btn
-                flat
-                round
-                dense
-                icon="download"
-                aria-label="下载文件"
-                :loading="downloadingId === file.id"
-                @click.stop="download(file)"
-              >
-                <q-tooltip>下载</q-tooltip>
-              </q-btn>
-              <q-btn
-                flat
-                round
-                dense
-                color="negative"
-                icon="delete_outline"
-                aria-label="删除文件"
-                :loading="deletingId === file.id"
-                @click.stop="confirmDelete(file)"
-              >
-                <q-tooltip>删除</q-tooltip>
-              </q-btn>
-            </div>
-          </q-item-section>
-        </q-item>
+            </q-item-section>
+            <q-item-section side class="artifact-list-item__side">
+              <div class="artifact-actions">
+                <q-btn
+                  v-if="allowReference"
+                  flat
+                  round
+                  dense
+                  icon="add_link"
+                  aria-label="引用到当前提示"
+                  @click.stop="emit('referenceArtifact', file)"
+                >
+                  <q-tooltip>引用到当前提示</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  icon="download"
+                  aria-label="下载文件"
+                  :loading="downloadingId === file.id"
+                  @click.stop="download(file)"
+                >
+                  <q-tooltip>下载</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  color="negative"
+                  icon="delete_outline"
+                  aria-label="删除文件"
+                  :loading="deletingId === file.id"
+                  @click.stop="confirmDelete(file)"
+                >
+                  <q-tooltip>删除</q-tooltip>
+                </q-btn>
+              </div>
+            </q-item-section>
+          </q-item>
+        </q-infinite-scroll>
       </q-list>
 
       <q-card v-if="inlinePreviewActive" flat bordered class="artifact-inline-preview">
@@ -275,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dialog, Notify, useQuasar } from 'quasar';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
@@ -307,6 +309,8 @@ const $q = useQuasar();
 const files = ref<SessionFile[]>([]);
 const panelElement = ref<HTMLElement | null>(null);
 const loading = ref(false);
+const hasMore = ref(false);
+const pageSize = 50;
 const error = ref('');
 const filter = ref('');
 const kind = ref<string | null>(null);
@@ -345,7 +349,7 @@ const sortOptions = [
   { label: '大小', value: 'size_desc' },
 ];
 
-async function load() {
+async function load(append = false) {
   if (!props.sessionId) return;
   const request = ++loadRequest;
   loading.value = true;
@@ -357,8 +361,12 @@ async function load() {
       kind?: string;
       source?: string;
       sort?: string;
+      offset: number;
+      limit: number;
     } = {
       sessionId: props.sessionId,
+      offset: append ? files.value.length : 0,
+      limit: pageSize,
     };
     if (filter.value.trim()) input.filter = filter.value.trim();
     if (kind.value) input.kind = kind.value;
@@ -366,12 +374,30 @@ async function load() {
     if (sort.value) input.sort = sort.value;
     const result = await listSessionFiles(input);
     if (request !== loadRequest) return;
-    files.value = result;
-    if (inlinePreviewActive.value) syncInlineSelection(result);
+    hasMore.value = result.length === pageSize;
+    files.value = append
+      ? [
+          ...files.value,
+          ...result.filter((file) => !files.value.some((existing) => existing.id === file.id)),
+        ]
+      : result;
+    if (inlinePreviewActive.value) syncInlineSelection(files.value);
   } catch (err) {
-    if (request === loadRequest) error.value = errorMessage(err, '读取临时文件失败');
+    if (request === loadRequest) {
+      error.value = errorMessage(err, '读取临时文件失败');
+      hasMore.value = false;
+    }
   } finally {
+    await nextTick();
     if (request === loadRequest) loading.value = false;
+  }
+}
+
+async function loadNext(_index: number, done: () => void) {
+  try {
+    if (!loading.value && hasMore.value) await load(true);
+  } finally {
+    done();
   }
 }
 

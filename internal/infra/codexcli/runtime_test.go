@@ -1138,3 +1138,31 @@ func TestNewUsesCODEXBIN(t *testing.T) {
 }
 
 var _ = strings.TrimSpace
+
+func TestHistoryPreservesToolImagesForArchivedFileResolution(t *testing.T) {
+	for _, kind := range []string{"custom_tool_call", "function_call"} {
+		t.Run(kind, func(t *testing.T) {
+			home := t.TempDir()
+			body := `{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"` + kind + `","call_id":"image-1","name":"view_image","input":"{}","arguments":"{}"}}` + "\n" +
+				`{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"` + kind + `_output","call_id":"image-1","output":[{"type":"input_image","image_url":"data:image/png;base64,cG5n"}]}}`
+			writeSessionLog(t, home, "images", body)
+			client := New("codex", WithCodexHome(home))
+			page, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "images"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			event := page.Events[len(page.Events)-1]
+			content := event.Content.(process.CodexToolContent)
+			if len(content.Images) != 1 || content.Images[0].Source != "data:image/png;base64,cG5n" {
+				t.Fatalf("images: %#v", content.Images)
+			}
+			loaded, err := client.HistoryEvent(context.Background(), process.CodexHistoryEventInput{ThreadID: "images", EventID: event.EventID, ByteOffset: event.SourceOffset})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded.Content.(process.CodexToolContent).Images) != 1 {
+				t.Fatal("detail lost image")
+			}
+		})
+	}
+}

@@ -69,7 +69,7 @@ func (f *fakeStatisticsUseCase) Dashboard(_ context.Context, query statisticsapp
 	return f.dashboard, nil
 }
 
-func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
+func TestQuerySessionFilesDefaultsToBoundedPage(t *testing.T) {
 	artifacts := &fakeArtifactUseCase{files: []sessiondomain.SessionFile{{ID: "artifact-1", SessionID: "session-1"}}}
 	files, err := NewResolver(UseCases{Artifacts: artifacts}).Query().SessionFiles(context.Background(), model.ListSessionFilesInput{
 		SessionID: "session-1",
@@ -77,7 +77,7 @@ func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if artifacts.query.SessionID != "session-1" {
+	if artifacts.query.SessionID != "session-1" || artifacts.query.Limit != 50 {
 		t.Fatalf("artifact query = %#v", artifacts.query)
 	}
 	if len(files) != 1 || files[0].ID != "artifact-1" {
@@ -212,10 +212,12 @@ func TestCleanupSessionsMapsFilterInput(t *testing.T) {
 
 type fakeArtifactUseCase struct {
 	artifactapp.UseCase
-	query        sessiondomain.ArtifactQuery
-	files        []sessiondomain.SessionFile
-	resolvePaths []string
-	resolved     []sessiondomain.SessionFile
+	query          sessiondomain.ArtifactQuery
+	files          []sessiondomain.SessionFile
+	resolvePaths   []string
+	resolveIDs     []sessiondomain.SessionFileID
+	resolveSession sessiondomain.ID
+	resolved       []sessiondomain.SessionFile
 }
 
 func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, error) {
@@ -1826,4 +1828,22 @@ type fakeTunnelEventUseCase struct {
 
 func (f fakeTunnelEventUseCase) TunnelUpdates(context.Context) (<-chan tunneleventapp.DTO, error) {
 	return f.updates, nil
+}
+
+func (f *fakeArtifactUseCase) ResolveIDs(_ context.Context, sessionID sessiondomain.ID, ids []sessiondomain.SessionFileID) ([]sessiondomain.SessionFile, error) {
+	f.resolveSession = sessionID
+	f.resolveIDs = ids
+	return f.resolved, nil
+}
+
+func TestQuerySessionFileResolvesOnlyRequestedID(t *testing.T) {
+	artifacts := &fakeArtifactUseCase{resolved: []sessiondomain.SessionFile{{ID: "target", SessionID: "session-1"}}}
+	id := "target"
+	got, err := NewResolver(UseCases{Artifacts: artifacts}).Query().SessionFiles(context.Background(), model.ListSessionFilesInput{SessionID: "session-1", FileID: &id})
+	if err != nil || len(got) != 1 || got[0].ID != id {
+		t.Fatalf("file: %#v %v", got, err)
+	}
+	if artifacts.query.SessionID != "" || artifacts.resolveSession != "session-1" || !reflect.DeepEqual(artifacts.resolveIDs, []sessiondomain.SessionFileID{"target"}) {
+		t.Fatalf("unexpected lookup: %#v", artifacts)
+	}
 }

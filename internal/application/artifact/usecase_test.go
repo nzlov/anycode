@@ -279,3 +279,28 @@ func (r *artifactCountRepository) UpdateArtifactCount(_ context.Context, session
 	r.count = count
 	return nil
 }
+
+func TestListPagesAfterFilteringAndKeepsTotalCount(t *testing.T) {
+	ctx := context.Background()
+	files := filestore.New(t.TempDir())
+	root, err := files.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.txt", "b.txt", "c.txt", "other.md"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for offset, want := range [][]string{{"a.txt", "b.txt"}, {"c.txt"}, {}} {
+		page, total, err := files.ListArtifacts(ctx, session.ArtifactQuery{SessionID: "session-1", Filter: ".txt", Sort: "filename_asc", Offset: offset * 2, Limit: 2})
+		if err != nil || total != 4 || len(page) != len(want) {
+			t.Fatalf("page %d = %#v, total %d, err %v", offset, page, total, err)
+		}
+		for i, name := range want {
+			if page[i].Filename != name {
+				t.Fatalf("file = %s want %s", page[i].Filename, name)
+			}
+		}
+	}
+}

@@ -55,6 +55,8 @@ type Attachment struct {
 }
 
 type BranchDiffInput struct {
+	Offset        *int    `json:"offset,omitempty"`
+	Limit         *int    `json:"limit,omitempty"`
 	ProjectID     string  `json:"projectId"`
 	Branch        string  `json:"branch"`
 	Mode          *string `json:"mode,omitempty"`
@@ -237,6 +239,9 @@ type ListQuickCommandsInput struct {
 }
 
 type ListSessionFilesInput struct {
+	FileID    *string `json:"fileId,omitempty"`
+	Offset    *int    `json:"offset,omitempty"`
+	Limit     *int    `json:"limit,omitempty"`
 	SessionID string  `json:"sessionId"`
 	Kind      *string `json:"kind,omitempty"`
 	Source    *string `json:"source,omitempty"`
@@ -739,6 +744,8 @@ type SessionDiff struct {
 }
 
 type SessionDiffInput struct {
+	Offset        *int    `json:"offset,omitempty"`
+	Limit         *int    `json:"limit,omitempty"`
 	SessionID     string  `json:"sessionId"`
 	Mode          *string `json:"mode,omitempty"`
 	FilePath      *string `json:"filePath,omitempty"`

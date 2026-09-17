@@ -33,6 +33,9 @@ export type SessionFilePreviewData = Pick<
 >;
 
 export interface ListSessionFilesInput {
+  fileId?: string;
+  offset?: number;
+  limit?: number;
   sessionId: string;
   kind?: string;
   source?: string;

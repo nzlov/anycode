@@ -548,6 +548,9 @@ input ResolveSessionArtifactsInput {
 }
 
 input ListSessionFilesInput {
+  fileId: ID
+  offset: Int
+  limit: Int
   sessionId: ID!
   kind: String
   source: String
@@ -1211,6 +1214,8 @@ input ListTranscriptEventsInput {
 }
 
 input SessionDiffInput {
+  offset: Int
+  limit: Int
   sessionId: ID!
   mode: String
   filePath: String
@@ -1219,6 +1224,8 @@ input SessionDiffInput {
 }
 
 input BranchDiffInput {
+  offset: Int
+  limit: Int
   projectId: ID!
   branch: String!
   mode: String

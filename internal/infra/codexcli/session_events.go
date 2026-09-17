@@ -1299,6 +1299,7 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 			normalized["status"] = "completed"
 		}
 		normalized["output"] = result.output
+		normalized["content"] = payload["output"]
 		if len(result.commandOutputs) > 0 {
 			normalized["commandOutputs"] = commandOutputValues(result.commandOutputs)
 		}
@@ -1370,6 +1371,7 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		normalized := normalizedItem("custom_tool_call", "completed")
 		result := normalizeCustomToolOutput(payload["output"])
 		normalized["output"] = result.output
+		normalized["content"] = payload["output"]
 		if len(result.commandOutputs) > 0 {
 			normalized["commandOutputs"] = commandOutputValues(result.commandOutputs)
 		}

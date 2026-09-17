@@ -205,6 +205,24 @@ func TestGetSessionDiffReturnsAllChangedFiles(t *testing.T) {
 	if len(got.Files) != len(files) || got.Files[100].Path != "file-100.go" {
 		t.Fatalf("GetSessionDiff() returned %d files, want all %d", len(got.Files), len(files))
 	}
+	for _, offset := range []int{0, 50, 100, 150} {
+		page, err := service.GetSessionDiff(context.Background(), SessionDiffInput{SessionID: "session-1", Offset: offset, Limit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := min(50, max(101-offset, 0))
+		if len(page.Files) != want {
+			t.Fatalf("offset %d: got %d want %d", offset, len(page.Files), want)
+		}
+		if want > 0 && page.Files[0].Path != files[offset].Path {
+			t.Fatal("wrong page start")
+		}
+	}
+	exact, err := service.GetSessionDiff(context.Background(), SessionDiffInput{SessionID: "session-1", FilePath: "file-100.go"})
+	if err != nil || len(exact.Files) != 1 || exact.Files[0].Path != "file-100.go" {
+		t.Fatalf("exact lookup: %#v %v", exact, err)
+	}
+
 }
 
 func TestGetSessionDiffReadsSelectedFile(t *testing.T) {

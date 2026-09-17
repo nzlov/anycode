@@ -56,7 +56,7 @@ const error = ref('');
 
 onMounted(async () => {
   try {
-    const files = await listSessionFiles({ sessionId: sessionId.value });
+    const files = await listSessionFiles({ sessionId: sessionId.value, fileId: fileId.value });
     file.value = files.find((item) => item.id === fileId.value) ?? null;
     if (!file.value) error.value = '文件已不存在';
   } catch (err) {

@@ -542,6 +542,8 @@ func (f SessionFile) IsArtifact() bool {
 type SessionAttachment = SessionFile
 
 type ArtifactQuery struct {
+	Offset    int
+	Limit     int
 	SessionID ID
 	Kind      ArtifactKind
 	Source    AttachmentSourceType

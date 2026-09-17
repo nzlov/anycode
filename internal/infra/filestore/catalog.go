@@ -338,6 +338,10 @@ func (s *Store) ListArtifacts(ctx context.Context, query session.ArtifactQuery) 
 			return artifacts[i].CreatedAt.After(artifacts[j].CreatedAt)
 		}
 	})
+	if query.Limit > 0 {
+		start := min(max(query.Offset, 0), len(artifacts))
+		artifacts = artifacts[start : start+min(query.Limit, len(artifacts)-start)]
+	}
 	return artifacts, total, nil
 }
 

@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	mcpdomain "github.com/nzlov/anycode/internal/domain/mcp"
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
@@ -26,6 +25,7 @@ import (
 	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
+	mcpdomain "github.com/nzlov/anycode/internal/domain/mcp"
 	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
@@ -1123,6 +1123,8 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 		IncludeAllDiff:  diffFieldSelected(ctx, "allDiff"),
 		ContextBefore:   intValue(input.ContextBefore, 0),
 		ContextAfter:    intValue(input.ContextAfter, 0),
+		Offset:          max(intValue(input.Offset, 0), 0),
+		Limit:           min(max(intValue(input.Limit, 0), 0), 100),
 	})
 	if err != nil {
 		return nil, err
@@ -1144,6 +1146,8 @@ func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffIn
 		IncludeAllDiff:  diffFieldSelected(ctx, "allDiff"),
 		ContextBefore:   intValue(input.ContextBefore, 0),
 		ContextAfter:    intValue(input.ContextAfter, 0),
+		Offset:          max(intValue(input.Offset, 0), 0),
+		Limit:           min(max(intValue(input.Limit, 0), 0), 100),
 	})
 	if err != nil {
 		return nil, err
@@ -1212,7 +1216,20 @@ func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessio
 	if r.UseCases.Artifacts == nil {
 		return nil, missingUseCase("artifacts")
 	}
+	if input.FileID != nil {
+		files, err := r.UseCases.Artifacts.ResolveIDs(ctx, sessiondomain.ID(input.SessionID), []sessiondomain.SessionFileID{sessiondomain.SessionFileID(*input.FileID)})
+		if err != nil {
+			return nil, err
+		}
+		items := make([]*model.SessionFile, 0, len(files))
+		for _, file := range files {
+			items = append(items, mapSessionFile(file))
+		}
+		return items, nil
+	}
 	files, err := r.UseCases.Artifacts.List(ctx, sessiondomain.ArtifactQuery{
+		Offset:    max(intValue(input.Offset, 0), 0),
+		Limit:     min(max(intValue(input.Limit, 50), 1), 100),
 		SessionID: sessiondomain.ID(input.SessionID),
 		Kind:      sessiondomain.ArtifactKind(stringValue(input.Kind, "")),
 		Source:    sessiondomain.AttachmentSourceType(stringValue(input.Source, "")),

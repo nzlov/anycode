@@ -55,14 +55,15 @@ test('artifact surfaces consistently use the temporary file label', () => {
   assert.doesNotMatch(surfaces, /产物/);
 });
 
-test('session artifacts use one unpaginated latest-version query and unified file actions', () => {
+test('session artifacts use paginated latest-version queries and unified file actions', () => {
   assert.match(panel, /listSessionFiles\(input\)/);
   assert.match(panel, /input\.kind = kind\.value/);
   assert.match(panel, /input\.source = source\.value/);
   assert.doesNotMatch(panel, /mcp_artifact|published_artifact|reconciled_artifact/);
   assert.match(panel, /input\.sort = sort\.value/);
-  assert.doesNotMatch(panel, /<AppPagination|pageSize|pageMax|result\.pageInfo/);
-  assert.match(panel, /files\.value = result/);
+  assert.match(panel, /<q-infinite-scroll/);
+  assert.match(panel, /offset: append \? files\.value\.length : 0/);
+  assert.match(panel, /files\.value = append/);
   assert.match(service, /sessionFiles\(input: \$input\) \{ \$\{sessionFileFields\} \}/);
   assert.doesNotMatch(service, /sourceId/);
   assert.doesNotMatch(sessionsService, /sourceId/);
