@@ -15,6 +15,11 @@ export interface SessionSideRun {
   codexSessionId: string;
   processRunId: string;
   turnId: string;
+  prompt: string;
+  followUps: string[];
+  status: 'running' | 'completed' | 'failed';
+  error: string;
+  events: TranscriptEvent[];
 }
 
 export interface SessionSideConfig {
@@ -27,6 +32,35 @@ export interface SessionSideMessage {
   prompt: string;
   files: File[];
   config: SessionSideConfig;
+}
+
+const sessionSideFields = `
+  codexSessionId
+  processRunId
+  turnId
+  prompt
+  followUps
+  status
+  error
+  events { ${transcriptEventFields} }
+`;
+
+type GraphQLSessionSideRun = Omit<SessionSideRun, 'events'> & { events: GraphQLTranscriptEvent[] };
+
+function normalizeSessionSide(run: GraphQLSessionSideRun): SessionSideRun {
+  return { ...run, events: run.events.map(normalizeTranscriptEvent) };
+}
+
+export async function listSessionSides(sessionId: string) {
+  const data = await graphqlFetch<{ sessionSides: GraphQLSessionSideRun[] }, { sessionId: string }>({
+    query: `
+      query SessionSides($sessionId: ID!) {
+        sessionSides(sessionId: $sessionId) { ${sessionSideFields} }
+      }
+    `,
+    variables: { sessionId },
+  });
+  return data.sessionSides.map(normalizeSessionSide);
 }
 
 async function sendSideMessage<TData>(
@@ -55,16 +89,16 @@ async function sendSideMessage<TData>(
 }
 
 export async function startSessionSide(sessionId: string, message: SessionSideMessage) {
-  const data = await sendSideMessage<{ startSessionSide: SessionSideRun }>(
+  const data = await sendSideMessage<{ startSessionSide: GraphQLSessionSideRun }>(
     `
       mutation StartSessionSide($input: StartSessionSideInput!) {
-        startSessionSide(input: $input) { codexSessionId processRunId turnId }
+        startSessionSide(input: $input) { ${sessionSideFields} }
       }
     `,
     { sessionId, prompt: message.prompt, config: message.config },
     message.files,
   );
-  return data.startSessionSide;
+  return normalizeSessionSide(data.startSessionSide);
 }
 
 export async function continueSessionSide(
@@ -72,16 +106,16 @@ export async function continueSessionSide(
   codexSessionId: string,
   message: SessionSideMessage,
 ) {
-  const data = await sendSideMessage<{ continueSessionSide: SessionSideRun }>(
+  const data = await sendSideMessage<{ continueSessionSide: GraphQLSessionSideRun }>(
     `
       mutation ContinueSessionSide($input: ContinueSessionSideInput!) {
-        continueSessionSide(input: $input) { codexSessionId processRunId turnId }
+        continueSessionSide(input: $input) { ${sessionSideFields} }
       }
     `,
     { sessionId, codexSessionId, prompt: message.prompt, config: message.config },
     message.files,
   );
-  return data.continueSessionSide;
+  return normalizeSessionSide(data.continueSessionSide);
 }
 
 export async function stopSessionSide(processRunId: string) {

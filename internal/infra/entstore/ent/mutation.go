@@ -35,6 +35,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -69,6 +71,8 @@ const (
 	TypeQuestionRequest           = "QuestionRequest"
 	TypeQuickCommand              = "QuickCommand"
 	TypeSession                   = "Session"
+	TypeSessionSide               = "SessionSide"
+	TypeSessionSideEvent          = "SessionSideEvent"
 	TypeStagedAttachment          = "StagedAttachment"
 	TypeSystemConfiguration       = "SystemConfiguration"
 	TypeWorkflowDefinition        = "WorkflowDefinition"
@@ -18134,6 +18138,1925 @@ func (m *SessionMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *SessionMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Session edge %s", name)
+}
+
+// SessionSideMutation represents an operation that mutates the SessionSide nodes in the graph.
+type SessionSideMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *string
+	session_id       *string
+	process_run_id   *string
+	turn_id          *string
+	prompt           *string
+	follow_ups       *[]string
+	appendfollow_ups []string
+	status           *string
+	error            *string
+	turn_index       *int
+	addturn_index    *int
+	created_at       *time.Time
+	updated_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*SessionSide, error)
+	predicates       []predicate.SessionSide
+}
+
+var _ ent.Mutation = (*SessionSideMutation)(nil)
+
+// sessionsideOption allows management of the mutation configuration using functional options.
+type sessionsideOption func(*SessionSideMutation)
+
+// newSessionSideMutation creates new mutation for the SessionSide entity.
+func newSessionSideMutation(c config, op Op, opts ...sessionsideOption) *SessionSideMutation {
+	m := &SessionSideMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSessionSide,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSessionSideID sets the ID field of the mutation.
+func withSessionSideID(id string) sessionsideOption {
+	return func(m *SessionSideMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SessionSide
+		)
+		m.oldValue = func(ctx context.Context) (*SessionSide, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SessionSide.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSessionSide sets the old SessionSide of the mutation.
+func withSessionSide(node *SessionSide) sessionsideOption {
+	return func(m *SessionSideMutation) {
+		m.oldValue = func(context.Context) (*SessionSide, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SessionSideMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SessionSideMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SessionSide entities.
+func (m *SessionSideMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SessionSideMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SessionSideMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SessionSide.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SessionSideMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SessionSideMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SessionSideMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (m *SessionSideMutation) SetProcessRunID(s string) {
+	m.process_run_id = &s
+}
+
+// ProcessRunID returns the value of the "process_run_id" field in the mutation.
+func (m *SessionSideMutation) ProcessRunID() (r string, exists bool) {
+	v := m.process_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcessRunID returns the old "process_run_id" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldProcessRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcessRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcessRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcessRunID: %w", err)
+	}
+	return oldValue.ProcessRunID, nil
+}
+
+// ResetProcessRunID resets all changes to the "process_run_id" field.
+func (m *SessionSideMutation) ResetProcessRunID() {
+	m.process_run_id = nil
+}
+
+// SetTurnID sets the "turn_id" field.
+func (m *SessionSideMutation) SetTurnID(s string) {
+	m.turn_id = &s
+}
+
+// TurnID returns the value of the "turn_id" field in the mutation.
+func (m *SessionSideMutation) TurnID() (r string, exists bool) {
+	v := m.turn_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTurnID returns the old "turn_id" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldTurnID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTurnID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTurnID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTurnID: %w", err)
+	}
+	return oldValue.TurnID, nil
+}
+
+// ResetTurnID resets all changes to the "turn_id" field.
+func (m *SessionSideMutation) ResetTurnID() {
+	m.turn_id = nil
+}
+
+// SetPrompt sets the "prompt" field.
+func (m *SessionSideMutation) SetPrompt(s string) {
+	m.prompt = &s
+}
+
+// Prompt returns the value of the "prompt" field in the mutation.
+func (m *SessionSideMutation) Prompt() (r string, exists bool) {
+	v := m.prompt
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPrompt returns the old "prompt" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldPrompt(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPrompt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPrompt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPrompt: %w", err)
+	}
+	return oldValue.Prompt, nil
+}
+
+// ResetPrompt resets all changes to the "prompt" field.
+func (m *SessionSideMutation) ResetPrompt() {
+	m.prompt = nil
+}
+
+// SetFollowUps sets the "follow_ups" field.
+func (m *SessionSideMutation) SetFollowUps(s []string) {
+	m.follow_ups = &s
+	m.appendfollow_ups = nil
+}
+
+// FollowUps returns the value of the "follow_ups" field in the mutation.
+func (m *SessionSideMutation) FollowUps() (r []string, exists bool) {
+	v := m.follow_ups
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFollowUps returns the old "follow_ups" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldFollowUps(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFollowUps is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFollowUps requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFollowUps: %w", err)
+	}
+	return oldValue.FollowUps, nil
+}
+
+// AppendFollowUps adds s to the "follow_ups" field.
+func (m *SessionSideMutation) AppendFollowUps(s []string) {
+	m.appendfollow_ups = append(m.appendfollow_ups, s...)
+}
+
+// AppendedFollowUps returns the list of values that were appended to the "follow_ups" field in this mutation.
+func (m *SessionSideMutation) AppendedFollowUps() ([]string, bool) {
+	if len(m.appendfollow_ups) == 0 {
+		return nil, false
+	}
+	return m.appendfollow_ups, true
+}
+
+// ResetFollowUps resets all changes to the "follow_ups" field.
+func (m *SessionSideMutation) ResetFollowUps() {
+	m.follow_ups = nil
+	m.appendfollow_ups = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *SessionSideMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *SessionSideMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *SessionSideMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetError sets the "error" field.
+func (m *SessionSideMutation) SetError(s string) {
+	m.error = &s
+}
+
+// Error returns the value of the "error" field in the mutation.
+func (m *SessionSideMutation) Error() (r string, exists bool) {
+	v := m.error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldError returns the old "error" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldError: %w", err)
+	}
+	return oldValue.Error, nil
+}
+
+// ResetError resets all changes to the "error" field.
+func (m *SessionSideMutation) ResetError() {
+	m.error = nil
+}
+
+// SetTurnIndex sets the "turn_index" field.
+func (m *SessionSideMutation) SetTurnIndex(i int) {
+	m.turn_index = &i
+	m.addturn_index = nil
+}
+
+// TurnIndex returns the value of the "turn_index" field in the mutation.
+func (m *SessionSideMutation) TurnIndex() (r int, exists bool) {
+	v := m.turn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTurnIndex returns the old "turn_index" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldTurnIndex(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTurnIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTurnIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTurnIndex: %w", err)
+	}
+	return oldValue.TurnIndex, nil
+}
+
+// AddTurnIndex adds i to the "turn_index" field.
+func (m *SessionSideMutation) AddTurnIndex(i int) {
+	if m.addturn_index != nil {
+		*m.addturn_index += i
+	} else {
+		m.addturn_index = &i
+	}
+}
+
+// AddedTurnIndex returns the value that was added to the "turn_index" field in this mutation.
+func (m *SessionSideMutation) AddedTurnIndex() (r int, exists bool) {
+	v := m.addturn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTurnIndex resets all changes to the "turn_index" field.
+func (m *SessionSideMutation) ResetTurnIndex() {
+	m.turn_index = nil
+	m.addturn_index = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SessionSideMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SessionSideMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SessionSideMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *SessionSideMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *SessionSideMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the SessionSide entity.
+// If the SessionSide object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *SessionSideMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the SessionSideMutation builder.
+func (m *SessionSideMutation) Where(ps ...predicate.SessionSide) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SessionSideMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SessionSideMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SessionSide, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SessionSideMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SessionSideMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SessionSide).
+func (m *SessionSideMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SessionSideMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.session_id != nil {
+		fields = append(fields, sessionside.FieldSessionID)
+	}
+	if m.process_run_id != nil {
+		fields = append(fields, sessionside.FieldProcessRunID)
+	}
+	if m.turn_id != nil {
+		fields = append(fields, sessionside.FieldTurnID)
+	}
+	if m.prompt != nil {
+		fields = append(fields, sessionside.FieldPrompt)
+	}
+	if m.follow_ups != nil {
+		fields = append(fields, sessionside.FieldFollowUps)
+	}
+	if m.status != nil {
+		fields = append(fields, sessionside.FieldStatus)
+	}
+	if m.error != nil {
+		fields = append(fields, sessionside.FieldError)
+	}
+	if m.turn_index != nil {
+		fields = append(fields, sessionside.FieldTurnIndex)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sessionside.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, sessionside.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SessionSideMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sessionside.FieldSessionID:
+		return m.SessionID()
+	case sessionside.FieldProcessRunID:
+		return m.ProcessRunID()
+	case sessionside.FieldTurnID:
+		return m.TurnID()
+	case sessionside.FieldPrompt:
+		return m.Prompt()
+	case sessionside.FieldFollowUps:
+		return m.FollowUps()
+	case sessionside.FieldStatus:
+		return m.Status()
+	case sessionside.FieldError:
+		return m.Error()
+	case sessionside.FieldTurnIndex:
+		return m.TurnIndex()
+	case sessionside.FieldCreatedAt:
+		return m.CreatedAt()
+	case sessionside.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SessionSideMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sessionside.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sessionside.FieldProcessRunID:
+		return m.OldProcessRunID(ctx)
+	case sessionside.FieldTurnID:
+		return m.OldTurnID(ctx)
+	case sessionside.FieldPrompt:
+		return m.OldPrompt(ctx)
+	case sessionside.FieldFollowUps:
+		return m.OldFollowUps(ctx)
+	case sessionside.FieldStatus:
+		return m.OldStatus(ctx)
+	case sessionside.FieldError:
+		return m.OldError(ctx)
+	case sessionside.FieldTurnIndex:
+		return m.OldTurnIndex(ctx)
+	case sessionside.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case sessionside.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SessionSide field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionSideMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sessionside.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sessionside.FieldProcessRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcessRunID(v)
+		return nil
+	case sessionside.FieldTurnID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTurnID(v)
+		return nil
+	case sessionside.FieldPrompt:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPrompt(v)
+		return nil
+	case sessionside.FieldFollowUps:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFollowUps(v)
+		return nil
+	case sessionside.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case sessionside.FieldError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetError(v)
+		return nil
+	case sessionside.FieldTurnIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTurnIndex(v)
+		return nil
+	case sessionside.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case sessionside.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSide field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SessionSideMutation) AddedFields() []string {
+	var fields []string
+	if m.addturn_index != nil {
+		fields = append(fields, sessionside.FieldTurnIndex)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SessionSideMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sessionside.FieldTurnIndex:
+		return m.AddedTurnIndex()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionSideMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sessionside.FieldTurnIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTurnIndex(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSide numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SessionSideMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SessionSideMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SessionSideMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SessionSide nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SessionSideMutation) ResetField(name string) error {
+	switch name {
+	case sessionside.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sessionside.FieldProcessRunID:
+		m.ResetProcessRunID()
+		return nil
+	case sessionside.FieldTurnID:
+		m.ResetTurnID()
+		return nil
+	case sessionside.FieldPrompt:
+		m.ResetPrompt()
+		return nil
+	case sessionside.FieldFollowUps:
+		m.ResetFollowUps()
+		return nil
+	case sessionside.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case sessionside.FieldError:
+		m.ResetError()
+		return nil
+	case sessionside.FieldTurnIndex:
+		m.ResetTurnIndex()
+		return nil
+	case sessionside.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case sessionside.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSide field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SessionSideMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SessionSideMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SessionSideMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SessionSideMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SessionSideMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SessionSideMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SessionSideMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SessionSide unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SessionSideMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SessionSide edge %s", name)
+}
+
+// SessionSideEventMutation represents an operation that mutates the SessionSideEvent nodes in the graph.
+type SessionSideEventMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *string
+	side_id        *string
+	session_id     *string
+	process_run_id *string
+	event_id       *string
+	_type          *string
+	correlation_id *string
+	turn_id        *string
+	phase          *string
+	content_kind   *string
+	content        *map[string]interface{}
+	turn_index     *int
+	addturn_index  *int
+	sequence       *int64
+	addsequence    *int64
+	created_at     *time.Time
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*SessionSideEvent, error)
+	predicates     []predicate.SessionSideEvent
+}
+
+var _ ent.Mutation = (*SessionSideEventMutation)(nil)
+
+// sessionsideeventOption allows management of the mutation configuration using functional options.
+type sessionsideeventOption func(*SessionSideEventMutation)
+
+// newSessionSideEventMutation creates new mutation for the SessionSideEvent entity.
+func newSessionSideEventMutation(c config, op Op, opts ...sessionsideeventOption) *SessionSideEventMutation {
+	m := &SessionSideEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSessionSideEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSessionSideEventID sets the ID field of the mutation.
+func withSessionSideEventID(id string) sessionsideeventOption {
+	return func(m *SessionSideEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SessionSideEvent
+		)
+		m.oldValue = func(ctx context.Context) (*SessionSideEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SessionSideEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSessionSideEvent sets the old SessionSideEvent of the mutation.
+func withSessionSideEvent(node *SessionSideEvent) sessionsideeventOption {
+	return func(m *SessionSideEventMutation) {
+		m.oldValue = func(context.Context) (*SessionSideEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SessionSideEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SessionSideEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SessionSideEvent entities.
+func (m *SessionSideEventMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SessionSideEventMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SessionSideEventMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SessionSideEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSideID sets the "side_id" field.
+func (m *SessionSideEventMutation) SetSideID(s string) {
+	m.side_id = &s
+}
+
+// SideID returns the value of the "side_id" field in the mutation.
+func (m *SessionSideEventMutation) SideID() (r string, exists bool) {
+	v := m.side_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSideID returns the old "side_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldSideID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSideID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSideID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSideID: %w", err)
+	}
+	return oldValue.SideID, nil
+}
+
+// ResetSideID resets all changes to the "side_id" field.
+func (m *SessionSideEventMutation) ResetSideID() {
+	m.side_id = nil
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SessionSideEventMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SessionSideEventMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SessionSideEventMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (m *SessionSideEventMutation) SetProcessRunID(s string) {
+	m.process_run_id = &s
+}
+
+// ProcessRunID returns the value of the "process_run_id" field in the mutation.
+func (m *SessionSideEventMutation) ProcessRunID() (r string, exists bool) {
+	v := m.process_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcessRunID returns the old "process_run_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldProcessRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcessRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcessRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcessRunID: %w", err)
+	}
+	return oldValue.ProcessRunID, nil
+}
+
+// ResetProcessRunID resets all changes to the "process_run_id" field.
+func (m *SessionSideEventMutation) ResetProcessRunID() {
+	m.process_run_id = nil
+}
+
+// SetEventID sets the "event_id" field.
+func (m *SessionSideEventMutation) SetEventID(s string) {
+	m.event_id = &s
+}
+
+// EventID returns the value of the "event_id" field in the mutation.
+func (m *SessionSideEventMutation) EventID() (r string, exists bool) {
+	v := m.event_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventID returns the old "event_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldEventID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventID: %w", err)
+	}
+	return oldValue.EventID, nil
+}
+
+// ResetEventID resets all changes to the "event_id" field.
+func (m *SessionSideEventMutation) ResetEventID() {
+	m.event_id = nil
+}
+
+// SetType sets the "type" field.
+func (m *SessionSideEventMutation) SetType(s string) {
+	m._type = &s
+}
+
+// GetType returns the value of the "type" field in the mutation.
+func (m *SessionSideEventMutation) GetType() (r string, exists bool) {
+	v := m._type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldType returns the old "type" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldType: %w", err)
+	}
+	return oldValue.Type, nil
+}
+
+// ResetType resets all changes to the "type" field.
+func (m *SessionSideEventMutation) ResetType() {
+	m._type = nil
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (m *SessionSideEventMutation) SetCorrelationID(s string) {
+	m.correlation_id = &s
+}
+
+// CorrelationID returns the value of the "correlation_id" field in the mutation.
+func (m *SessionSideEventMutation) CorrelationID() (r string, exists bool) {
+	v := m.correlation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrelationID returns the old "correlation_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldCorrelationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrelationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrelationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrelationID: %w", err)
+	}
+	return oldValue.CorrelationID, nil
+}
+
+// ResetCorrelationID resets all changes to the "correlation_id" field.
+func (m *SessionSideEventMutation) ResetCorrelationID() {
+	m.correlation_id = nil
+}
+
+// SetTurnID sets the "turn_id" field.
+func (m *SessionSideEventMutation) SetTurnID(s string) {
+	m.turn_id = &s
+}
+
+// TurnID returns the value of the "turn_id" field in the mutation.
+func (m *SessionSideEventMutation) TurnID() (r string, exists bool) {
+	v := m.turn_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTurnID returns the old "turn_id" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldTurnID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTurnID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTurnID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTurnID: %w", err)
+	}
+	return oldValue.TurnID, nil
+}
+
+// ResetTurnID resets all changes to the "turn_id" field.
+func (m *SessionSideEventMutation) ResetTurnID() {
+	m.turn_id = nil
+}
+
+// SetPhase sets the "phase" field.
+func (m *SessionSideEventMutation) SetPhase(s string) {
+	m.phase = &s
+}
+
+// Phase returns the value of the "phase" field in the mutation.
+func (m *SessionSideEventMutation) Phase() (r string, exists bool) {
+	v := m.phase
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPhase returns the old "phase" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldPhase(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPhase is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPhase requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPhase: %w", err)
+	}
+	return oldValue.Phase, nil
+}
+
+// ResetPhase resets all changes to the "phase" field.
+func (m *SessionSideEventMutation) ResetPhase() {
+	m.phase = nil
+}
+
+// SetContentKind sets the "content_kind" field.
+func (m *SessionSideEventMutation) SetContentKind(s string) {
+	m.content_kind = &s
+}
+
+// ContentKind returns the value of the "content_kind" field in the mutation.
+func (m *SessionSideEventMutation) ContentKind() (r string, exists bool) {
+	v := m.content_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentKind returns the old "content_kind" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldContentKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentKind: %w", err)
+	}
+	return oldValue.ContentKind, nil
+}
+
+// ResetContentKind resets all changes to the "content_kind" field.
+func (m *SessionSideEventMutation) ResetContentKind() {
+	m.content_kind = nil
+}
+
+// SetContent sets the "content" field.
+func (m *SessionSideEventMutation) SetContent(value map[string]interface{}) {
+	m.content = &value
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *SessionSideEventMutation) Content() (r map[string]interface{}, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldContent(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *SessionSideEventMutation) ResetContent() {
+	m.content = nil
+}
+
+// SetTurnIndex sets the "turn_index" field.
+func (m *SessionSideEventMutation) SetTurnIndex(i int) {
+	m.turn_index = &i
+	m.addturn_index = nil
+}
+
+// TurnIndex returns the value of the "turn_index" field in the mutation.
+func (m *SessionSideEventMutation) TurnIndex() (r int, exists bool) {
+	v := m.turn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTurnIndex returns the old "turn_index" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldTurnIndex(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTurnIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTurnIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTurnIndex: %w", err)
+	}
+	return oldValue.TurnIndex, nil
+}
+
+// AddTurnIndex adds i to the "turn_index" field.
+func (m *SessionSideEventMutation) AddTurnIndex(i int) {
+	if m.addturn_index != nil {
+		*m.addturn_index += i
+	} else {
+		m.addturn_index = &i
+	}
+}
+
+// AddedTurnIndex returns the value that was added to the "turn_index" field in this mutation.
+func (m *SessionSideEventMutation) AddedTurnIndex() (r int, exists bool) {
+	v := m.addturn_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTurnIndex resets all changes to the "turn_index" field.
+func (m *SessionSideEventMutation) ResetTurnIndex() {
+	m.turn_index = nil
+	m.addturn_index = nil
+}
+
+// SetSequence sets the "sequence" field.
+func (m *SessionSideEventMutation) SetSequence(i int64) {
+	m.sequence = &i
+	m.addsequence = nil
+}
+
+// Sequence returns the value of the "sequence" field in the mutation.
+func (m *SessionSideEventMutation) Sequence() (r int64, exists bool) {
+	v := m.sequence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSequence returns the old "sequence" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldSequence(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSequence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSequence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSequence: %w", err)
+	}
+	return oldValue.Sequence, nil
+}
+
+// AddSequence adds i to the "sequence" field.
+func (m *SessionSideEventMutation) AddSequence(i int64) {
+	if m.addsequence != nil {
+		*m.addsequence += i
+	} else {
+		m.addsequence = &i
+	}
+}
+
+// AddedSequence returns the value that was added to the "sequence" field in this mutation.
+func (m *SessionSideEventMutation) AddedSequence() (r int64, exists bool) {
+	v := m.addsequence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSequence resets all changes to the "sequence" field.
+func (m *SessionSideEventMutation) ResetSequence() {
+	m.sequence = nil
+	m.addsequence = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SessionSideEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SessionSideEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SessionSideEvent entity.
+// If the SessionSideEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionSideEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SessionSideEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the SessionSideEventMutation builder.
+func (m *SessionSideEventMutation) Where(ps ...predicate.SessionSideEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SessionSideEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SessionSideEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SessionSideEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SessionSideEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SessionSideEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SessionSideEvent).
+func (m *SessionSideEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SessionSideEventMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.side_id != nil {
+		fields = append(fields, sessionsideevent.FieldSideID)
+	}
+	if m.session_id != nil {
+		fields = append(fields, sessionsideevent.FieldSessionID)
+	}
+	if m.process_run_id != nil {
+		fields = append(fields, sessionsideevent.FieldProcessRunID)
+	}
+	if m.event_id != nil {
+		fields = append(fields, sessionsideevent.FieldEventID)
+	}
+	if m._type != nil {
+		fields = append(fields, sessionsideevent.FieldType)
+	}
+	if m.correlation_id != nil {
+		fields = append(fields, sessionsideevent.FieldCorrelationID)
+	}
+	if m.turn_id != nil {
+		fields = append(fields, sessionsideevent.FieldTurnID)
+	}
+	if m.phase != nil {
+		fields = append(fields, sessionsideevent.FieldPhase)
+	}
+	if m.content_kind != nil {
+		fields = append(fields, sessionsideevent.FieldContentKind)
+	}
+	if m.content != nil {
+		fields = append(fields, sessionsideevent.FieldContent)
+	}
+	if m.turn_index != nil {
+		fields = append(fields, sessionsideevent.FieldTurnIndex)
+	}
+	if m.sequence != nil {
+		fields = append(fields, sessionsideevent.FieldSequence)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sessionsideevent.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SessionSideEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sessionsideevent.FieldSideID:
+		return m.SideID()
+	case sessionsideevent.FieldSessionID:
+		return m.SessionID()
+	case sessionsideevent.FieldProcessRunID:
+		return m.ProcessRunID()
+	case sessionsideevent.FieldEventID:
+		return m.EventID()
+	case sessionsideevent.FieldType:
+		return m.GetType()
+	case sessionsideevent.FieldCorrelationID:
+		return m.CorrelationID()
+	case sessionsideevent.FieldTurnID:
+		return m.TurnID()
+	case sessionsideevent.FieldPhase:
+		return m.Phase()
+	case sessionsideevent.FieldContentKind:
+		return m.ContentKind()
+	case sessionsideevent.FieldContent:
+		return m.Content()
+	case sessionsideevent.FieldTurnIndex:
+		return m.TurnIndex()
+	case sessionsideevent.FieldSequence:
+		return m.Sequence()
+	case sessionsideevent.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SessionSideEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sessionsideevent.FieldSideID:
+		return m.OldSideID(ctx)
+	case sessionsideevent.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sessionsideevent.FieldProcessRunID:
+		return m.OldProcessRunID(ctx)
+	case sessionsideevent.FieldEventID:
+		return m.OldEventID(ctx)
+	case sessionsideevent.FieldType:
+		return m.OldType(ctx)
+	case sessionsideevent.FieldCorrelationID:
+		return m.OldCorrelationID(ctx)
+	case sessionsideevent.FieldTurnID:
+		return m.OldTurnID(ctx)
+	case sessionsideevent.FieldPhase:
+		return m.OldPhase(ctx)
+	case sessionsideevent.FieldContentKind:
+		return m.OldContentKind(ctx)
+	case sessionsideevent.FieldContent:
+		return m.OldContent(ctx)
+	case sessionsideevent.FieldTurnIndex:
+		return m.OldTurnIndex(ctx)
+	case sessionsideevent.FieldSequence:
+		return m.OldSequence(ctx)
+	case sessionsideevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SessionSideEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionSideEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sessionsideevent.FieldSideID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSideID(v)
+		return nil
+	case sessionsideevent.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sessionsideevent.FieldProcessRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcessRunID(v)
+		return nil
+	case sessionsideevent.FieldEventID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventID(v)
+		return nil
+	case sessionsideevent.FieldType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetType(v)
+		return nil
+	case sessionsideevent.FieldCorrelationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrelationID(v)
+		return nil
+	case sessionsideevent.FieldTurnID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTurnID(v)
+		return nil
+	case sessionsideevent.FieldPhase:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPhase(v)
+		return nil
+	case sessionsideevent.FieldContentKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentKind(v)
+		return nil
+	case sessionsideevent.FieldContent:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case sessionsideevent.FieldTurnIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTurnIndex(v)
+		return nil
+	case sessionsideevent.FieldSequence:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSequence(v)
+		return nil
+	case sessionsideevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSideEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SessionSideEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addturn_index != nil {
+		fields = append(fields, sessionsideevent.FieldTurnIndex)
+	}
+	if m.addsequence != nil {
+		fields = append(fields, sessionsideevent.FieldSequence)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SessionSideEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sessionsideevent.FieldTurnIndex:
+		return m.AddedTurnIndex()
+	case sessionsideevent.FieldSequence:
+		return m.AddedSequence()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionSideEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sessionsideevent.FieldTurnIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTurnIndex(v)
+		return nil
+	case sessionsideevent.FieldSequence:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSequence(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSideEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SessionSideEventMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SessionSideEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SessionSideEventMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SessionSideEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SessionSideEventMutation) ResetField(name string) error {
+	switch name {
+	case sessionsideevent.FieldSideID:
+		m.ResetSideID()
+		return nil
+	case sessionsideevent.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sessionsideevent.FieldProcessRunID:
+		m.ResetProcessRunID()
+		return nil
+	case sessionsideevent.FieldEventID:
+		m.ResetEventID()
+		return nil
+	case sessionsideevent.FieldType:
+		m.ResetType()
+		return nil
+	case sessionsideevent.FieldCorrelationID:
+		m.ResetCorrelationID()
+		return nil
+	case sessionsideevent.FieldTurnID:
+		m.ResetTurnID()
+		return nil
+	case sessionsideevent.FieldPhase:
+		m.ResetPhase()
+		return nil
+	case sessionsideevent.FieldContentKind:
+		m.ResetContentKind()
+		return nil
+	case sessionsideevent.FieldContent:
+		m.ResetContent()
+		return nil
+	case sessionsideevent.FieldTurnIndex:
+		m.ResetTurnIndex()
+		return nil
+	case sessionsideevent.FieldSequence:
+		m.ResetSequence()
+		return nil
+	case sessionsideevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionSideEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SessionSideEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SessionSideEventMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SessionSideEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SessionSideEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SessionSideEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SessionSideEventMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SessionSideEventMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SessionSideEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SessionSideEventMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SessionSideEvent edge %s", name)
 }
 
 // StagedAttachmentMutation represents an operation that mutates the StagedAttachment nodes in the graph.

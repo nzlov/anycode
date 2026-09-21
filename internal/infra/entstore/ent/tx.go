@@ -52,6 +52,10 @@ type Tx struct {
 	QuickCommand *QuickCommandClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SessionSide is the client for interacting with the SessionSide builders.
+	SessionSide *SessionSideClient
+	// SessionSideEvent is the client for interacting with the SessionSideEvent builders.
+	SessionSideEvent *SessionSideEventClient
 	// StagedAttachment is the client for interacting with the StagedAttachment builders.
 	StagedAttachment *StagedAttachmentClient
 	// SystemConfiguration is the client for interacting with the SystemConfiguration builders.
@@ -209,6 +213,8 @@ func (tx *Tx) init() {
 	tx.QuestionRequest = NewQuestionRequestClient(tx.config)
 	tx.QuickCommand = NewQuickCommandClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
+	tx.SessionSide = NewSessionSideClient(tx.config)
+	tx.SessionSideEvent = NewSessionSideEventClient(tx.config)
 	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)
 	tx.SystemConfiguration = NewSystemConfigurationClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)

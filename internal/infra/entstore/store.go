@@ -508,6 +508,10 @@ func (s *Store) Sessions() *SessionRepository {
 	return NewSessionRepository(s.client)
 }
 
+func (s *Store) SessionSides() *SideRepository {
+	return NewSideRepository(s.client)
+}
+
 func (s *Store) Statistics() *StatisticsRepository {
 	return NewStatisticsRepository(s.client)
 }

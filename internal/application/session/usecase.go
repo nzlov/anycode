@@ -336,6 +336,9 @@ type Service struct {
 	promptFileReader        domain.PromptFileReader
 	processes               processdomain.Repository
 	codex                   processdomain.CodexProcess
+	sides                   domain.SideRepository
+	sideRuns                sync.Map
+	sideWG                  sync.WaitGroup
 	terminal                terminaldomain.Runtime
 	codexSessionCleaner     processdomain.CodexSessionCleaner
 	historyPurger           port.SessionHistoryPurger
@@ -470,6 +473,12 @@ func WithProcesses(repo processdomain.Repository, codex processdomain.CodexProce
 		if cleaner, ok := codex.(processdomain.CodexSessionCleaner); ok {
 			s.codexSessionCleaner = cleaner
 		}
+	}
+}
+
+func WithSessionSides(repo domain.SideRepository) Option {
+	return func(s *Service) {
+		s.sides = repo
 	}
 }
 
@@ -616,6 +625,7 @@ func (s *Service) Close() {
 		s.lifecycleCancel()
 		s.terminalWG.Wait()
 		s.initializationWG.Wait()
+		s.sideWG.Wait()
 		s.cleanupWG.Wait()
 	}
 }
@@ -990,6 +1000,9 @@ const codexConfigurationRestartPrompt = "Continue the interrupted task after the
 func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 	if s == nil {
 		return 0, errors.New("session usecase: nil service")
+	}
+	if err := s.recoverInterruptedSides(ctx); err != nil {
+		return 0, err
 	}
 	systemAdvanceSessions, err := s.recoverAllPendingSystemAdvances(ctx)
 	if err != nil {
@@ -7320,6 +7333,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
 	}
 	if session.Status == domain.StatusClosed {
+		if err := s.cleanupSessionSides(ctx, session.ID); err != nil {
+			return toDTO(session), err
+		}
 		if session.WorktreeCleanup.Status == domain.WorktreeCleanupPending || (session.WorktreeCleanup.Status == domain.WorktreeCleanupFailed && session.WorktreeCleanup.Retryable) {
 			s.scheduleWorktreeCleanup()
 		}
@@ -7340,6 +7356,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	}
 	switch prepared.Status {
 	case port.CloseAlreadyClosed:
+		if err := s.cleanupSessionSides(ctx, prepared.Session.ID); err != nil {
+			return toDTO(prepared.Session), err
+		}
 		return toDTO(prepared.Session), nil
 	case port.CloseActive:
 		return DTO{}, errCloseRequiresStop
@@ -7349,6 +7368,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		session = prepared.Session
 	default:
 		return DTO{}, fmt.Errorf("unsupported close preparation status %q", prepared.Status)
+	}
+	if err := s.quiesceSessionSides(ctx, session.ID); err != nil {
+		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
 	}
 	quarantinePath := ""
 	releaseClose := func(cause error) error {
@@ -7454,6 +7476,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	}
 	if mindMapClose != nil && mindMapClose.task != nil && s.mindMapQueueScheduler != nil {
 		s.mindMapQueueScheduler()
+	}
+	if err := s.cleanupSessionSides(ctx, session.ID); err != nil {
+		return toDTO(session), err
 	}
 	return toDTO(session), nil
 }

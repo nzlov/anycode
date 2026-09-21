@@ -421,11 +421,7 @@ func (r *mutationResolver) StartSessionSide(ctx context.Context, input model.Sta
 	if err != nil {
 		return nil, err
 	}
-	return &model.SessionSideRun{
-		CodexSessionID: run.CodexSessionID,
-		ProcessRunID:   string(run.ProcessRunID),
-		TurnID:         run.TurnID,
-	}, nil
+	return mapSessionSide(run), nil
 }
 
 // ContinueSessionSide is the resolver for the continueSessionSide field.
@@ -437,11 +433,7 @@ func (r *mutationResolver) ContinueSessionSide(ctx context.Context, input model.
 	if err != nil {
 		return nil, err
 	}
-	return &model.SessionSideRun{
-		CodexSessionID: run.CodexSessionID,
-		ProcessRunID:   string(run.ProcessRunID),
-		TurnID:         run.TurnID,
-	}, nil
+	return mapSessionSide(run), nil
 }
 
 // StopSessionSide is the resolver for the stopSessionSide field.
@@ -1077,6 +1069,22 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionD
 		return nil, err
 	}
 	return mapSessionDetail(dto), nil
+}
+
+// SessionSides is the resolver for the sessionSides field.
+func (r *queryResolver) SessionSides(ctx context.Context, sessionID string) ([]*model.SessionSideRun, error) {
+	if r.UseCases.SessionSides == nil {
+		return nil, missingUseCase("session sides")
+	}
+	items, err := r.UseCases.SessionSides.ListSides(ctx, sessiondomain.ID(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.SessionSideRun, 0, len(items))
+	for _, item := range items {
+		result = append(result, mapSessionSide(item))
+	}
+	return result, nil
 }
 
 // SessionTranscript is the resolver for the sessionTranscript field.

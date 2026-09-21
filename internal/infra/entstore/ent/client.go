@@ -34,6 +34,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -84,6 +86,10 @@ type Client struct {
 	QuickCommand *QuickCommandClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SessionSide is the client for interacting with the SessionSide builders.
+	SessionSide *SessionSideClient
+	// SessionSideEvent is the client for interacting with the SessionSideEvent builders.
+	SessionSideEvent *SessionSideEventClient
 	// StagedAttachment is the client for interacting with the StagedAttachment builders.
 	StagedAttachment *StagedAttachmentClient
 	// SystemConfiguration is the client for interacting with the SystemConfiguration builders.
@@ -121,6 +127,8 @@ func (c *Client) init() {
 	c.QuestionRequest = NewQuestionRequestClient(c.config)
 	c.QuickCommand = NewQuickCommandClient(c.config)
 	c.Session = NewSessionClient(c.config)
+	c.SessionSide = NewSessionSideClient(c.config)
+	c.SessionSideEvent = NewSessionSideEventClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
 	c.SystemConfiguration = NewSystemConfigurationClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
@@ -236,6 +244,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		QuestionRequest:           NewQuestionRequestClient(cfg),
 		QuickCommand:              NewQuickCommandClient(cfg),
 		Session:                   NewSessionClient(cfg),
+		SessionSide:               NewSessionSideClient(cfg),
+		SessionSideEvent:          NewSessionSideEventClient(cfg),
 		StagedAttachment:          NewStagedAttachmentClient(cfg),
 		SystemConfiguration:       NewSystemConfigurationClient(cfg),
 		WorkflowDefinition:        NewWorkflowDefinitionClient(cfg),
@@ -278,6 +288,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		QuestionRequest:           NewQuestionRequestClient(cfg),
 		QuickCommand:              NewQuickCommandClient(cfg),
 		Session:                   NewSessionClient(cfg),
+		SessionSide:               NewSessionSideClient(cfg),
+		SessionSideEvent:          NewSessionSideEventClient(cfg),
 		StagedAttachment:          NewStagedAttachmentClient(cfg),
 		SystemConfiguration:       NewSystemConfigurationClient(cfg),
 		WorkflowDefinition:        NewWorkflowDefinitionClient(cfg),
@@ -314,8 +326,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
 		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
 		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
-		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
-		c.WorkflowDefinition,
+		c.QuickCommand, c.Session, c.SessionSide, c.SessionSideEvent,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -329,8 +341,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
 		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
 		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
-		c.QuickCommand, c.Session, c.StagedAttachment, c.SystemConfiguration,
-		c.WorkflowDefinition,
+		c.QuickCommand, c.Session, c.SessionSide, c.SessionSideEvent,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -379,6 +391,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.QuickCommand.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
+	case *SessionSideMutation:
+		return c.SessionSide.mutate(ctx, m)
+	case *SessionSideEventMutation:
+		return c.SessionSideEvent.mutate(ctx, m)
 	case *StagedAttachmentMutation:
 		return c.StagedAttachment.mutate(ctx, m)
 	case *SystemConfigurationMutation:
@@ -3050,6 +3066,272 @@ func (c *SessionClient) mutate(ctx context.Context, m *SessionMutation) (Value, 
 	}
 }
 
+// SessionSideClient is a client for the SessionSide schema.
+type SessionSideClient struct {
+	config
+}
+
+// NewSessionSideClient returns a client for the SessionSide from the given config.
+func NewSessionSideClient(c config) *SessionSideClient {
+	return &SessionSideClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionside.Hooks(f(g(h())))`.
+func (c *SessionSideClient) Use(hooks ...Hook) {
+	c.hooks.SessionSide = append(c.hooks.SessionSide, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionside.Intercept(f(g(h())))`.
+func (c *SessionSideClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionSide = append(c.inters.SessionSide, interceptors...)
+}
+
+// Create returns a builder for creating a SessionSide entity.
+func (c *SessionSideClient) Create() *SessionSideCreate {
+	mutation := newSessionSideMutation(c.config, OpCreate)
+	return &SessionSideCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionSide entities.
+func (c *SessionSideClient) CreateBulk(builders ...*SessionSideCreate) *SessionSideCreateBulk {
+	return &SessionSideCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionSideClient) MapCreateBulk(slice any, setFunc func(*SessionSideCreate, int)) *SessionSideCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionSideCreateBulk{err: fmt.Errorf("calling to SessionSideClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionSideCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionSideCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionSide.
+func (c *SessionSideClient) Update() *SessionSideUpdate {
+	mutation := newSessionSideMutation(c.config, OpUpdate)
+	return &SessionSideUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionSideClient) UpdateOne(_m *SessionSide) *SessionSideUpdateOne {
+	mutation := newSessionSideMutation(c.config, OpUpdateOne, withSessionSide(_m))
+	return &SessionSideUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionSideClient) UpdateOneID(id string) *SessionSideUpdateOne {
+	mutation := newSessionSideMutation(c.config, OpUpdateOne, withSessionSideID(id))
+	return &SessionSideUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionSide.
+func (c *SessionSideClient) Delete() *SessionSideDelete {
+	mutation := newSessionSideMutation(c.config, OpDelete)
+	return &SessionSideDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionSideClient) DeleteOne(_m *SessionSide) *SessionSideDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionSideClient) DeleteOneID(id string) *SessionSideDeleteOne {
+	builder := c.Delete().Where(sessionside.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionSideDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionSide.
+func (c *SessionSideClient) Query() *SessionSideQuery {
+	return &SessionSideQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionSide},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionSide entity by its id.
+func (c *SessionSideClient) Get(ctx context.Context, id string) (*SessionSide, error) {
+	return c.Query().Where(sessionside.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionSideClient) GetX(ctx context.Context, id string) *SessionSide {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SessionSideClient) Hooks() []Hook {
+	return c.hooks.SessionSide
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionSideClient) Interceptors() []Interceptor {
+	return c.inters.SessionSide
+}
+
+func (c *SessionSideClient) mutate(ctx context.Context, m *SessionSideMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionSideCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionSideUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionSideUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionSideDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionSide mutation op: %q", m.Op())
+	}
+}
+
+// SessionSideEventClient is a client for the SessionSideEvent schema.
+type SessionSideEventClient struct {
+	config
+}
+
+// NewSessionSideEventClient returns a client for the SessionSideEvent from the given config.
+func NewSessionSideEventClient(c config) *SessionSideEventClient {
+	return &SessionSideEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionsideevent.Hooks(f(g(h())))`.
+func (c *SessionSideEventClient) Use(hooks ...Hook) {
+	c.hooks.SessionSideEvent = append(c.hooks.SessionSideEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionsideevent.Intercept(f(g(h())))`.
+func (c *SessionSideEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionSideEvent = append(c.inters.SessionSideEvent, interceptors...)
+}
+
+// Create returns a builder for creating a SessionSideEvent entity.
+func (c *SessionSideEventClient) Create() *SessionSideEventCreate {
+	mutation := newSessionSideEventMutation(c.config, OpCreate)
+	return &SessionSideEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionSideEvent entities.
+func (c *SessionSideEventClient) CreateBulk(builders ...*SessionSideEventCreate) *SessionSideEventCreateBulk {
+	return &SessionSideEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionSideEventClient) MapCreateBulk(slice any, setFunc func(*SessionSideEventCreate, int)) *SessionSideEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionSideEventCreateBulk{err: fmt.Errorf("calling to SessionSideEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionSideEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionSideEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionSideEvent.
+func (c *SessionSideEventClient) Update() *SessionSideEventUpdate {
+	mutation := newSessionSideEventMutation(c.config, OpUpdate)
+	return &SessionSideEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionSideEventClient) UpdateOne(_m *SessionSideEvent) *SessionSideEventUpdateOne {
+	mutation := newSessionSideEventMutation(c.config, OpUpdateOne, withSessionSideEvent(_m))
+	return &SessionSideEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionSideEventClient) UpdateOneID(id string) *SessionSideEventUpdateOne {
+	mutation := newSessionSideEventMutation(c.config, OpUpdateOne, withSessionSideEventID(id))
+	return &SessionSideEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionSideEvent.
+func (c *SessionSideEventClient) Delete() *SessionSideEventDelete {
+	mutation := newSessionSideEventMutation(c.config, OpDelete)
+	return &SessionSideEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionSideEventClient) DeleteOne(_m *SessionSideEvent) *SessionSideEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionSideEventClient) DeleteOneID(id string) *SessionSideEventDeleteOne {
+	builder := c.Delete().Where(sessionsideevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionSideEventDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionSideEvent.
+func (c *SessionSideEventClient) Query() *SessionSideEventQuery {
+	return &SessionSideEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionSideEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionSideEvent entity by its id.
+func (c *SessionSideEventClient) Get(ctx context.Context, id string) (*SessionSideEvent, error) {
+	return c.Query().Where(sessionsideevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionSideEventClient) GetX(ctx context.Context, id string) *SessionSideEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SessionSideEventClient) Hooks() []Hook {
+	return c.hooks.SessionSideEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionSideEventClient) Interceptors() []Interceptor {
+	return c.inters.SessionSideEvent
+}
+
+func (c *SessionSideEventClient) mutate(ctx context.Context, m *SessionSideEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionSideEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionSideEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionSideEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionSideEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionSideEvent mutation op: %q", m.Op())
+	}
+}
+
 // StagedAttachmentClient is a client for the StagedAttachment schema.
 type StagedAttachmentClient struct {
 	config
@@ -3456,13 +3738,15 @@ type (
 		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
-		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
+		SessionSide, SessionSideEvent, StagedAttachment, SystemConfiguration,
+		WorkflowDefinition []ent.Hook
 	}
 	inters struct {
 		DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge, MindMapGraph,
 		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
 		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
-		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Interceptor
+		SessionSide, SessionSideEvent, StagedAttachment, SystemConfiguration,
+		WorkflowDefinition []ent.Interceptor
 	}
 )

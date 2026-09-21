@@ -622,6 +622,26 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 	return event
 }
 
+func mapSessionSide(dto sessionapp.SideRunDTO) *model.SessionSideRun {
+	events := make([]*model.TranscriptEvent, 0, len(dto.Events))
+	for _, event := range dto.Events {
+		item, visible := timelineapp.FromCodexEvent(event)
+		if visible {
+			events = append(events, mapTranscriptEvent(item))
+		}
+	}
+	return &model.SessionSideRun{
+		CodexSessionID: dto.CodexSessionID,
+		ProcessRunID:   string(dto.ProcessRunID),
+		TurnID:         dto.TurnID,
+		Prompt:         dto.Prompt,
+		FollowUps:      append([]string(nil), dto.FollowUps...),
+		Status:         string(dto.Status),
+		Error:          dto.Error,
+		Events:         events,
+	}
+}
+
 func mapTranscriptContentReference(value *processdomain.CodexContentReference) *model.TranscriptContentReference {
 	if value == nil {
 		return nil

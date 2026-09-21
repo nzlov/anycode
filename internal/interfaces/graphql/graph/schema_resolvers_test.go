@@ -85,6 +85,40 @@ func TestQuerySessionFilesDefaultsToBoundedPage(t *testing.T) {
 	}
 }
 
+func TestQuerySessionSidesMapsPersistedTranscript(t *testing.T) {
+	sides := &fakeSideUseCase{items: []sessionapp.SideRunDTO{{
+		CodexSessionID: "side-1", ProcessRunID: "run-1", TurnID: "turn-1", Prompt: "inspect",
+		Status: sessiondomain.SideStatusCompleted,
+		Events: []processdomain.CodexEvent{{
+			EventID: "message-1", Type: processdomain.CodexEventMessage, CodexSessionID: "side-1",
+			Sequence: 1, CreatedAt: time.Unix(1, 0).UTC(),
+			Content: processdomain.CodexMessageContent{Role: "assistant", Text: "done", Format: processdomain.CodexTextMarkdown},
+		}},
+	}}}
+	got, err := NewResolver(UseCases{SessionSides: sides}).Query().SessionSides(context.Background(), "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sides.sessionID != "session-1" || len(got) != 1 || got[0].Status != "completed" || len(got[0].Events) != 1 {
+		t.Fatalf("session Sides = %#v, sessionID = %q", got, sides.sessionID)
+	}
+	message, ok := got[0].Events[0].Content.(*model.TranscriptMessageContent)
+	if !ok || message.Text != "done" {
+		t.Fatalf("Side message = %#v", got[0].Events[0].Content)
+	}
+}
+
+type fakeSideUseCase struct {
+	sessionapp.SideUseCase
+	sessionID sessiondomain.ID
+	items     []sessionapp.SideRunDTO
+}
+
+func (f *fakeSideUseCase) ListSides(_ context.Context, sessionID sessiondomain.ID) ([]sessionapp.SideRunDTO, error) {
+	f.sessionID = sessionID
+	return f.items, nil
+}
+
 func TestQuerySearchProjectMindMapMapsScopedMatches(t *testing.T) {
 	mindMaps := &fakeMindMapUseCase{result: mindmapapp.ProjectSearchResultDTO{
 		ProjectID: "project-1", Query: "agent search",

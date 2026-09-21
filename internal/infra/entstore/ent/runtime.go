@@ -25,6 +25,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -682,6 +684,106 @@ func init() {
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	entsession.UpdateDefaultUpdatedAt = entsessionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	sessionsideFields := schema.SessionSide{}.Fields()
+	_ = sessionsideFields
+	// sessionsideDescSessionID is the schema descriptor for session_id field.
+	sessionsideDescSessionID := sessionsideFields[1].Descriptor()
+	// sessionside.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	sessionside.SessionIDValidator = sessionsideDescSessionID.Validators[0].(func(string) error)
+	// sessionsideDescProcessRunID is the schema descriptor for process_run_id field.
+	sessionsideDescProcessRunID := sessionsideFields[2].Descriptor()
+	// sessionside.ProcessRunIDValidator is a validator for the "process_run_id" field. It is called by the builders before save.
+	sessionside.ProcessRunIDValidator = sessionsideDescProcessRunID.Validators[0].(func(string) error)
+	// sessionsideDescTurnID is the schema descriptor for turn_id field.
+	sessionsideDescTurnID := sessionsideFields[3].Descriptor()
+	// sessionside.DefaultTurnID holds the default value on creation for the turn_id field.
+	sessionside.DefaultTurnID = sessionsideDescTurnID.Default.(string)
+	// sessionsideDescPrompt is the schema descriptor for prompt field.
+	sessionsideDescPrompt := sessionsideFields[4].Descriptor()
+	// sessionside.PromptValidator is a validator for the "prompt" field. It is called by the builders before save.
+	sessionside.PromptValidator = sessionsideDescPrompt.Validators[0].(func(string) error)
+	// sessionsideDescFollowUps is the schema descriptor for follow_ups field.
+	sessionsideDescFollowUps := sessionsideFields[5].Descriptor()
+	// sessionside.DefaultFollowUps holds the default value on creation for the follow_ups field.
+	sessionside.DefaultFollowUps = sessionsideDescFollowUps.Default.([]string)
+	// sessionsideDescStatus is the schema descriptor for status field.
+	sessionsideDescStatus := sessionsideFields[6].Descriptor()
+	// sessionside.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	sessionside.StatusValidator = sessionsideDescStatus.Validators[0].(func(string) error)
+	// sessionsideDescError is the schema descriptor for error field.
+	sessionsideDescError := sessionsideFields[7].Descriptor()
+	// sessionside.DefaultError holds the default value on creation for the error field.
+	sessionside.DefaultError = sessionsideDescError.Default.(string)
+	// sessionsideDescTurnIndex is the schema descriptor for turn_index field.
+	sessionsideDescTurnIndex := sessionsideFields[8].Descriptor()
+	// sessionside.DefaultTurnIndex holds the default value on creation for the turn_index field.
+	sessionside.DefaultTurnIndex = sessionsideDescTurnIndex.Default.(int)
+	// sessionside.TurnIndexValidator is a validator for the "turn_index" field. It is called by the builders before save.
+	sessionside.TurnIndexValidator = sessionsideDescTurnIndex.Validators[0].(func(int) error)
+	// sessionsideDescCreatedAt is the schema descriptor for created_at field.
+	sessionsideDescCreatedAt := sessionsideFields[9].Descriptor()
+	// sessionside.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sessionside.DefaultCreatedAt = sessionsideDescCreatedAt.Default.(func() time.Time)
+	// sessionsideDescUpdatedAt is the schema descriptor for updated_at field.
+	sessionsideDescUpdatedAt := sessionsideFields[10].Descriptor()
+	// sessionside.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	sessionside.DefaultUpdatedAt = sessionsideDescUpdatedAt.Default.(func() time.Time)
+	// sessionside.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	sessionside.UpdateDefaultUpdatedAt = sessionsideDescUpdatedAt.UpdateDefault.(func() time.Time)
+	sessionsideeventFields := schema.SessionSideEvent{}.Fields()
+	_ = sessionsideeventFields
+	// sessionsideeventDescSideID is the schema descriptor for side_id field.
+	sessionsideeventDescSideID := sessionsideeventFields[1].Descriptor()
+	// sessionsideevent.SideIDValidator is a validator for the "side_id" field. It is called by the builders before save.
+	sessionsideevent.SideIDValidator = sessionsideeventDescSideID.Validators[0].(func(string) error)
+	// sessionsideeventDescSessionID is the schema descriptor for session_id field.
+	sessionsideeventDescSessionID := sessionsideeventFields[2].Descriptor()
+	// sessionsideevent.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	sessionsideevent.SessionIDValidator = sessionsideeventDescSessionID.Validators[0].(func(string) error)
+	// sessionsideeventDescProcessRunID is the schema descriptor for process_run_id field.
+	sessionsideeventDescProcessRunID := sessionsideeventFields[3].Descriptor()
+	// sessionsideevent.ProcessRunIDValidator is a validator for the "process_run_id" field. It is called by the builders before save.
+	sessionsideevent.ProcessRunIDValidator = sessionsideeventDescProcessRunID.Validators[0].(func(string) error)
+	// sessionsideeventDescEventID is the schema descriptor for event_id field.
+	sessionsideeventDescEventID := sessionsideeventFields[4].Descriptor()
+	// sessionsideevent.EventIDValidator is a validator for the "event_id" field. It is called by the builders before save.
+	sessionsideevent.EventIDValidator = sessionsideeventDescEventID.Validators[0].(func(string) error)
+	// sessionsideeventDescType is the schema descriptor for type field.
+	sessionsideeventDescType := sessionsideeventFields[5].Descriptor()
+	// sessionsideevent.TypeValidator is a validator for the "type" field. It is called by the builders before save.
+	sessionsideevent.TypeValidator = sessionsideeventDescType.Validators[0].(func(string) error)
+	// sessionsideeventDescCorrelationID is the schema descriptor for correlation_id field.
+	sessionsideeventDescCorrelationID := sessionsideeventFields[6].Descriptor()
+	// sessionsideevent.DefaultCorrelationID holds the default value on creation for the correlation_id field.
+	sessionsideevent.DefaultCorrelationID = sessionsideeventDescCorrelationID.Default.(string)
+	// sessionsideeventDescTurnID is the schema descriptor for turn_id field.
+	sessionsideeventDescTurnID := sessionsideeventFields[7].Descriptor()
+	// sessionsideevent.DefaultTurnID holds the default value on creation for the turn_id field.
+	sessionsideevent.DefaultTurnID = sessionsideeventDescTurnID.Default.(string)
+	// sessionsideeventDescPhase is the schema descriptor for phase field.
+	sessionsideeventDescPhase := sessionsideeventFields[8].Descriptor()
+	// sessionsideevent.DefaultPhase holds the default value on creation for the phase field.
+	sessionsideevent.DefaultPhase = sessionsideeventDescPhase.Default.(string)
+	// sessionsideeventDescContentKind is the schema descriptor for content_kind field.
+	sessionsideeventDescContentKind := sessionsideeventFields[9].Descriptor()
+	// sessionsideevent.ContentKindValidator is a validator for the "content_kind" field. It is called by the builders before save.
+	sessionsideevent.ContentKindValidator = sessionsideeventDescContentKind.Validators[0].(func(string) error)
+	// sessionsideeventDescContent is the schema descriptor for content field.
+	sessionsideeventDescContent := sessionsideeventFields[10].Descriptor()
+	// sessionsideevent.DefaultContent holds the default value on creation for the content field.
+	sessionsideevent.DefaultContent = sessionsideeventDescContent.Default.(map[string]interface{})
+	// sessionsideeventDescTurnIndex is the schema descriptor for turn_index field.
+	sessionsideeventDescTurnIndex := sessionsideeventFields[11].Descriptor()
+	// sessionsideevent.TurnIndexValidator is a validator for the "turn_index" field. It is called by the builders before save.
+	sessionsideevent.TurnIndexValidator = sessionsideeventDescTurnIndex.Validators[0].(func(int) error)
+	// sessionsideeventDescSequence is the schema descriptor for sequence field.
+	sessionsideeventDescSequence := sessionsideeventFields[12].Descriptor()
+	// sessionsideevent.SequenceValidator is a validator for the "sequence" field. It is called by the builders before save.
+	sessionsideevent.SequenceValidator = sessionsideeventDescSequence.Validators[0].(func(int64) error)
+	// sessionsideeventDescCreatedAt is the schema descriptor for created_at field.
+	sessionsideeventDescCreatedAt := sessionsideeventFields[13].Descriptor()
+	// sessionsideevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sessionsideevent.DefaultCreatedAt = sessionsideeventDescCreatedAt.Default.(func() time.Time)
 	stagedattachmentFields := schema.StagedAttachment{}.Fields()
 	_ = stagedattachmentFields
 	// stagedattachmentDescOwnerKeyHash is the schema descriptor for owner_key_hash field.

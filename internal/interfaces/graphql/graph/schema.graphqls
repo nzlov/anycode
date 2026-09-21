@@ -25,6 +25,7 @@ type Query {
   statistics(input: StatisticsQueryInput!): StatisticsDashboard!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
+  sessionSides(sessionId: ID!): [SessionSideRun!]!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionTranscriptEvent(input: SessionTranscriptEventInput!): TranscriptEvent!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
@@ -163,6 +164,11 @@ type SessionSideRun {
   codexSessionId: ID!
   processRunId: ID!
   turnId: ID!
+  prompt: String!
+  followUps: [String!]!
+  status: String!
+  error: String!
+  events: [TranscriptEvent!]!
 }
 
 input StartSessionSideInput {

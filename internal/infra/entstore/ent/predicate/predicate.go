@@ -66,6 +66,12 @@ type QuickCommand func(*sql.Selector)
 // Session is the predicate function for entsession builders.
 type Session func(*sql.Selector)
 
+// SessionSide is the predicate function for sessionside builders.
+type SessionSide func(*sql.Selector)
+
+// SessionSideEvent is the predicate function for sessionsideevent builders.
+type SessionSideEvent func(*sql.Selector)
+
 // StagedAttachment is the predicate function for stagedattachment builders.
 type StagedAttachment func(*sql.Selector)
 

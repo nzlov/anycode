@@ -18,7 +18,7 @@
         />
         <div class="side-dialog__title">
           <div class="text-subtitle1 text-weight-bold">Side 临时提问</div>
-          <div class="text-caption text-muted">只读运行，不保存到 AnyCode</div>
+          <div class="text-caption text-muted">只读运行，随卡片保留，关闭卡片后清理</div>
         </div>
         <q-btn
           flat
@@ -63,6 +63,10 @@
             @submit="continueSelectedSide"
           />
         </div>
+      </div>
+
+      <div v-else-if="loadingSides" class="side-dialog__empty text-muted">
+        <q-spinner size="24px" />
       </div>
 
       <div v-else-if="sides.length" class="side-dialog__list-wrap">
@@ -130,6 +134,7 @@ import SessionSidePromptInput from '@/components/SessionSidePromptInput.vue';
 import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import {
   continueSessionSide,
+  listSessionSides,
   startSessionSide,
   stopSessionSide,
   subscribeSessionSideEvents,
@@ -164,6 +169,7 @@ const { updateEventScroll, scrollEventsToBottom, followLatestEvent } =
 let disposed = false;
 const composerOpen = ref(false);
 const submitting = ref(false);
+const loadingSides = ref(true);
 const selectedSide = computed(
   () => sides.value.find((side) => side.codexSessionId === selectedSideId.value) ?? null,
 );
@@ -175,6 +181,29 @@ watch(() => selectedSide.value?.events.at(-1), followLatestEvent);
 watch(selectedSideId, () => {
   void scrollEventsToBottom(true);
 });
+
+void loadSides();
+
+async function loadSides() {
+  loadingSides.value = true;
+  try {
+    const restored = await listSessionSides(props.sessionId);
+    if (disposed) return;
+    sides.value = restored.map((run) =>
+      reactive<SideRecord>({
+        ...run,
+        draft: { prompt: '', files: [], config: { ...props.config } },
+      }),
+    );
+    for (const side of sides.value) {
+      if (side.status === 'running') subscribeToSide(side);
+    }
+  } catch {
+    // The request client displays the error; leave the composer available for retry.
+  } finally {
+    loadingSides.value = false;
+  }
+}
 
 function messagePrompt(message: SessionSideMessage) {
   return (
@@ -196,11 +225,6 @@ async function startSide() {
     }
     const side = reactive<SideRecord>({
       ...run,
-      prompt,
-      events: [],
-      status: 'running',
-      error: '',
-      followUps: [],
       draft: { prompt: '', files: [], config: { ...message.config } },
     });
     sides.value.push(side);
@@ -234,9 +258,9 @@ async function continueSelectedSide() {
     side.subscription?.unsubscribe();
     side.processRunId = run.processRunId;
     side.turnId = run.turnId;
-    side.status = 'running';
-    side.error = '';
-    side.followUps.push(prompt);
+    side.status = run.status;
+    side.error = run.error;
+    side.followUps = run.followUps;
     side.draft = { prompt: '', files: [], config: { ...message.config } };
     subscribeToSide(side);
   } catch {
@@ -248,26 +272,53 @@ async function continueSelectedSide() {
 
 function subscribeToSide(side: SideRecord) {
   side.subscription = subscribeSessionSideEvents(side.processRunId, {
-    onData: (event) => side.events.push(event),
+    onData: (event) => appendSideEvent(side, event),
     onError: (error) => {
       side.status = 'failed';
       side.error = error.message;
     },
     onClose: ({ completedByServer }) => {
-      if (completedByServer && side.status === 'running') side.status = 'completed';
+      if (completedByServer) void refreshSide(side);
     },
   });
+}
+
+function appendSideEvent(side: SideRecord, event: TranscriptEvent) {
+  const index = side.events.findIndex((candidate) => candidate.id === event.id);
+  if (index >= 0) side.events[index] = event;
+  else side.events.push(event);
+}
+
+async function refreshSide(side: SideRecord) {
+  try {
+    const restored = (await listSessionSides(props.sessionId)).find(
+      (candidate) => candidate.codexSessionId === side.codexSessionId,
+    );
+    if (!restored || disposed || !sides.value.includes(side)) return;
+    side.processRunId = restored.processRunId;
+    side.turnId = restored.turnId;
+    side.status = restored.status;
+    side.error = restored.error;
+    side.followUps = restored.followUps;
+    for (const event of restored.events) appendSideEvent(side, event);
+  } catch {
+    // The request client displays the error; retain the transcript already received.
+  }
 }
 
 function openSide(codexSessionId: string) {
   selectedSideId.value = codexSessionId;
 }
 
-function closeSide(side: SideRecord) {
+async function closeSide(side: SideRecord) {
   side.subscription?.unsubscribe();
-  void stopSessionSide(side.processRunId).catch(() => undefined);
-  sides.value = sides.value.filter((candidate) => candidate !== side);
-  if (selectedSideId.value === side.codexSessionId) selectedSideId.value = '';
+  try {
+    await stopSessionSide(side.processRunId);
+    sides.value = sides.value.filter((candidate) => candidate !== side);
+    if (selectedSideId.value === side.codexSessionId) selectedSideId.value = '';
+  } catch {
+    if (side.status === 'running') subscribeToSide(side);
+  }
 }
 
 function sideStatusLabel(status: SideStatus) {
@@ -280,7 +331,6 @@ onUnmounted(() => {
   disposed = true;
   for (const side of sides.value) {
     side.subscription?.unsubscribe();
-    void stopSessionSide(side.processRunId).catch(() => undefined);
   }
 });
 </script>

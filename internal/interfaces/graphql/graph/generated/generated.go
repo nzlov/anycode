@@ -411,6 +411,7 @@ type ComplexityRoot struct {
 		SessionCommitHistory    func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff             func(childComplexity int, input model.SessionDiffInput) int
 		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
+		SessionSides            func(childComplexity int, sessionID string) int
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
 		SessionTranscriptEvent  func(childComplexity int, input model.SessionTranscriptEventInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
@@ -609,7 +610,12 @@ type ComplexityRoot struct {
 
 	SessionSideRun struct {
 		CodexSessionID func(childComplexity int) int
+		Error          func(childComplexity int) int
+		Events         func(childComplexity int) int
+		FollowUps      func(childComplexity int) int
 		ProcessRunID   func(childComplexity int) int
+		Prompt         func(childComplexity int) int
+		Status         func(childComplexity int) int
 		TurnID         func(childComplexity int) int
 	}
 
@@ -975,6 +981,7 @@ type QueryResolver interface {
 	Statistics(ctx context.Context, input model.StatisticsQueryInput) (*model.StatisticsDashboard, error)
 	SessionCard(ctx context.Context, id string) (*model.SessionCard, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
+	SessionSides(ctx context.Context, sessionID string) ([]*model.SessionSideRun, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionTranscriptEvent(ctx context.Context, input model.SessionTranscriptEventInput) (*model.TranscriptEvent, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
@@ -2881,6 +2888,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SessionFiles(childComplexity, args["input"].(model.ListSessionFilesInput)), true
+	case "Query.sessionSides":
+		if e.ComplexityRoot.Query.SessionSides == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sessionSides_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SessionSides(childComplexity, args["sessionId"].(string)), true
 	case "Query.sessionTranscript":
 		if e.ComplexityRoot.Query.SessionTranscript == nil {
 			break
@@ -3788,12 +3806,42 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionSideRun.CodexSessionID(childComplexity), true
+	case "SessionSideRun.error":
+		if e.ComplexityRoot.SessionSideRun.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.Error(childComplexity), true
+	case "SessionSideRun.events":
+		if e.ComplexityRoot.SessionSideRun.Events == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.Events(childComplexity), true
+	case "SessionSideRun.followUps":
+		if e.ComplexityRoot.SessionSideRun.FollowUps == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.FollowUps(childComplexity), true
 	case "SessionSideRun.processRunId":
 		if e.ComplexityRoot.SessionSideRun.ProcessRunID == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SessionSideRun.ProcessRunID(childComplexity), true
+	case "SessionSideRun.prompt":
+		if e.ComplexityRoot.SessionSideRun.Prompt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.Prompt(childComplexity), true
+	case "SessionSideRun.status":
+		if e.ComplexityRoot.SessionSideRun.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionSideRun.Status(childComplexity), true
 	case "SessionSideRun.turnId":
 		if e.ComplexityRoot.SessionSideRun.TurnID == nil {
 			break
@@ -5063,6 +5111,7 @@ type Query {
   statistics(input: StatisticsQueryInput!): StatisticsDashboard!
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
+  sessionSides(sessionId: ID!): [SessionSideRun!]!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionTranscriptEvent(input: SessionTranscriptEventInput!): TranscriptEvent!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
@@ -5201,6 +5250,11 @@ type SessionSideRun {
   codexSessionId: ID!
   processRunId: ID!
   turnId: ID!
+  prompt: String!
+  followUps: [String!]!
+  status: String!
+  error: String!
+  events: [TranscriptEvent!]!
 }
 
 input StartSessionSideInput {
@@ -7149,6 +7203,17 @@ func (ec *executionContext) field_Query_sessionFiles_args(ctx context.Context, r
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_sessionSides_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -12247,6 +12312,16 @@ func (ec *executionContext) fieldContext_Mutation_startSessionSide(ctx context.C
 				return ec.fieldContext_SessionSideRun_processRunId(ctx, field)
 			case "turnId":
 				return ec.fieldContext_SessionSideRun_turnId(ctx, field)
+			case "prompt":
+				return ec.fieldContext_SessionSideRun_prompt(ctx, field)
+			case "followUps":
+				return ec.fieldContext_SessionSideRun_followUps(ctx, field)
+			case "status":
+				return ec.fieldContext_SessionSideRun_status(ctx, field)
+			case "error":
+				return ec.fieldContext_SessionSideRun_error(ctx, field)
+			case "events":
+				return ec.fieldContext_SessionSideRun_events(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionSideRun", field.Name)
 		},
@@ -12296,6 +12371,16 @@ func (ec *executionContext) fieldContext_Mutation_continueSessionSide(ctx contex
 				return ec.fieldContext_SessionSideRun_processRunId(ctx, field)
 			case "turnId":
 				return ec.fieldContext_SessionSideRun_turnId(ctx, field)
+			case "prompt":
+				return ec.fieldContext_SessionSideRun_prompt(ctx, field)
+			case "followUps":
+				return ec.fieldContext_SessionSideRun_followUps(ctx, field)
+			case "status":
+				return ec.fieldContext_SessionSideRun_status(ctx, field)
+			case "error":
+				return ec.fieldContext_SessionSideRun_error(ctx, field)
+			case "events":
+				return ec.fieldContext_SessionSideRun_events(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionSideRun", field.Name)
 		},
@@ -16464,6 +16549,65 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_session_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_sessionSides(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sessionSides,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SessionSides(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNSessionSideRun2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRunᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sessionSides(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "codexSessionId":
+				return ec.fieldContext_SessionSideRun_codexSessionId(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionSideRun_processRunId(ctx, field)
+			case "turnId":
+				return ec.fieldContext_SessionSideRun_turnId(ctx, field)
+			case "prompt":
+				return ec.fieldContext_SessionSideRun_prompt(ctx, field)
+			case "followUps":
+				return ec.fieldContext_SessionSideRun_followUps(ctx, field)
+			case "status":
+				return ec.fieldContext_SessionSideRun_status(ctx, field)
+			case "error":
+				return ec.fieldContext_SessionSideRun_error(ctx, field)
+			case "events":
+				return ec.fieldContext_SessionSideRun_events(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionSideRun", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sessionSides_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -21559,6 +21703,169 @@ func (ec *executionContext) fieldContext_SessionSideRun_turnId(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_prompt(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_prompt,
+		func(ctx context.Context) (any, error) {
+			return obj.Prompt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_prompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_followUps(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_followUps,
+		func(ctx context.Context) (any, error) {
+			return obj.FollowUps, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_followUps(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_status(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_error(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionSideRun_events(ctx context.Context, field graphql.CollectedField, obj *model.SessionSideRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionSideRun_events,
+		func(ctx context.Context) (any, error) {
+			return obj.Events, nil
+		},
+		nil,
+		ec.marshalNTranscriptEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionSideRun_events(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionSideRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
 		},
 	}
 	return fc, nil
@@ -34581,6 +34888,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sessionSides":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sessionSides(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "sessionTranscript":
 			field := field
 
@@ -36084,6 +36413,31 @@ func (ec *executionContext) _SessionSideRun(ctx context.Context, sel ast.Selecti
 			}
 		case "turnId":
 			out.Values[i] = ec._SessionSideRun_turnId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prompt":
+			out.Values[i] = ec._SessionSideRun_prompt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "followUps":
+			out.Values[i] = ec._SessionSideRun_followUps(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._SessionSideRun_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "error":
+			out.Values[i] = ec._SessionSideRun_error(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "events":
+			out.Values[i] = ec._SessionSideRun_events(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -40048,6 +40402,22 @@ func (ec *executionContext) marshalNSessionFile2ᚖgithubᚗcomᚋnzlovᚋanycod
 
 func (ec *executionContext) marshalNSessionSideRun2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun(ctx context.Context, sel ast.SelectionSet, v model.SessionSideRun) graphql.Marshaler {
 	return ec._SessionSideRun(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionSideRun2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRunᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionSideRun) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSessionSideRun2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNSessionSideRun2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionSideRun(ctx context.Context, sel ast.SelectionSet, v *model.SessionSideRun) graphql.Marshaler {

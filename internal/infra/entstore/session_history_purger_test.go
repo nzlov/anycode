@@ -43,6 +43,12 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	if err := store.client.ProcessRun.Create().SetID("process-1").SetSessionID("session-1").SetStatus("exited").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.client.SessionSide.Create().SetID("side-1").SetSessionID("session-1").SetProcessRunID("side-run-1").SetPrompt("inspect").SetStatus("completed").Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.client.SessionSideEvent.Create().SetID("side-run-1:1").SetSideID("side-1").SetSessionID("session-1").SetProcessRunID("side-run-1").SetEventID("message-1").SetType("message").SetContentKind("message").SetTurnIndex(1).SetSequence(1).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.client.PromptAppend.Create().SetID("append-1").SetSessionID("session-1").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +78,8 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	counts["questions"] = mustCount(t, func() (int, error) { return store.client.QuestionRequest.Query().Count(ctx) })
 	counts["nodes"] = mustCount(t, func() (int, error) { return store.client.NodeRun.Query().Count(ctx) })
 	counts["processes"] = mustCount(t, func() (int, error) { return store.client.ProcessRun.Query().Count(ctx) })
+	counts["sides"] = mustCount(t, func() (int, error) { return store.client.SessionSide.Query().Count(ctx) })
+	counts["side_events"] = mustCount(t, func() (int, error) { return store.client.SessionSideEvent.Query().Count(ctx) })
 	counts["appends"] = mustCount(t, func() (int, error) { return store.client.PromptAppend.Query().Count(ctx) })
 	counts["merges"] = mustCount(t, func() (int, error) { return store.client.MergeRecord.Query().Count(ctx) })
 	counts["mind_map_overlays"] = mustCount(t, func() (int, error) { return store.client.MindMapOverlay.Query().Count(ctx) })

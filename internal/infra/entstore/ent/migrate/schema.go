@@ -634,6 +634,78 @@ var (
 			},
 		},
 	}
+	// SessionSidesColumns holds the columns for the "session_sides" table.
+	SessionSidesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "process_run_id", Type: field.TypeString},
+		{Name: "turn_id", Type: field.TypeString, Default: ""},
+		{Name: "prompt", Type: field.TypeString, Size: 2147483647},
+		{Name: "follow_ups", Type: field.TypeJSON},
+		{Name: "status", Type: field.TypeString},
+		{Name: "error", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "turn_index", Type: field.TypeInt, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SessionSidesTable holds the schema information for the "session_sides" table.
+	SessionSidesTable = &schema.Table{
+		Name:       "session_sides",
+		Columns:    SessionSidesColumns,
+		PrimaryKey: []*schema.Column{SessionSidesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionside_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionSidesColumns[1], SessionSidesColumns[9]},
+			},
+			{
+				Name:    "sessionside_process_run_id",
+				Unique:  true,
+				Columns: []*schema.Column{SessionSidesColumns[2]},
+			},
+		},
+	}
+	// SessionSideEventsColumns holds the columns for the "session_side_events" table.
+	SessionSideEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "side_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "process_run_id", Type: field.TypeString},
+		{Name: "event_id", Type: field.TypeString},
+		{Name: "type", Type: field.TypeString},
+		{Name: "correlation_id", Type: field.TypeString, Default: ""},
+		{Name: "turn_id", Type: field.TypeString, Default: ""},
+		{Name: "phase", Type: field.TypeString, Default: ""},
+		{Name: "content_kind", Type: field.TypeString},
+		{Name: "content", Type: field.TypeJSON},
+		{Name: "turn_index", Type: field.TypeInt},
+		{Name: "sequence", Type: field.TypeInt64},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SessionSideEventsTable holds the schema information for the "session_side_events" table.
+	SessionSideEventsTable = &schema.Table{
+		Name:       "session_side_events",
+		Columns:    SessionSideEventsColumns,
+		PrimaryKey: []*schema.Column{SessionSideEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionsideevent_side_id_turn_index_sequence",
+				Unique:  false,
+				Columns: []*schema.Column{SessionSideEventsColumns[1], SessionSideEventsColumns[11], SessionSideEventsColumns[12]},
+			},
+			{
+				Name:    "sessionsideevent_process_run_id_sequence",
+				Unique:  false,
+				Columns: []*schema.Column{SessionSideEventsColumns[3], SessionSideEventsColumns[12]},
+			},
+			{
+				Name:    "sessionsideevent_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionSideEventsColumns[2]},
+			},
+		},
+	}
 	// StagedAttachmentsColumns holds the columns for the "staged_attachments" table.
 	StagedAttachmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -739,6 +811,8 @@ var (
 		QuestionRequestsTable,
 		QuickCommandsTable,
 		SessionsTable,
+		SessionSidesTable,
+		SessionSideEventsTable,
 		StagedAttachmentsTable,
 		SystemConfigurationsTable,
 		WorkflowDefinitionsTable,

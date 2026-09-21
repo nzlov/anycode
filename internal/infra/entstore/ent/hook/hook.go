@@ -249,6 +249,30 @@ func (f SessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionMutation", m)
 }
 
+// The SessionSideFunc type is an adapter to allow the use of ordinary
+// function as SessionSide mutator.
+type SessionSideFunc func(context.Context, *ent.SessionSideMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionSideFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionSideMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionSideMutation", m)
+}
+
+// The SessionSideEventFunc type is an adapter to allow the use of ordinary
+// function as SessionSideEvent mutator.
+type SessionSideEventFunc func(context.Context, *ent.SessionSideEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionSideEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionSideEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionSideEventMutation", m)
+}
+
 // The StagedAttachmentFunc type is an adapter to allow the use of ordinary
 // function as StagedAttachment mutator.
 type StagedAttachmentFunc func(context.Context, *ent.StagedAttachmentMutation) (ent.Value, error)

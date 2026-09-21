@@ -776,9 +776,14 @@ type SessionSideConfigInput struct {
 }
 
 type SessionSideRun struct {
-	CodexSessionID string `json:"codexSessionId"`
-	ProcessRunID   string `json:"processRunId"`
-	TurnID         string `json:"turnId"`
+	CodexSessionID string             `json:"codexSessionId"`
+	ProcessRunID   string             `json:"processRunId"`
+	TurnID         string             `json:"turnId"`
+	Prompt         string             `json:"prompt"`
+	FollowUps      []string           `json:"followUps"`
+	Status         string             `json:"status"`
+	Error          string             `json:"error"`
+	Events         []*TranscriptEvent `json:"events"`
 }
 
 type SessionStatusUpdate struct {

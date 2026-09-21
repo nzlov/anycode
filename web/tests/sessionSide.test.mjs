@@ -14,6 +14,7 @@ const composerSource = readSource('../src/components/CodexPromptComposer.vue');
 const detailSource = readSource('../src/components/SessionDetailView.vue');
 
 test('Side calls ephemeral backend operations and consumes the shared transcript contract', () => {
+  assert.match(serviceSource, /query SessionSides/);
   assert.match(serviceSource, /mutation StartSessionSide/);
   assert.match(serviceSource, /mutation ContinueSessionSide/);
   assert.match(serviceSource, /mutation StopSessionSide/);
@@ -60,10 +61,12 @@ test('Side dialog caps its height and keeps the composer outside the event scrol
   assert.match(dialogSource, /\.side-dialog__events,[\s\S]*overflow-y: auto/);
 });
 
-test('Side history remains current-page memory only', () => {
+test('Side history restores from the server without browser shadow storage', () => {
   assert.doesNotMatch(dialogSource, /localStorage|sessionStorage|indexedDB/);
   assert.doesNotMatch(serviceSource, /localStorage|sessionStorage|indexedDB/);
-  assert.match(dialogSource, /sides\.value = sides\.value\.filter/);
+  assert.match(dialogSource, /listSessionSides\(props\.sessionId\)/);
+  assert.match(dialogSource, /if \(side\.status === 'running'\) subscribeToSide\(side\)/);
+  assert.doesNotMatch(dialogSource, /onUnmounted\([\s\S]*stopSessionSide/);
 });
 
 test('Side uses the same follow-bottom behavior as the card transcript', () => {

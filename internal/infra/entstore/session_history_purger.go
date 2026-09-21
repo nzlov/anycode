@@ -20,6 +20,8 @@ import (
 	entpromptappend "github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	entquestionrequest "github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	entsessionside "github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
+	entsessionsideevent "github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
 )
 
 var _ port.SessionHistoryPurger = (*Store)(nil)
@@ -93,6 +95,16 @@ func (s *Store) PurgeSessions(ctx context.Context, ids []session.ID) error {
 	if err == nil {
 		if _, deleteErr := client.MindMapOverlay.Delete().Where(entmindmapoverlay.IDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
 			err = fmt.Errorf("delete mind map overlays: %w", deleteErr)
+		}
+	}
+	if err == nil {
+		if _, deleteErr := client.SessionSideEvent.Delete().Where(entsessionsideevent.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete session Side events: %w", deleteErr)
+		}
+	}
+	if err == nil {
+		if _, deleteErr := client.SessionSide.Delete().Where(entsessionside.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete session Sides: %w", deleteErr)
 		}
 	}
 	if err == nil {
