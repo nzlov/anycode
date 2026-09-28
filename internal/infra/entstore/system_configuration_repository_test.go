@@ -104,3 +104,39 @@ func TestSystemConfigurationMigrationAddsWritableRootsToExistingRow(t *testing.T
 		t.Fatalf("migrated system configuration = %#v, %v", configuration, err)
 	}
 }
+
+func TestTunnelModePersistsAcrossOtherSettingsAndReopen(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "anycode.db")
+	store, err := Open(ctx, OpenOptions{DatabaseURL: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repository := store.Settings()
+	if mode, err := repository.TunnelMode(ctx); err != nil || mode != "cf" {
+		t.Fatalf("default %s %v", mode, err)
+	}
+	if err := repository.SetTunnelMode(ctx, "local"); err != nil {
+		t.Fatal(err)
+	}
+	configuration, err := repository.GetSystemConfiguration(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration.AgentMaxConcurrent = 7
+	if err := repository.SaveSystemConfiguration(ctx, configuration); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	reopened, err := Open(ctx, OpenOptions{DatabaseURL: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if mode, err := reopened.Settings().TunnelMode(ctx); err != nil || mode != "local" {
+		t.Fatalf("persisted %s %v", mode, err)
+	}
+}

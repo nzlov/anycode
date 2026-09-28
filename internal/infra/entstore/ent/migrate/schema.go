@@ -741,6 +741,7 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "agent_max_concurrent", Type: field.TypeInt, Default: 2},
 		{Name: "agent_writable_roots", Type: field.TypeJSON, Default: schema.Expr("'[]'")},
+		{Name: "tunnel_mode", Type: field.TypeString, Default: "cf"},
 		{Name: "send_shortcut", Type: field.TypeString, Default: "shift_enter"},
 		{Name: "codex_context_window", Type: field.TypeInt, Default: 0},
 		{Name: "codex_auto_compact_token_limit", Type: field.TypeInt, Default: 0},

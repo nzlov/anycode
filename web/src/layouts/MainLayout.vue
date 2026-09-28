@@ -75,7 +75,7 @@
           <q-tooltip>项目管理</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="$route.name === 'overview' && runningTunnelCount > 0"
+          v-if="$route.name === 'overview'"
           flat
           round
           dense
@@ -84,7 +84,9 @@
           aria-label="隧道"
           @click="openTunnels"
         >
-          <q-badge floating rounded color="negative">{{ runningTunnelCount }}</q-badge>
+          <q-badge v-if="runningTunnelCount > 0" floating rounded color="negative">{{
+            runningTunnelCount
+          }}</q-badge>
           <q-tooltip>隧道</q-tooltip>
         </q-btn>
         <q-btn
@@ -320,8 +322,7 @@ const initialProjectRequired = computed(
 );
 const applicationReady = computed(
   () =>
-    !checkingProjects.value &&
-    (!initialProjectRequired.value || route.name === 'project-create'),
+    !checkingProjects.value && (!initialProjectRequired.value || route.name === 'project-create'),
 );
 const isContentRoute = computed(() =>
   ['diff', 'session-artifacts', 'session-artifact'].includes(String(route.name ?? '')),

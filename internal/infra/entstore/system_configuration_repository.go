@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nzlov/anycode/internal/domain/setting"
+	tunneldomain "github.com/nzlov/anycode/internal/domain/tunnel"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
@@ -129,4 +130,34 @@ func (r *SettingRepository) MindMapConfiguration(ctx context.Context) (setting.M
 		return setting.MindMapConfiguration{}, err
 	}
 	return configuration.MindMap, nil
+}
+
+func (r *SettingRepository) TunnelMode(ctx context.Context) (tunneldomain.Mode, error) {
+	row, err := r.client.SystemConfiguration.Get(ctx, globalSystemConfigurationID)
+	if ent.IsNotFound(err) {
+		return tunneldomain.ModeCF, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return tunneldomain.Mode(row.TunnelMode), nil
+}
+
+func (r *SettingRepository) SetTunnelMode(ctx context.Context, mode tunneldomain.Mode) error {
+	if !mode.Valid() {
+		return fmt.Errorf("invalid tunnel mode: %q", mode)
+	}
+	err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).SetTunnelMode(string(mode)).Exec(ctx)
+	if !ent.IsNotFound(err) {
+		return err
+	}
+	_, err = r.client.SystemConfiguration.Create().SetID(globalSystemConfigurationID).
+		SetWallpaperColorScheme(string(setting.WallpaperColorSchemeContent)).SetTunnelMode(string(mode)).Save(ctx)
+	if err == nil {
+		return nil
+	}
+	if !ent.IsConstraintError(err) {
+		return err
+	}
+	return r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).SetTunnelMode(string(mode)).Exec(ctx)
 }

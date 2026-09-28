@@ -17,6 +17,8 @@ const (
 	FieldAgentMaxConcurrent = "agent_max_concurrent"
 	// FieldAgentWritableRoots holds the string denoting the agent_writable_roots field in the database.
 	FieldAgentWritableRoots = "agent_writable_roots"
+	// FieldTunnelMode holds the string denoting the tunnel_mode field in the database.
+	FieldTunnelMode = "tunnel_mode"
 	// FieldSendShortcut holds the string denoting the send_shortcut field in the database.
 	FieldSendShortcut = "send_shortcut"
 	// FieldCodexContextWindow holds the string denoting the codex_context_window field in the database.
@@ -60,6 +62,7 @@ var Columns = []string{
 	FieldID,
 	FieldAgentMaxConcurrent,
 	FieldAgentWritableRoots,
+	FieldTunnelMode,
 	FieldSendShortcut,
 	FieldCodexContextWindow,
 	FieldCodexAutoCompactTokenLimit,
@@ -94,6 +97,10 @@ var (
 	DefaultAgentMaxConcurrent int
 	// DefaultAgentWritableRoots holds the default value on creation for the "agent_writable_roots" field.
 	DefaultAgentWritableRoots []string
+	// DefaultTunnelMode holds the default value on creation for the "tunnel_mode" field.
+	DefaultTunnelMode string
+	// TunnelModeValidator is a validator for the "tunnel_mode" field. It is called by the builders before save.
+	TunnelModeValidator func(string) error
 	// DefaultSendShortcut holds the default value on creation for the "send_shortcut" field.
 	DefaultSendShortcut string
 	// SendShortcutValidator is a validator for the "send_shortcut" field. It is called by the builders before save.
@@ -153,6 +160,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByAgentMaxConcurrent orders the results by the agent_max_concurrent field.
 func ByAgentMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAgentMaxConcurrent, opts...).ToFunc()
+}
+
+// ByTunnelMode orders the results by the tunnel_mode field.
+func ByTunnelMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTunnelMode, opts...).ToFunc()
 }
 
 // BySendShortcut orders the results by the send_shortcut field.

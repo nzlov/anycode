@@ -36,7 +36,8 @@ type Query {
   pendingQuestionRequests(sessionId: ID!): [QuestionRequest!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
-  tunnels: [Tunnel!]!
+  tunnelMode: String!
+  tunnels(ids: [ID!]): [Tunnel!]!
 }
 
 type StatisticsDashboard {
@@ -137,10 +138,13 @@ type Mutation {
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
   submitQuestionRequest(input: SubmitQuestionRequestInput!): QuestionRequest!
+  switchTunnelMode(id: ID!, mode: String!): Boolean!
+  setTunnelMode(mode: String!): String!
   closeTunnel(id: ID!): Boolean!
 }
 
 type Tunnel {
+  mode: String!
   id: ID!
   sessionId: ID!
   name: String!
@@ -199,8 +203,9 @@ type MindMapUpdateEvent {
 }
 
 type TunnelCountEvent {
+  tunnelId: ID
   eventType: String!
-  runningCount: Int!
+  runningCount: Int
 }
 
 type PageInfo {

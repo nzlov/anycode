@@ -38,6 +38,7 @@ import (
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
+	tunnels         http.Handler
 	graphqlHandler  http.Handler
 	attachments     attachmentapp.UseCase
 	diff            diffapp.UseCase
@@ -94,6 +95,10 @@ func WithTerminalRuntime(runtime terminaldomain.Runtime) HandlerOption {
 	}
 }
 
+func WithTunnelHandler(handler http.Handler) HandlerOption {
+	return func(opts *handlerOptions) { opts.tunnels = handler }
+}
+
 func WithBuildVersion(version string) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.buildVersion = strings.TrimSpace(version)
@@ -141,6 +146,9 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	})))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
+	}
+	if opts.tunnels != nil {
+		mux.Handle("/tunnel/", opts.tunnels)
 	}
 	mux.Handle("/", newPWAHandler())
 

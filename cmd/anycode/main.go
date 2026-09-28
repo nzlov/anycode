@@ -107,7 +107,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithWorkspaceFileUseCase(application.workspaceFiles), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithBuildVersion(version), httpinterface.WithPlayground()),
+		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithWorkspaceFileUseCase(application.workspaceFiles), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithTunnelHandler(application.tunnels), httpinterface.WithBuildVersion(version), httpinterface.WithPlayground()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -161,6 +161,7 @@ func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUs
 }
 
 type wiredApplication struct {
+	tunnels        http.Handler
 	mcp            *mcpinfra.Runtime
 	useCases       graph.UseCases
 	codex          *codexcli.Client
@@ -236,7 +237,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		_ = codex.Close()
 		return nil, fmt.Errorf("initialize tunnel runtime: %w", err)
 	}
-	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)), tunnelapp.WithEventPublisher(eventService))
+	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithConfiguration(store.Settings()), tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)), tunnelapp.WithEventPublisher(eventService))
 	terminalRuntime := ptyruntime.New(ptyruntime.WithHistoryDir(filepath.Join(cfg.DataDir, "terminals")))
 	mindMapQueue := mindmapapp.NewQueue(store.MindMaps(), store, store.Sessions(), store.Projects(), settings, processes, codex)
 	mindMapService := mindmapapp.New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
@@ -289,7 +290,8 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
 		CodexModels:  capabilities.Models,
 	}
-	return &wiredApplication{mcp: mcpRuntime, useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
+	return &wiredApplication{
+		tunnels: http.HandlerFunc(tunnelRuntime.ServeLocalHTTP), mcp: mcpRuntime, useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
 }
 
 func httpPort(addr string) int {

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
@@ -753,6 +754,26 @@ func (r *mutationResolver) SubmitQuestionRequest(ctx context.Context, input mode
 	return mapQuestionRequest(dto), nil
 }
 
+// SwitchTunnelMode is the resolver for the switchTunnelMode field.
+func (r *mutationResolver) SwitchTunnelMode(ctx context.Context, id string, mode string) (bool, error) {
+	if r.UseCases.Tunnels == nil {
+		return false, missingUseCase("tunnels")
+	}
+	if err := r.UseCases.Tunnels.SwitchMode(ctx, tunneldomain.ID(id), tunneldomain.Mode(mode)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// SetTunnelMode is the resolver for the setTunnelMode field.
+func (r *mutationResolver) SetTunnelMode(ctx context.Context, mode string) (string, error) {
+	if r.UseCases.Tunnels == nil {
+		return "", missingUseCase("tunnels")
+	}
+	value, err := r.UseCases.Tunnels.SetMode(ctx, tunneldomain.Mode(mode))
+	return string(value), err
+}
+
 // CloseTunnel is the resolver for the closeTunnel field.
 func (r *mutationResolver) CloseTunnel(ctx context.Context, id string) (bool, error) {
 	if r.UseCases.Tunnels == nil {
@@ -1270,8 +1291,17 @@ func (r *queryResolver) ResolveSessionArtifacts(ctx context.Context, input model
 	return resolved, nil
 }
 
+// TunnelMode is the resolver for the tunnelMode field.
+func (r *queryResolver) TunnelMode(ctx context.Context) (string, error) {
+	if r.UseCases.Tunnels == nil {
+		return "", missingUseCase("tunnels")
+	}
+	value, err := r.UseCases.Tunnels.Mode(ctx)
+	return string(value), err
+}
+
 // Tunnels is the resolver for the tunnels field.
-func (r *queryResolver) Tunnels(ctx context.Context) ([]*model.Tunnel, error) {
+func (r *queryResolver) Tunnels(ctx context.Context, ids []string) ([]*model.Tunnel, error) {
 	if r.UseCases.Tunnels == nil {
 		return nil, missingUseCase("tunnels")
 	}
@@ -1281,8 +1311,12 @@ func (r *queryResolver) Tunnels(ctx context.Context) ([]*model.Tunnel, error) {
 	}
 	result := make([]*model.Tunnel, 0, len(items))
 	for _, item := range items {
+		if len(ids) > 0 && !slices.Contains(ids, string(item.ID)) {
+			continue
+		}
 		result = append(result, &model.Tunnel{
-			ID: string(item.ID), SessionID: string(item.SessionID), Name: item.Name, Port: item.Port,
+			Mode: string(item.Mode),
+			ID:   string(item.ID), SessionID: string(item.SessionID), Name: item.Name, Port: item.Port,
 			Hostname: item.Hostname, URL: item.URL, AccessURL: item.AccessURL,
 			Status: string(item.Status), CreatedAt: item.CreatedAt,
 		})
@@ -1448,7 +1482,13 @@ func (r *subscriptionResolver) TunnelUpdates(ctx context.Context) (<-chan *model
 				if !ok {
 					return
 				}
-				update := &model.TunnelCountEvent{EventType: event.Type, RunningCount: event.RunningCount}
+				update := &model.TunnelCountEvent{EventType: event.Type}
+				if event.TunnelID == "" {
+					update.RunningCount = &event.RunningCount
+				}
+				if event.TunnelID != "" {
+					update.TunnelID = &event.TunnelID
+				}
 				select {
 				case <-ctx.Done():
 					return

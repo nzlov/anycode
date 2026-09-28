@@ -19,6 +19,7 @@ func (SystemConfiguration) Fields() []ent.Field {
 		field.JSON("agent_writable_roots", []string{}).
 			Default([]string{}).
 			Annotations(entsql.DefaultExpr("'[]'")),
+		field.String("tunnel_mode").NotEmpty().Default("cf"),
 		field.String("send_shortcut").NotEmpty().Default("shift_enter"),
 		field.Int("codex_context_window").Default(0),
 		field.Int("codex_auto_compact_token_limit").Default(0),

@@ -62,6 +62,20 @@ func (_u *SystemConfigurationUpdate) AppendAgentWritableRoots(v []string) *Syste
 	return _u
 }
 
+// SetTunnelMode sets the "tunnel_mode" field.
+func (_u *SystemConfigurationUpdate) SetTunnelMode(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetTunnelMode(v)
+	return _u
+}
+
+// SetNillableTunnelMode sets the "tunnel_mode" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableTunnelMode(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetTunnelMode(*v)
+	}
+	return _u
+}
+
 // SetSendShortcut sets the "send_shortcut" field.
 func (_u *SystemConfigurationUpdate) SetSendShortcut(v string) *SystemConfigurationUpdate {
 	_u.mutation.SetSendShortcut(v)
@@ -363,6 +377,11 @@ func (_u *SystemConfigurationUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SystemConfigurationUpdate) check() error {
+	if v, ok := _u.mutation.TunnelMode(); ok {
+		if err := systemconfiguration.TunnelModeValidator(v); err != nil {
+			return &ValidationError{Name: "tunnel_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.tunnel_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SendShortcut(); ok {
 		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
 			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
@@ -421,6 +440,9 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
 		})
+	}
+	if value, ok := _u.mutation.TunnelMode(); ok {
+		_spec.SetField(systemconfiguration.FieldTunnelMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)
@@ -535,6 +557,20 @@ func (_u *SystemConfigurationUpdateOne) SetAgentWritableRoots(v []string) *Syste
 // AppendAgentWritableRoots appends value to the "agent_writable_roots" field.
 func (_u *SystemConfigurationUpdateOne) AppendAgentWritableRoots(v []string) *SystemConfigurationUpdateOne {
 	_u.mutation.AppendAgentWritableRoots(v)
+	return _u
+}
+
+// SetTunnelMode sets the "tunnel_mode" field.
+func (_u *SystemConfigurationUpdateOne) SetTunnelMode(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetTunnelMode(v)
+	return _u
+}
+
+// SetNillableTunnelMode sets the "tunnel_mode" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableTunnelMode(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetTunnelMode(*v)
+	}
 	return _u
 }
 
@@ -852,6 +888,11 @@ func (_u *SystemConfigurationUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SystemConfigurationUpdateOne) check() error {
+	if v, ok := _u.mutation.TunnelMode(); ok {
+		if err := systemconfiguration.TunnelModeValidator(v); err != nil {
+			return &ValidationError{Name: "tunnel_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.tunnel_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SendShortcut(); ok {
 		if err := systemconfiguration.SendShortcutValidator(v); err != nil {
 			return &ValidationError{Name: "send_shortcut", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.send_shortcut": %w`, err)}
@@ -927,6 +968,9 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
 		})
+	}
+	if value, ok := _u.mutation.TunnelMode(); ok {
+		_spec.SetField(systemconfiguration.FieldTunnelMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)

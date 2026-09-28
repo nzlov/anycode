@@ -18,6 +18,9 @@ import (
 )
 
 type UseCase interface {
+	SwitchMode(context.Context, domain.ID, domain.Mode) error
+	Mode(context.Context) (domain.Mode, error)
+	SetMode(context.Context, domain.Mode) (domain.Mode, error)
 	Create(ctx context.Context, input CreateInput) (CreateResult, error)
 	List(ctx context.Context) ([]DTO, error)
 	Close(ctx context.Context, id domain.ID) error
@@ -38,6 +41,7 @@ type CreateResult struct {
 }
 
 type DTO struct {
+	Mode      domain.Mode
 	ID        domain.ID
 	SessionID domain.SessionID
 	Name      string
@@ -50,6 +54,7 @@ type DTO struct {
 }
 
 type Service struct {
+	configuration domain.ConfigurationRepository
 	runtime       domain.Runtime
 	publisher     eventdomain.Publisher
 	now           func() time.Time
@@ -58,6 +63,10 @@ type Service struct {
 }
 
 type Option func(*Service)
+
+func WithConfiguration(repository domain.ConfigurationRepository) Option {
+	return func(s *Service) { s.configuration = repository }
+}
 
 func WithReservedPorts(ports ...int) Option {
 	return func(s *Service) {
@@ -86,6 +95,41 @@ func New(runtime domain.Runtime, options ...Option) *Service {
 	return service
 }
 
+func (s *Service) Mode(ctx context.Context) (domain.Mode, error) {
+	if s.configuration == nil {
+		return domain.ModeCF, nil
+	}
+	return s.configuration.TunnelMode(ctx)
+}
+
+func (s *Service) SetMode(ctx context.Context, mode domain.Mode) (domain.Mode, error) {
+	if !mode.Valid() {
+		return "", apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "invalid tunnel mode")
+	}
+	if s.configuration == nil {
+		return "", errors.New("tunnel configuration is unavailable")
+	}
+	if err := s.configuration.SetTunnelMode(ctx, mode); err != nil {
+		return "", err
+	}
+	return mode, nil
+}
+
+func (s *Service) SwitchMode(ctx context.Context, id domain.ID, mode domain.Mode) error {
+	if id == "" || !mode.Valid() {
+		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "invalid tunnel id or mode")
+	}
+	if s == nil || s.runtime == nil {
+		return errors.New("tunnel runtime is unavailable")
+	}
+	_, err := s.runtime.SwitchMode(ctx, id, mode)
+	if err == nil && s.publisher != nil {
+		now := s.now().UTC()
+		_ = s.publisher.PublishAfterCommit(ctx, eventdomain.DomainEvent{ID: eventdomain.ID("tunnel-mode-" + strconv.FormatInt(now.UnixNano(), 10)), Type: "tunnel.mode_changed", Payload: map[string]any{"tunnelId": string(id)}, CreatedAt: now})
+	}
+	return err
+}
+
 func (s *Service) Create(ctx context.Context, input CreateInput) (CreateResult, error) {
 	if s == nil || s.runtime == nil {
 		return CreateResult{}, errors.New("tunnel runtime is unavailable")
@@ -111,9 +155,14 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreateResult, 
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("generate tunnel auth: %w", err)
 	}
+	mode, err := s.Mode(ctx)
+	if err != nil {
+		return CreateResult{}, err
+	}
 	now := s.now().UTC()
 	started, err := s.runtime.Start(ctx, domain.StartInput{
 		Tunnel: domain.Tunnel{
+			Mode:      mode,
 			ID:        domain.ID("tunnel-" + strings.ToLower(id)),
 			SessionID: input.SessionID,
 			Name:      name,
@@ -202,7 +251,7 @@ func (s *Service) CloseAll(ctx context.Context) error {
 
 func toDTO(item domain.Tunnel) DTO {
 	return DTO{
-		ID: item.ID, SessionID: item.SessionID, Name: item.Name, Port: item.Port, Hostname: item.Hostname,
+		Mode: item.Mode, ID: item.ID, SessionID: item.SessionID, Name: item.Name, Port: item.Port, Hostname: item.Hostname,
 		URL: item.URL, AccessURL: item.AccessURL, Status: item.Status, CreatedAt: item.CreatedAt,
 	}
 }

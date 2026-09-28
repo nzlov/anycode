@@ -34,6 +34,12 @@ func TestTunnelUpdatesStartsWithCurrentCountAndForwardsCountEvents(t *testing.T)
 	if update := <-updates; update.Type != TypeCountUpdated || update.RunningCount != 3 {
 		t.Fatalf("count update = %#v", update)
 	}
+	if err := events.PublishAfterCommit(ctx, eventdomain.DomainEvent{Type: TypeModeChanged, Payload: map[string]any{"tunnelId": "tunnel-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if update := <-updates; update.Type != TypeModeChanged || update.TunnelID != "tunnel-1" {
+		t.Fatalf("mode update = %#v", update)
+	}
 }
 
 type tunnelSourceStub struct {

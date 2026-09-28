@@ -26,12 +26,12 @@ test('tunnel entry follows history and uses page navigation only on mobile', () 
   assert.match(routes, /path: 'tunnels', name: 'tunnels'/);
 });
 
-test('toolbar tunnel entry only appears for running tunnels and shows their count', () => {
+test('toolbar tunnel entry allows configuration before any tunnel is running', () => {
   assert.match(
     layout,
-    /v-if="\$route\.name === 'overview' && runningTunnelCount > 0"[\s\S]*icon="lan"/,
+    /v-if="\$route\.name === 'overview'"[\s\S]*icon="lan"/,
   );
-  assert.match(layout, /<q-badge[\s\S]*\{\{ runningTunnelCount \}\}/);
+  assert.match(layout, /<q-badge[\s\S]*\{\{\s*runningTunnelCount\s*\}\}/);
   assert.match(layout, /@tunnel-count="runningTunnelCount = \$event"/);
   assert.match(index, /emit\('tunnel-count', update\.runningCount\)/);
   assert.match(index, /useTunnelUpdates/);

@@ -20815,6 +20815,7 @@ type SystemConfigurationMutation struct {
 	addagent_max_concurrent           *int
 	agent_writable_roots              *[]string
 	appendagent_writable_roots        []string
+	tunnel_mode                       *string
 	send_shortcut                     *string
 	codex_context_window              *int
 	addcodex_context_window           *int
@@ -21051,6 +21052,42 @@ func (m *SystemConfigurationMutation) AppendedAgentWritableRoots() ([]string, bo
 func (m *SystemConfigurationMutation) ResetAgentWritableRoots() {
 	m.agent_writable_roots = nil
 	m.appendagent_writable_roots = nil
+}
+
+// SetTunnelMode sets the "tunnel_mode" field.
+func (m *SystemConfigurationMutation) SetTunnelMode(s string) {
+	m.tunnel_mode = &s
+}
+
+// TunnelMode returns the value of the "tunnel_mode" field in the mutation.
+func (m *SystemConfigurationMutation) TunnelMode() (r string, exists bool) {
+	v := m.tunnel_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTunnelMode returns the old "tunnel_mode" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldTunnelMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTunnelMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTunnelMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTunnelMode: %w", err)
+	}
+	return oldValue.TunnelMode, nil
+}
+
+// ResetTunnelMode resets all changes to the "tunnel_mode" field.
+func (m *SystemConfigurationMutation) ResetTunnelMode() {
+	m.tunnel_mode = nil
 }
 
 // SetSendShortcut sets the "send_shortcut" field.
@@ -21779,12 +21816,15 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 19)
+	fields := make([]string, 0, 20)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
 	}
 	if m.agent_writable_roots != nil {
 		fields = append(fields, systemconfiguration.FieldAgentWritableRoots)
+	}
+	if m.tunnel_mode != nil {
+		fields = append(fields, systemconfiguration.FieldTunnelMode)
 	}
 	if m.send_shortcut != nil {
 		fields = append(fields, systemconfiguration.FieldSendShortcut)
@@ -21849,6 +21889,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 		return m.AgentMaxConcurrent()
 	case systemconfiguration.FieldAgentWritableRoots:
 		return m.AgentWritableRoots()
+	case systemconfiguration.FieldTunnelMode:
+		return m.TunnelMode()
 	case systemconfiguration.FieldSendShortcut:
 		return m.SendShortcut()
 	case systemconfiguration.FieldCodexContextWindow:
@@ -21896,6 +21938,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 		return m.OldAgentMaxConcurrent(ctx)
 	case systemconfiguration.FieldAgentWritableRoots:
 		return m.OldAgentWritableRoots(ctx)
+	case systemconfiguration.FieldTunnelMode:
+		return m.OldTunnelMode(ctx)
 	case systemconfiguration.FieldSendShortcut:
 		return m.OldSendShortcut(ctx)
 	case systemconfiguration.FieldCodexContextWindow:
@@ -21952,6 +21996,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAgentWritableRoots(v)
+		return nil
+	case systemconfiguration.FieldTunnelMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTunnelMode(v)
 		return nil
 	case systemconfiguration.FieldSendShortcut:
 		v, ok := value.(string)
@@ -22189,6 +22240,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 		return nil
 	case systemconfiguration.FieldAgentWritableRoots:
 		m.ResetAgentWritableRoots()
+		return nil
+	case systemconfiguration.FieldTunnelMode:
+		m.ResetTunnelMode()
 		return nil
 	case systemconfiguration.FieldSendShortcut:
 		m.ResetSendShortcut()

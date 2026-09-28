@@ -1032,6 +1032,7 @@ type TranscriptUsageAttribution struct {
 }
 
 type Tunnel struct {
+	Mode      string    `json:"mode"`
 	ID        string    `json:"id"`
 	SessionID string    `json:"sessionId"`
 	Name      string    `json:"name"`
@@ -1044,8 +1045,9 @@ type Tunnel struct {
 }
 
 type TunnelCountEvent struct {
-	EventType    string `json:"eventType"`
-	RunningCount int    `json:"runningCount"`
+	TunnelID     *string `json:"tunnelId,omitempty"`
+	EventType    string  `json:"eventType"`
+	RunningCount *int    `json:"runningCount,omitempty"`
 }
 
 type UpdateAppearanceSettingsInput struct {

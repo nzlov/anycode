@@ -749,7 +749,23 @@ async function refreshTunnels() {
   }
 }
 
-function handleTunnelCountUpdate(update: { runningCount: number }) {
+function handleTunnelCountUpdate(update: {
+  eventType: string;
+  runningCount: number | null;
+  tunnelId?: string | null;
+}) {
+  if (update.eventType === 'tunnel.mode_changed' && update.tunnelId) {
+    void listTunnels([update.tunnelId])
+      .then((items) => {
+        for (const item of items) {
+          const index = tunnels.value.findIndex((tunnel) => tunnel.id === item.id);
+          if (index >= 0) tunnels.value[index] = item;
+        }
+      })
+      .catch(() => {});
+    return;
+  }
+  if (update.runningCount === null) return;
   emit('tunnel-count', update.runningCount);
   void refreshTunnels();
 }

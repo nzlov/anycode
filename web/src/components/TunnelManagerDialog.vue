@@ -37,6 +37,28 @@
         </q-banner>
       </q-card-section>
 
+      <q-card-section>
+        <q-select
+          :model-value="mode"
+          :options="modeOptions"
+          label="新建隧道模式"
+          emit-value
+          map-options
+          outlined
+          dense
+          :disable="loading || savingMode"
+          :loading="savingMode"
+          @update:model-value="changeMode"
+        />
+        <div class="text-caption q-mt-sm">
+          {{
+            mode === 'local'
+              ? '本地模式：通过 AnyCode 地址转发，应用需支持路径前缀。'
+              : 'CF 模式：通过 Cloudflare 临时域名访问。'
+          }}
+          此设置仅影响新建隧道；已有隧道可单独切换，成功后原连接会断开。
+        </div>
+      </q-card-section>
       <q-card-section class="tunnel-manager__content">
         <div v-if="tunnels.length" class="tunnel-groups">
           <q-list
@@ -66,7 +88,10 @@
                   </a>
                   <q-badge outline color="positive" :label="statusLabel(tunnel.status)" />
                 </q-item-label>
-                <q-item-label caption>端口 {{ tunnel.port }}</q-item-label>
+                <q-item-label caption
+                  >{{ tunnel.mode === 'local' ? '本地' : 'CF' }} · 端口
+                  {{ tunnel.port }}</q-item-label
+                >
                 <q-item-label caption class="tunnel-list__url">
                   {{ tunnel.accessUrl }}
                 </q-item-label>
@@ -78,11 +103,24 @@
                   round
                   dense
                   class="app-icon-btn"
+                  icon="swap_horiz"
+                  :aria-label="`切换隧道 ${tunnel.name} 为${tunnel.mode === 'local' ? 'CF' : '本地'}模式`"
+                  :loading="switchingId === tunnel.id"
+                  :disable="Boolean(switchingId || closingId)"
+                  @click="switchExistingMode(tunnel)"
+                >
+                  <q-tooltip>切换为{{ tunnel.mode === 'local' ? 'CF' : '本地' }}模式</q-tooltip>
+                </q-btn>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
                   color="negative"
                   icon="close"
                   :aria-label="`关闭隧道 ${tunnel.name}`"
                   :loading="closingId === tunnel.id"
-                  :disable="Boolean(closingId)"
+                  :disable="Boolean(closingId || switchingId)"
                   @click="confirmClose(tunnel)"
                 >
                   <q-tooltip>关闭隧道</q-tooltip>
@@ -138,7 +176,15 @@
 import { QDialog } from 'quasar';
 import { computed, ref, watch } from 'vue';
 
-import { closeTunnel as closeTunnelRequest, listTunnels, type Tunnel } from '@/services/tunnels';
+import {
+  closeTunnel as closeTunnelRequest,
+  listTunnels,
+  getTunnelMode,
+  setTunnelMode,
+  switchTunnelMode,
+  type TunnelMode,
+  type Tunnel,
+} from '@/services/tunnels';
 import { getSessionCard } from '@/services/sessions';
 
 const props = defineProps<{
@@ -151,6 +197,41 @@ const emit = defineEmits<{
 }>();
 
 const tunnels = ref<Tunnel[]>([]);
+const mode = ref<TunnelMode>('cf');
+const savingMode = ref(false);
+const switchingId = ref('');
+async function switchExistingMode(tunnel: Tunnel) {
+  if (switchingId.value) return;
+  switchingId.value = tunnel.id;
+  error.value = '';
+  try {
+    await switchTunnelMode(tunnel.id, tunnel.mode === 'local' ? 'cf' : 'local');
+    const [updated] = await listTunnels([tunnel.id]);
+    const index = tunnels.value.findIndex((item) => item.id === tunnel.id);
+    if (updated && index >= 0) tunnels.value[index] = updated;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '切换隧道失败';
+  } finally {
+    switchingId.value = '';
+  }
+}
+const modeOptions = [
+  { label: '本地模式', value: 'local' },
+  { label: 'CF 模式', value: 'cf' },
+];
+
+async function changeMode(value: TunnelMode) {
+  if (savingMode.value || value === mode.value) return;
+  savingMode.value = true;
+  error.value = '';
+  try {
+    mode.value = await setTunnelMode(value);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '切换模式失败';
+  } finally {
+    savingMode.value = false;
+  }
+}
 const loading = ref(false);
 const error = ref('');
 const closingId = ref('');
@@ -183,7 +264,9 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    tunnels.value = await listTunnels();
+    const [items, currentMode] = await Promise.all([listTunnels(), getTunnelMode()]);
+    tunnels.value = items;
+    mode.value = currentMode;
     await loadSessionTitles(tunnels.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载隧道失败';

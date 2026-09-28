@@ -40,6 +40,20 @@ func (_c *SystemConfigurationCreate) SetAgentWritableRoots(v []string) *SystemCo
 	return _c
 }
 
+// SetTunnelMode sets the "tunnel_mode" field.
+func (_c *SystemConfigurationCreate) SetTunnelMode(v string) *SystemConfigurationCreate {
+	_c.mutation.SetTunnelMode(v)
+	return _c
+}
+
+// SetNillableTunnelMode sets the "tunnel_mode" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableTunnelMode(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetTunnelMode(*v)
+	}
+	return _c
+}
+
 // SetSendShortcut sets the "send_shortcut" field.
 func (_c *SystemConfigurationCreate) SetSendShortcut(v string) *SystemConfigurationCreate {
 	_c.mutation.SetSendShortcut(v)
@@ -319,6 +333,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultAgentWritableRoots
 		_c.mutation.SetAgentWritableRoots(v)
 	}
+	if _, ok := _c.mutation.TunnelMode(); !ok {
+		v := systemconfiguration.DefaultTunnelMode
+		_c.mutation.SetTunnelMode(v)
+	}
 	if _, ok := _c.mutation.SendShortcut(); !ok {
 		v := systemconfiguration.DefaultSendShortcut
 		_c.mutation.SetSendShortcut(v)
@@ -389,6 +407,14 @@ func (_c *SystemConfigurationCreate) defaults() {
 func (_c *SystemConfigurationCreate) check() error {
 	if _, ok := _c.mutation.AgentMaxConcurrent(); !ok {
 		return &ValidationError{Name: "agent_max_concurrent", err: errors.New(`ent: missing required field "SystemConfiguration.agent_max_concurrent"`)}
+	}
+	if _, ok := _c.mutation.TunnelMode(); !ok {
+		return &ValidationError{Name: "tunnel_mode", err: errors.New(`ent: missing required field "SystemConfiguration.tunnel_mode"`)}
+	}
+	if v, ok := _c.mutation.TunnelMode(); ok {
+		if err := systemconfiguration.TunnelModeValidator(v); err != nil {
+			return &ValidationError{Name: "tunnel_mode", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.tunnel_mode": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.SendShortcut(); !ok {
 		return &ValidationError{Name: "send_shortcut", err: errors.New(`ent: missing required field "SystemConfiguration.send_shortcut"`)}
@@ -513,6 +539,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.AgentWritableRoots(); ok {
 		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
 		_node.AgentWritableRoots = value
+	}
+	if value, ok := _c.mutation.TunnelMode(); ok {
+		_spec.SetField(systemconfiguration.FieldTunnelMode, field.TypeString, value)
+		_node.TunnelMode = value
 	}
 	if value, ok := _c.mutation.SendShortcut(); ok {
 		_spec.SetField(systemconfiguration.FieldSendShortcut, field.TypeString, value)

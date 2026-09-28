@@ -4,7 +4,10 @@ import {
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 
+export type TunnelMode = 'local' | 'cf';
+
 export interface Tunnel {
+  mode: TunnelMode;
   id: string;
   sessionId: string;
   name: string;
@@ -17,15 +20,17 @@ export interface Tunnel {
 }
 
 export interface TunnelCountUpdate {
+  tunnelId?: string | null;
   eventType: string;
-  runningCount: number;
+  runningCount: number | null;
 }
 
-export async function listTunnels() {
-  const data = await graphqlFetch<{ tunnels: Tunnel[] }>({
+export async function listTunnels(ids?: string[]) {
+  const data = await graphqlFetch<{ tunnels: Tunnel[] }, { ids: string[] | null }>({
     query: `
-      query Tunnels {
-        tunnels {
+      query Tunnels($ids: [ID!]) {
+        tunnels(ids: $ids) {
+          mode
           id
           sessionId
           name
@@ -38,6 +43,7 @@ export async function listTunnels() {
         }
       }
     `,
+    variables: { ids: ids ?? null },
     notify: false,
   });
   return data.tunnels;
@@ -66,6 +72,7 @@ export function subscribeTunnelUpdates(handlers: {
     query: `
       subscription TunnelUpdates {
         tunnelUpdates {
+          tunnelId
           eventType
           runningCount
         }
@@ -75,5 +82,30 @@ export function subscribeTunnelUpdates(handlers: {
     ...(handlers.onStart ? { onStart: handlers.onStart } : {}),
     ...(handlers.onError ? { onError: handlers.onError } : {}),
     ...(handlers.onClose ? { onClose: handlers.onClose } : {}),
+  });
+}
+
+export async function getTunnelMode() {
+  const data = await graphqlFetch<{ tunnelMode: TunnelMode }>({
+    query: `query TunnelMode { tunnelMode }`,
+    notify: false,
+  });
+  return data.tunnelMode;
+}
+
+export async function setTunnelMode(mode: TunnelMode) {
+  const data = await graphqlFetch<{ setTunnelMode: TunnelMode }, { mode: TunnelMode }>({
+    query: `mutation SetTunnelMode($mode: String!) { setTunnelMode(mode: $mode) }`,
+    variables: { mode },
+    notify: false,
+  });
+  return data.setTunnelMode;
+}
+
+export async function switchTunnelMode(id: string, mode: TunnelMode) {
+  await graphqlFetch<{ switchTunnelMode: boolean }, { id: string; mode: TunnelMode }>({
+    query: `mutation SwitchTunnelMode($id: ID!, $mode: String!) { switchTunnelMode(id: $id, mode: $mode) }`,
+    variables: { id, mode },
+    notify: false,
   });
 }

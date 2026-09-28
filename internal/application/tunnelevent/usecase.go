@@ -12,9 +12,11 @@ import (
 const (
 	TypeCountSnapshot = "tunnel.count_snapshot"
 	TypeCountUpdated  = "tunnel.count_updated"
+	TypeModeChanged   = "tunnel.mode_changed"
 )
 
 type DTO struct {
+	TunnelID     string
 	Type         string
 	RunningCount int
 }
@@ -66,6 +68,13 @@ func (s *Service) TunnelUpdates(ctx context.Context) (<-chan DTO, error) {
 			case event, ok := <-events:
 				if !ok {
 					return
+				}
+				if event.Type == TypeModeChanged {
+					id, ok := event.Payload["tunnelId"].(string)
+					if ok && id != "" && !send(ctx, out, DTO{Type: event.Type, TunnelID: id}) {
+						return
+					}
+					continue
 				}
 				if event.Type != TypeCountUpdated {
 					continue

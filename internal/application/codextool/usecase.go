@@ -341,7 +341,7 @@ func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicTo
 	}
 	payload, err := json.Marshal(map[string]any{
 		"id": created.Tunnel.ID, "name": created.Tunnel.Name, "url": created.AccessURL, "publicUrl": created.Tunnel.URL,
-		"hostname": created.Tunnel.Hostname, "port": created.Tunnel.Port, "status": created.Tunnel.Status,
+		"mode": created.Tunnel.Mode, "hostname": created.Tunnel.Hostname, "port": created.Tunnel.Port, "status": created.Tunnel.Status,
 	})
 	if err != nil {
 		return processdomain.DynamicToolResult{}, fmt.Errorf("encode tunnel_create result: %w", err)
@@ -363,7 +363,7 @@ func (s *Service) listTunnels(ctx context.Context, call processdomain.DynamicToo
 			continue
 		}
 		result = append(result, map[string]any{
-			"id": item.ID, "name": item.Name, "url": item.AccessURL, "publicUrl": item.URL, "hostname": item.Hostname,
+			"id": item.ID, "name": item.Name, "url": item.AccessURL, "publicUrl": item.URL, "mode": item.Mode, "hostname": item.Hostname,
 			"port": item.Port, "status": item.Status, "createdAt": item.CreatedAt,
 		})
 	}

@@ -25,7 +25,11 @@ cleanupOutdatedCaches();
 if (import.meta.env.QUASAR_PROD) {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL(import.meta.env.QUASAR_PWA_FALLBACK_HTML), {
-      denylist: [new RegExp(import.meta.env.QUASAR_PWA_SERVICE_WORKER_REGEX), /workbox-(.)*\.js$/],
+      denylist: [
+        /^\/tunnel\//,
+        new RegExp(import.meta.env.QUASAR_PWA_SERVICE_WORKER_REGEX),
+        /workbox-(.)*\.js$/,
+      ],
     }),
   );
 }

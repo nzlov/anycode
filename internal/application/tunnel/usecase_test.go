@@ -26,6 +26,16 @@ func (r *runtimeStub) Start(_ context.Context, input domain.StartInput) (domain.
 	return input.Tunnel, nil
 }
 
+func (r *runtimeStub) SwitchMode(_ context.Context, id domain.ID, mode domain.Mode) (domain.Tunnel, error) {
+	for i := range r.items {
+		if r.items[i].ID == id {
+			r.items[i].Mode = mode
+			return r.items[i], nil
+		}
+	}
+	return domain.Tunnel{}, nil
+}
+
 func (r *runtimeStub) List(context.Context) ([]domain.Tunnel, error) { return r.items, nil }
 func (r *runtimeStub) Close(_ context.Context, id domain.ID) error {
 	r.closed = append(r.closed, id)
@@ -129,4 +139,55 @@ type eventPublisherStub struct {
 func (p *eventPublisherStub) PublishAfterCommit(_ context.Context, event eventdomain.DomainEvent) error {
 	p.events = append(p.events, event)
 	return nil
+}
+
+type modeRepository struct{ mode domain.Mode }
+
+func (r *modeRepository) TunnelMode(context.Context) (domain.Mode, error) { return r.mode, nil }
+func (r *modeRepository) SetTunnelMode(_ context.Context, mode domain.Mode) error {
+	r.mode = mode
+	return nil
+}
+
+func TestModeChangesOnlyNewTunnels(t *testing.T) {
+	runtime := &runtimeStub{}
+	repository := &modeRepository{mode: domain.ModeCF}
+	service := New(runtime, WithConfiguration(repository))
+	input := CreateInput{SessionID: "s", Name: "preview", Port: 4173}
+	first, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetMode(context.Background(), domain.ModeLocal); err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Tunnel.Mode != domain.ModeCF || second.Tunnel.Mode != domain.ModeLocal || runtime.items[0].Mode != domain.ModeCF {
+		t.Fatal("mode change modified existing tunnels")
+	}
+	if _, err := service.SetMode(context.Background(), "invalid"); err == nil || repository.mode != domain.ModeLocal {
+		t.Fatal("invalid mode accepted")
+	}
+}
+
+func TestSwitchExistingModePublishesIDAndPreservesDefault(t *testing.T) {
+	runtime := &runtimeStub{items: []domain.Tunnel{{ID: "existing", Mode: domain.ModeCF}}}
+	repository := &modeRepository{mode: domain.ModeCF}
+	publisher := &eventPublisherStub{}
+	service := New(runtime, WithConfiguration(repository), WithEventPublisher(publisher))
+	if err := service.SwitchMode(context.Background(), "existing", domain.ModeLocal); err != nil {
+		t.Fatal(err)
+	}
+	if repository.mode != domain.ModeCF || runtime.items[0].Mode != domain.ModeLocal {
+		t.Fatal("existing switch changed default or failed to change tunnel")
+	}
+	if len(publisher.events) != 1 || publisher.events[0].Type != "tunnel.mode_changed" || publisher.events[0].Payload["tunnelId"] != "existing" || len(publisher.events[0].Payload) != 1 {
+		t.Fatalf("events %#v", publisher.events)
+	}
+	if err := service.SwitchMode(context.Background(), "existing", "invalid"); err == nil || len(publisher.events) != 1 {
+		t.Fatal("invalid switch was accepted or published")
+	}
 }

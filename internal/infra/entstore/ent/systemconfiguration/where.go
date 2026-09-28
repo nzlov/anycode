@@ -69,6 +69,11 @@ func AgentMaxConcurrent(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldAgentMaxConcurrent, v))
 }
 
+// TunnelMode applies equality check predicate on the "tunnel_mode" field. It's identical to TunnelModeEQ.
+func TunnelMode(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldTunnelMode, v))
+}
+
 // SendShortcut applies equality check predicate on the "send_shortcut" field. It's identical to SendShortcutEQ.
 func SendShortcut(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldSendShortcut, v))
@@ -192,6 +197,71 @@ func AgentMaxConcurrentLT(v int) predicate.SystemConfiguration {
 // AgentMaxConcurrentLTE applies the LTE predicate on the "agent_max_concurrent" field.
 func AgentMaxConcurrentLTE(v int) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldLTE(FieldAgentMaxConcurrent, v))
+}
+
+// TunnelModeEQ applies the EQ predicate on the "tunnel_mode" field.
+func TunnelModeEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldTunnelMode, v))
+}
+
+// TunnelModeNEQ applies the NEQ predicate on the "tunnel_mode" field.
+func TunnelModeNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldTunnelMode, v))
+}
+
+// TunnelModeIn applies the In predicate on the "tunnel_mode" field.
+func TunnelModeIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldTunnelMode, vs...))
+}
+
+// TunnelModeNotIn applies the NotIn predicate on the "tunnel_mode" field.
+func TunnelModeNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldTunnelMode, vs...))
+}
+
+// TunnelModeGT applies the GT predicate on the "tunnel_mode" field.
+func TunnelModeGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldTunnelMode, v))
+}
+
+// TunnelModeGTE applies the GTE predicate on the "tunnel_mode" field.
+func TunnelModeGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldTunnelMode, v))
+}
+
+// TunnelModeLT applies the LT predicate on the "tunnel_mode" field.
+func TunnelModeLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldTunnelMode, v))
+}
+
+// TunnelModeLTE applies the LTE predicate on the "tunnel_mode" field.
+func TunnelModeLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldTunnelMode, v))
+}
+
+// TunnelModeContains applies the Contains predicate on the "tunnel_mode" field.
+func TunnelModeContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldTunnelMode, v))
+}
+
+// TunnelModeHasPrefix applies the HasPrefix predicate on the "tunnel_mode" field.
+func TunnelModeHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldTunnelMode, v))
+}
+
+// TunnelModeHasSuffix applies the HasSuffix predicate on the "tunnel_mode" field.
+func TunnelModeHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldTunnelMode, v))
+}
+
+// TunnelModeEqualFold applies the EqualFold predicate on the "tunnel_mode" field.
+func TunnelModeEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldTunnelMode, v))
+}
+
+// TunnelModeContainsFold applies the ContainsFold predicate on the "tunnel_mode" field.
+func TunnelModeContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldTunnelMode, v))
 }
 
 // SendShortcutEQ applies the EQ predicate on the "send_shortcut" field.

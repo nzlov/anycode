@@ -189,7 +189,7 @@ func TestSubscriptionTunnelUpdatesForwardsRunningCount(t *testing.T) {
 	}
 	source <- tunneleventapp.DTO{Type: tunneleventapp.TypeCountUpdated, RunningCount: 2}
 	update := <-updates
-	if update.EventType != tunneleventapp.TypeCountUpdated || update.RunningCount != 2 {
+	if update.EventType != tunneleventapp.TypeCountUpdated || (update.RunningCount == nil || *update.RunningCount != 2) {
 		t.Fatalf("tunnel update = %#v", update)
 	}
 }

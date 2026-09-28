@@ -340,7 +340,7 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 		},
 		{
 			"type": "function", "name": "tunnel_create",
-			"description": "Create an authenticated temporary Cloudflare Quick Tunnel for an HTTP test program already listening on a localhost port.",
+			"description": "Create an authenticated temporary tunnel for an HTTP test program already listening on a localhost port. Uses the mode selected in AnyCode tunnel management: CF returns a Cloudflare URL; local returns a path relative to the AnyCode URL and requires the application to support that path prefix for assets and WebSockets.",
 			"inputSchema": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"name", "port"},
 				"properties": map[string]any{
