@@ -4531,11 +4531,16 @@ func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfter
 	original := strings.TrimSpace(session.Requirement)
 	nodePrompt = strings.TrimSpace(nodePrompt)
 	bodies := make([]string, 0, len(appends))
+	seen := make(map[string]struct{}, len(appends))
 	for _, promptAppend := range appends {
 		body := promptAppendText(promptAppend)
 		if body == "" {
 			continue
 		}
+		if _, ok := seen[body]; ok {
+			continue
+		}
+		seen[body] = struct{}{}
 		bodies = append(bodies, body)
 	}
 	if len(bodies) == 0 && !reviewAfterReuseFailure {
