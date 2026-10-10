@@ -26,6 +26,8 @@ if (import.meta.env.QUASAR_PROD) {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL(import.meta.env.QUASAR_PWA_FALLBACK_HTML), {
       denylist: [
+        // PDF frames are navigations too; file requests must reach the authenticated server.
+        /^\/(?:files|api)(?:\/|\?|$)/,
         /^\/tunnel\//,
         new RegExp(import.meta.env.QUASAR_PWA_SERVICE_WORKER_REGEX),
         /workbox-(.)*\.js$/,
