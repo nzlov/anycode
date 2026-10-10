@@ -3,6 +3,7 @@
     <section v-for="version in versions" :key="version" class="diff-media-preview__version">
       <div class="diff-media-preview__label text-caption text-weight-medium">
         {{ version === 'old' ? '旧版本' : '新版本' }}
+        <span v-if="states[version].thumbnail"> · 缩略图预览 · 下载可获取原图</span>
       </div>
       <div v-if="states[version].loading" class="diff-media-preview__state">
         <q-spinner color="primary" size="28px" />
@@ -63,6 +64,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, reactive, watch } from 'vue';
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
+import { loadImagePreview } from '@/services/imagePreview';
 import { requestDiffMediaPreviewURL } from '@/services/diffMedia';
 import { diffMediaVersions } from '@/services/diffMediaModel';
 import type { DiffMediaKind, DiffMediaVersion } from '@/services/diffMediaModel';
@@ -79,14 +81,15 @@ const props = defineProps<{
 }>();
 
 interface VersionState {
+  thumbnail: boolean;
   loading: boolean;
   error: string;
   url: string;
 }
 
 const states = reactive<Record<DiffMediaVersion, VersionState>>({
-  old: { loading: false, error: '', url: '' },
-  new: { loading: false, error: '', url: '' },
+  old: { loading: false, error: '', url: '', thumbnail: false },
+  new: { loading: false, error: '', url: '', thumbnail: false },
 });
 let controller: AbortController | null = null;
 const versions = computed(() => diffMediaVersions(props.status));
@@ -110,7 +113,9 @@ function clear() {
   for (const state of Object.values(states)) {
     state.loading = false;
     state.error = '';
+    if (state.url.startsWith('blob:')) URL.revokeObjectURL(state.url);
     state.url = '';
+    state.thumbnail = false;
   }
 }
 
@@ -130,7 +135,16 @@ async function load() {
           request.signal,
         );
         if (controller !== request) return;
-        state.url = url;
+        const preview =
+          props.kind === 'image'
+            ? await loadImagePreview(url, request.signal)
+            : { url, thumbnail: false };
+        if (controller !== request) {
+          if (preview.url.startsWith('blob:')) URL.revokeObjectURL(preview.url);
+          return;
+        }
+        state.url = preview.url;
+        state.thumbnail = preview.thumbnail;
       } catch (err) {
         if (controller === request && !request.signal.aborted) {
           state.error = err instanceof Error ? err.message : '读取多媒体版本失败';

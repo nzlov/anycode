@@ -107,7 +107,7 @@ test('all server file previews use direct authenticated URLs', () => {
 test('text previews align the outer grid item to the top so long files remain reachable', () => {
   assert.match(
     preview,
-    /:class="\{ 'session-file-preview--text': file\?\.previewKind === 'text' \}"/,
+    /:class="\{\s*'session-file-preview--text': file\?\.previewKind === 'text',/,
   );
   assert.match(preview, /\.session-file-preview--text\s*\{[^}]*align-items:\s*start;/s);
 });

@@ -4,14 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"mime"
 	"net/http"
@@ -25,7 +20,6 @@ import (
 )
 
 const DefaultArtifactMaxBytes int64 = 512 << 20
-const maxPreviewImagePixels int64 = 40_000_000
 const defaultWatchInterval = 500 * time.Millisecond
 
 type Store struct {
@@ -231,90 +225,6 @@ func (s *Store) EnsureArtifactDir(ctx context.Context, sessionID session.ID) (st
 
 func (s *Store) ArtifactDir(sessionID session.ID) string {
 	return filepath.Join(s.attachmentsRoot(), "outputs", safeSessionPathComponent(sessionID))
-}
-
-func validateImageDimensions(reader io.Reader, mimeType string, path string) error {
-	width, height := 0, 0
-	var err error
-	if mimeType == "image/bmp" {
-		width, height, err = decodeBMPDimensions(reader)
-	} else if mimeType == "image/webp" {
-		width, height, err = decodeWebPDimensions(reader)
-	} else {
-		var config image.Config
-		config, _, err = image.DecodeConfig(reader)
-		width, height = config.Width, config.Height
-	}
-	if err != nil {
-		return &Error{Code: "invalid_image", Path: path, Err: err}
-	}
-	if width <= 0 || height <= 0 || int64(width) > maxPreviewImagePixels/int64(height) {
-		return &Error{Code: "image_too_large", Path: path}
-	}
-	return nil
-}
-
-func imageNeedsDimensionValidation(mimeType string) bool {
-	mimeType = strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
-	switch mimeType {
-	case "image/bmp", "image/gif", "image/jpeg", "image/png", "image/webp":
-		return true
-	default:
-		return false
-	}
-}
-
-func decodeBMPDimensions(reader io.Reader) (int, int, error) {
-	var header [26]byte
-	if _, err := io.ReadFull(reader, header[:]); err != nil {
-		return 0, 0, err
-	}
-	if string(header[:2]) != "BM" {
-		return 0, 0, errors.New("invalid BMP header")
-	}
-	if binary.LittleEndian.Uint32(header[14:18]) == 12 {
-		return int(binary.LittleEndian.Uint16(header[18:20])), int(binary.LittleEndian.Uint16(header[20:22])), nil
-	}
-	width := int64(int32(binary.LittleEndian.Uint32(header[18:22])))
-	height := int64(int32(binary.LittleEndian.Uint32(header[22:26])))
-	if height < 0 {
-		height = -height
-	}
-	if width <= 0 || height <= 0 || width > int64(^uint(0)>>1) || height > int64(^uint(0)>>1) {
-		return 0, 0, errors.New("invalid BMP dimensions")
-	}
-	return int(width), int(height), nil
-}
-
-func decodeWebPDimensions(reader io.Reader) (int, int, error) {
-	var header [30]byte
-	if _, err := io.ReadFull(reader, header[:]); err != nil {
-		return 0, 0, err
-	}
-	if string(header[0:4]) != "RIFF" || string(header[8:12]) != "WEBP" {
-		return 0, 0, errors.New("invalid WebP container")
-	}
-	switch string(header[12:16]) {
-	case "VP8X":
-		width := 1 + int(header[24]) + int(header[25])<<8 + int(header[26])<<16
-		height := 1 + int(header[27]) + int(header[28])<<8 + int(header[29])<<16
-		return width, height, nil
-	case "VP8L":
-		if header[20] != 0x2f {
-			return 0, 0, errors.New("invalid VP8L signature")
-		}
-		bits := binary.LittleEndian.Uint32(header[21:25])
-		return 1 + int(bits&0x3fff), 1 + int((bits>>14)&0x3fff), nil
-	case "VP8 ":
-		if string(header[23:26]) != "\x9d\x01\x2a" {
-			return 0, 0, errors.New("invalid VP8 frame header")
-		}
-		width := int(binary.LittleEndian.Uint16(header[26:28]) & 0x3fff)
-		height := int(binary.LittleEndian.Uint16(header[28:30]) & 0x3fff)
-		return width, height, nil
-	default:
-		return 0, 0, errors.New("unsupported WebP bitstream")
-	}
 }
 
 func (s *Store) QuarantineArtifactDir(ctx context.Context, sessionID session.ID, token string) (string, error) {

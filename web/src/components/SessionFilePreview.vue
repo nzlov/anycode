@@ -1,8 +1,12 @@
 <template>
   <div
     class="session-file-preview"
-    :class="{ 'session-file-preview--text': file?.previewKind === 'text' }"
+    :class="{
+      'session-file-preview--text': file?.previewKind === 'text',
+      'session-file-preview--thumbnail': thumbnail,
+    }"
   >
+    <div v-if="thumbnail" class="text-caption text-muted">缩略图预览 · 下载可获取原图</div>
     <div
       v-if="file?.previewKind === 'image'"
       ref="zoomSurface"
@@ -27,7 +31,7 @@
         <template #toolbar-actions><slot name="toolbar-actions" /></template>
         <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
         <img
-          v-else-if="imageURL"
+          v-if="!error && imageURL"
           ref="mediaElement"
           :src="imageURL"
           :alt="file.filename"
@@ -124,6 +128,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import type { PreviewAnnotation } from '@/services/previewAnnotations';
+import { loadImagePreview } from '@/services/imagePreview';
 import { requestSessionFilePreviewURL, type SessionFilePreviewData } from '@/services/sessionFiles';
 
 const ModelFilePreview = defineAsyncComponent(() => import('@/components/ModelFilePreview.vue'));
@@ -150,6 +155,7 @@ const props = withDefaults(
 const loading = ref(false);
 const error = ref('');
 const imageURL = ref('');
+const thumbnail = ref(false);
 const previewURL = ref('');
 const text = ref('');
 const scale = ref(1);
@@ -185,7 +191,13 @@ async function load(file: SessionFilePreviewData | null) {
     const url = await requestSessionFilePreviewURL(file, request.signal);
     if (controller !== request || props.file?.id !== file.id) return;
     if (file.previewKind === 'image') {
-      imageURL.value = url;
+      const preview = await loadImagePreview(url, request.signal, file.size);
+      if (controller !== request || props.file?.id !== file.id) {
+        if (preview.url.startsWith('blob:')) URL.revokeObjectURL(preview.url);
+        return;
+      }
+      imageURL.value = preview.url;
+      thumbnail.value = preview.thumbnail;
       waitForImage = true;
     } else if (file.previewKind === 'text') {
       const response = await fetch(url, { signal: request.signal });
@@ -227,7 +239,9 @@ function clear() {
   controller?.abort();
   controller = null;
   loading.value = false;
+  if (imageURL.value.startsWith('blob:')) URL.revokeObjectURL(imageURL.value);
   imageURL.value = '';
+  thumbnail.value = false;
   previewURL.value = '';
   text.value = '';
   error.value = '';
@@ -372,6 +386,10 @@ onBeforeUnmount(clear);
   place-items: center;
   overflow: auto;
   background: var(--ac-surface-muted);
+}
+
+.session-file-preview--thumbnail {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .session-file-preview--text {

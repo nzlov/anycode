@@ -17,7 +17,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestInspectArtifactKeepsOversizedImageDownloadableWithoutPreview(t *testing.T) {
+func TestInspectArtifactKeepsLargeDimensionsPreviewable(t *testing.T) {
 	store := New(t.TempDir())
 	ctx := context.Background()
 	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
@@ -34,7 +34,7 @@ func TestInspectArtifactKeepsOversizedImageDownloadableWithoutPreview(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if artifact.PreviewKind != session.PreviewKindNone || artifact.Path != source {
+	if artifact.PreviewKind != session.PreviewKindImage || !artifact.Previewable || artifact.Path != source {
 		t.Fatalf("oversized artifact = %#v", artifact)
 	}
 	archiveRoot := filepath.Join(store.attachmentsRoot(), "sessions", "session-1")
@@ -120,49 +120,6 @@ func oversizedPNGHeader(width, height uint32) []byte {
 	binary.BigEndian.PutUint32(header[20:24], height)
 	header[24], header[25] = 8, 2
 	binary.BigEndian.PutUint32(header[29:33], crc32.ChecksumIEEE(header[12:29]))
-	return header
-}
-
-func TestValidateWebPDimensions(t *testing.T) {
-	if err := validateImageDimensions(bytes.NewReader(webPVP8XHeader(100, 100)), "image/webp", "image.webp"); err != nil {
-		t.Fatalf("validateImageDimensions() small WebP error = %v", err)
-	}
-	err := validateImageDimensions(bytes.NewReader(webPVP8XHeader(10_000, 10_000)), "image/webp", "image.webp")
-	var storeErr *Error
-	if !errors.As(err, &storeErr) || storeErr.Code != "image_too_large" {
-		t.Fatalf("validateImageDimensions() large WebP error = %v", err)
-	}
-}
-
-func TestValidateBMPDimensions(t *testing.T) {
-	header := make([]byte, 26)
-	copy(header[:2], "BM")
-	binary.LittleEndian.PutUint32(header[14:18], 40)
-	binary.LittleEndian.PutUint32(header[18:22], 100)
-	binary.LittleEndian.PutUint32(header[22:26], 100)
-	if err := validateImageDimensions(bytes.NewReader(header), "image/bmp", "image.bmp"); err != nil {
-		t.Fatalf("validateImageDimensions() small BMP error = %v", err)
-	}
-	binary.LittleEndian.PutUint32(header[18:22], 10_000)
-	binary.LittleEndian.PutUint32(header[22:26], 10_000)
-	err := validateImageDimensions(bytes.NewReader(header), "image/bmp", "image.bmp")
-	var storeErr *Error
-	if !errors.As(err, &storeErr) || storeErr.Code != "image_too_large" {
-		t.Fatalf("validateImageDimensions() large BMP error = %v", err)
-	}
-}
-
-func webPVP8XHeader(width, height int) []byte {
-	header := make([]byte, 30)
-	copy(header[0:4], "RIFF")
-	binary.LittleEndian.PutUint32(header[4:8], uint32(len(header)-8))
-	copy(header[8:12], "WEBP")
-	copy(header[12:16], "VP8X")
-	binary.LittleEndian.PutUint32(header[16:20], 10)
-	width--
-	height--
-	header[24], header[25], header[26] = byte(width), byte(width>>8), byte(width>>16)
-	header[27], header[28], header[29] = byte(height), byte(height>>8), byte(height>>16)
 	return header
 }
 
