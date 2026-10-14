@@ -37,6 +37,56 @@ test('event resources distinguish authenticated files, artifacts, and workspace 
   assert.equal(parseSessionEventResourceReference('../outside.txt', 'session-1'), null);
 });
 
+test('web navigation links bypass file previews and retain their original href', () => {
+  for (const reference of [
+    '/tunnel/tunnel-wy1pdnhngd7_ziwl/?anycode_auth=test-token',
+    '/tunnel/preview/assets/report.pdf?token=test#page=2',
+    '/tunnel',
+    '/tunnel?token=test',
+    '//preview.example.test/report.pdf',
+    '/#/sessions/session-1',
+    '#/sessions/session-1',
+    '?view=horizontal',
+    'https://preview.example.test/report.pdf',
+    'mailto:hello@example.test',
+  ]) {
+    assert.equal(parseSessionEventResourceReference(reference, 'session-1'), null, reference);
+  }
+});
+
+test('navigation exclusions preserve similarly named files and explicit file URLs', () => {
+  for (const [reference, path] of [
+    ['/tunnel.go:12', '/tunnel.go'],
+    ['/tunnels/readme.md', '/tunnels/readme.md'],
+    ['tunnel/report.pdf', 'tunnel/report.pdf'],
+    ['file:///tunnel/report.pdf', '/tunnel/report.pdf'],
+  ]) {
+    assert.deepEqual(parseSessionEventResourceReference(reference, 'session-1'), {
+      kind: 'workspace',
+      path,
+    });
+  }
+  assert.deepEqual(
+    parseSessionEventResourceReference('/files/file-1/download?token=test', 'session-1'),
+    { kind: 'session-file', fileId: 'file-1' },
+  );
+});
+
+test('historical relative file and artifact ID links open through authenticated file resolution', () => {
+  for (const reference of ['./screens/home.png', '././screens/home.png']) {
+    assert.deepEqual(parseSessionEventResourceReference(reference, 'session-1'), {
+      kind: 'workspace',
+      path: 'screens/home.png',
+    });
+  }
+  const fileId = 'artifact.v2.c2Vzc2lvbi0x.c2NyZWVucy9ob21lLnBuZw';
+  assert.deepEqual(parseSessionEventResourceReference(fileId, 'session-1'), {
+    kind: 'session-file',
+    fileId,
+  });
+  assert.equal(parseSessionEventResourceReference('./../outside.png', 'session-1'), null);
+});
+
 test('absolute workspace links select the longest matching changed path', () => {
   assert.equal(
     matchChangedFilePath('/worktrees/session-1/test/src/App.vue', [

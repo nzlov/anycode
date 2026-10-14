@@ -12,11 +12,24 @@ export function parseSessionEventResourceReference(
   sessionId: string,
 ): SessionEventResourceReference | null {
   const reference = decodeReference(value);
-  if (!reference || reference.startsWith('#')) return null;
+  if (
+    !reference ||
+    reference.startsWith('#') ||
+    reference.startsWith('?') ||
+    reference.startsWith('//') ||
+    reference.startsWith('/#') ||
+    /^\/tunnel(?:\/|[?#]|$)/.test(reference)
+  ) {
+    // Browser navigation targets must not enter the workspace file resolver.
+    return null;
+  }
 
   const fileMatch = stripQueryAndHash(reference).match(/^\/files\/([^/]+)\/(?:preview|download)$/);
   if (fileMatch?.[1]) {
     return { kind: 'session-file', fileId: fileMatch[1] };
+  }
+  if (/^artifact\.v2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(reference)) {
+    return { kind: 'session-file', fileId: reference };
   }
 
   const path = reference.startsWith('file:') ? fileURLPath(reference) : reference;
@@ -31,7 +44,7 @@ export function parseSessionEventResourceReference(
     return logicalPath ? { kind: 'artifact', logicalPath } : null;
   }
   if (normalizedPath.startsWith('/')) return { kind: 'workspace', path: normalizedPath };
-  const logicalPath = normalizeArtifactLogicalPath(normalizedPath);
+  const logicalPath = normalizeArtifactLogicalPath(normalizedPath.replace(/^(?:\.\/)+/, ''));
   return logicalPath ? { kind: 'workspace', path: logicalPath } : null;
 }
 
