@@ -1,5 +1,16 @@
 # AGENTS.md
 
+## 条目目录
+
+- [仓库定位](#仓库定位)
+- [下级规则索引](#下级规则索引)
+- [常用入口](#常用入口)
+- [执行规则](#执行规则)
+- [状态同步边界](#状态同步边界)
+- [DDD 分层](#ddd-分层)
+- [安全边界](#安全边界)
+- [验证](#验证)
+
 AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文件。
 
 ## 仓库定位
@@ -7,6 +18,22 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - AnyCode 是 Web 版 Codex agent 工具。
 - 后端使用 Go、gqlgen、ent 和 Turso/libSQL；Go module 为 `github.com/nzlov/anycode`。
 - 前端使用 Quasar、GraphQL 和 GraphQL WebSocket subscription；构建产物由 Go `embed` 嵌入。
+
+## 下级规则索引
+
+- [后端规则](internal/AGENTS.md)：适用于 `internal/` 下的后端实现与测试；涉及这些文件时读取。
+- [前端规则](web/AGENTS.md)：适用于 `web/` 下的界面、服务调用与构建；涉及这些文件时读取。
+- 修改目标文件前，检查从项目根到目标目录沿途的 `AGENTS.md`；跨模块任务读取各相关分支，索引链接不代表规则已加载。
+- 维护规则文件时同步条目目录和最近上级索引；全项目约束保留在本文件，子级仅补充所在目录的差异。
+
+## 常用入口
+
+- [cmd/anycode/main.go](cmd/anycode/main.go)：服务启动与依赖装配。
+- [internal/](internal/)：后端领域、用例、基础设施和接口实现；领域职责见后端规则。
+- [web/](web/)：Quasar 前端源码与测试；构建产物嵌入后端静态资源。
+- [gqlgen.yml](gqlgen.yml)：GraphQL schema、生成代码和 resolver 路径配置。
+- [Makefile](Makefile) 与 [scripts/verify/main.go](scripts/verify/main.go)：统一验证入口与具体检查项。
+- [README.md](README.md) 与 [.env.example](.env.example)：部署说明和环境配置示例。
 
 ## 执行规则
 
@@ -32,17 +59,6 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - Codex 命令行参数只在 `internal/infra/codexcli` 拼装。
 - 新增领域对象和用例前，先按上述分层与领域边界确定归属，不新增跨层 glue package。
 
-## DDD 领域边界
-
-- `project` 管理项目身份、路径、Git 探测结果、默认流程和 worktree 初始化配置；只表达 Git 事实，不执行 Git 命令。
-- `session` 管理卡片需求、模式、状态机、执行配置、队列意图、附件及 worktree 清理所有权；不推进流程节点。
-- `workflow` 管理流程定义、运行、节点尝试、条件、重试和审批规则；跨节点推进由 application runner 编排。
-- `question` 管理 `questions` 请求、选项和答案；不直接启动、恢复或停止进程。
-- `process` 管理 Codex 运行记录、生命周期、能力和标准化事件，并定义 Codex 进程端口；CLI 与操作系统进程实现在 infra。
-- `gitdiff` 管理 worktree、Diff、提交历史和合并的数据合同及端口；Git CLI 副作用实现在 infra。
-- `setting` 管理可复用快捷命令；`auth` 只表达访问主体；`event` 管理可持久化领域事件及提交后发布合同。
-- 跨上下文编排放在 application；各上下文保留自己的 ID 类型，通过 application use case 或明确端口交换数据，不共享 ent、GraphQL DTO 或 infra 实现。
-
 ## 安全边界
 
 - 访问密钥是服务账号权限范围内的代码执行凭据：持有者既能浏览服务进程可读路径，也能配置 worktree 初始化脚本执行任意 shell。不得弱化 HTTP、WebSocket、MCP、附件、下载或 Diff 的鉴权边界。
@@ -50,14 +66,9 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - 只允许清理 AnyCode 创建的 worktree，永不删除用户原始项目目录；当前卡片工作树由 AnyCode 管理，不得删除、移动、重建或手动清理。
 - worktree 路径由后端生成，不能直接拼接用户输入；目录浏览权限由服务进程权限和访问密钥决定，不在代码中硬编码为 `/workspaces`。
 
-## 前端约束
-
-- 优先使用现有 Quasar 组件和统一图标集，遵循已有页面与响应式布局模式。
-- 操作界面保持紧凑、可扫描；交互改动必须覆盖 hover、focus 和移动端溢出检查。
-
 ## 验证
 
 - 测试范围与风险匹配；文档改动至少运行 `git diff --check`。
 - 启动 AnyCode 测试实例时，必须使用该测试独占的临时数据库和数据目录，不得继承、连接或迁移主服务数据库。使用本地 Turso/libSQL 时，注意 `DATABASE_URL` 优先于 `TURSO_DATABASE_URL`：测试命令必须清除继承的 `DATABASE_URL` 和 `TURSO_AUTH_TOKEN`，并将 `TURSO_DATABASE_URL`、`ANYCODE_DATA_DIR` 显式指向临时目录；启动后先核对实际数据库目标，再执行迁移、恢复或浏览器测试。
-- 常规收口统一运行 `make verify`；该目标依次执行后端测试与静态检查、前端测试、类型检查、生产构建和 Git 差异检查。
+- 常规收口统一运行 `make verify`；该目标并行执行后端测试与静态检查、前端测试、类型检查、生产构建和 Git 差异检查；具体检查项以 `scripts/verify/main.go` 为准。
 - 验证失败时记录结果，继续修复或询问用户。
