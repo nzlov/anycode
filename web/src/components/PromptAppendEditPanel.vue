@@ -38,15 +38,10 @@
       >
         <div class="text-caption text-muted">附件保持不变</div>
         <div class="append-history__attachments">
-          <q-chip
+          <SessionFileAttachment
             v-for="attachment in target.attachments"
             :key="attachment.id"
-            dense
-            square
-            outline
-            :icon="attachment.kind === 'annotation' ? 'rate_review' : 'attach_file'"
-            color="primary"
-            text-color="primary"
+            :file="attachmentPreviewFile(attachment)"
             :label="attachmentLabel(attachment)"
           />
           <q-chip
@@ -65,15 +60,10 @@
             <q-icon name="visibility" class="q-ml-xs" />
             <q-tooltip>预览原文件及批注位置</q-tooltip>
           </q-chip>
-          <q-chip
+          <SessionFileAttachment
             v-for="artifact in target.artifacts"
             :key="artifact.id"
-            dense
-            square
-            outline
-            icon="link"
-            color="primary"
-            text-color="primary"
+            :file="artifact"
             :label="artifact.logicalPath || artifact.filename"
           />
         </div>
@@ -97,6 +87,8 @@
 </template>
 
 <script setup lang="ts">
+import SessionFileAttachment from '@/components/SessionFileAttachment.vue';
+import { attachmentPreviewFile } from '@/services/attachments';
 import type { PromptAppend } from '@/services/sessions';
 import type { SessionAttachment } from '@/services/sessions';
 import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';

@@ -1,4 +1,7 @@
 import { graphqlFetch, graphqlMultipartFetch } from '@/services/graphqlClient';
+import { browserPreviewKind } from '@/services/browserPreviewModel.js';
+import type { SessionAttachment } from '@/services/sessions';
+import type { SessionFilePreviewData } from '@/services/sessionFiles';
 import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
 export interface StagedAttachment {
@@ -77,4 +80,19 @@ export async function deleteStagedAttachment(id: string, options: { notify?: boo
   }
   const data = await graphqlFetch<{ deleteStagedAttachment: boolean }, { id: string }>(request);
   return data.deleteStagedAttachment;
+}
+
+// GLUE: Legacy uploads expose attachment metadata; use the existing authenticated file viewer.
+export function attachmentPreviewFile(attachment: SessionAttachment): SessionFilePreviewData {
+  const path = `/files/${encodeURIComponent(attachment.id)}`;
+  return {
+    id: attachment.id,
+    filename: attachment.filename,
+    size: attachment.size,
+    previewKind: attachment.previewable
+      ? browserPreviewKind(attachment.filename, attachment.mimeType) || 'text'
+      : 'none',
+    previewUrl: attachment.previewable ? `${path}/preview` : null,
+    downloadUrl: `${path}/download`,
+  };
 }

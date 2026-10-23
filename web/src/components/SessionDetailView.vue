@@ -454,15 +454,10 @@
                       <q-item-section>
                         <q-item-label class="append-history__body">{{ item.body }}</q-item-label>
                         <div v-if="item.attachments.length" class="append-history__attachments">
-                          <q-chip
+                          <SessionFileAttachment
                             v-for="attachment in item.attachments"
                             :key="attachment.id"
-                            dense
-                            square
-                            outline
-                            :icon="attachment.kind === 'annotation' ? 'rate_review' : 'attach_file'"
-                            color="primary"
-                            text-color="primary"
+                            :file="attachmentPreviewFile(attachment)"
                             :label="attachmentLabel(attachment)"
                           />
                         </div>
@@ -485,15 +480,10 @@
                           </q-chip>
                         </div>
                         <div v-if="item.artifacts.length" class="append-history__attachments">
-                          <q-chip
+                          <SessionFileAttachment
                             v-for="artifact in item.artifacts"
                             :key="artifact.id"
-                            dense
-                            square
-                            outline
-                            icon="link"
-                            color="primary"
-                            text-color="primary"
+                            :file="artifact"
                             :label="artifact.logicalPath || artifact.filename"
                           />
                         </div>
@@ -699,6 +689,8 @@
 </template>
 
 <script setup lang="ts">
+import SessionFileAttachment from '@/components/SessionFileAttachment.vue';
+import { attachmentPreviewFile } from '@/services/attachments';
 import MCPServiceManager from '@/components/MCPServiceManager.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Notify, QPage, useQuasar } from 'quasar';

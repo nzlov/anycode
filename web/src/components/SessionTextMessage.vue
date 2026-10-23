@@ -32,7 +32,7 @@
       </div>
       <SessionEventImages
         :event-id="event.id"
-        :images="content.images"
+        :images="message.images"
         :label="content.role === 'user' ? '用户输入图片' : '模型输出图片'"
       />
     </div>
@@ -63,7 +63,11 @@ import MarkdownContent from '@/components/MarkdownContent.vue';
 import SessionEventImages from '@/components/SessionEventImages.vue';
 import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptMessageContent, TranscriptItem } from '@/services/sessionTimeline';
-import { sessionTextPresentation, timelineTime } from '@/services/sessionTimelinePresentation';
+import {
+  sessionMessageImages,
+  sessionTextPresentation,
+  timelineTime,
+} from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptMessageContent };
@@ -76,8 +80,11 @@ const {
   load,
 } = useDeferredTranscriptEvent(() => props.event);
 const content = computed(() => resolvedEvent.value.content as TranscriptMessageContent);
+const message = computed(() =>
+  sessionMessageImages(content.value.role, content.value.text, content.value.images),
+);
 const presentation = computed(() =>
-  sessionTextPresentation(content.value.role, content.value.text, props.knownUserPrompts),
+  sessionTextPresentation(content.value.role, message.value.text, props.knownUserPrompts),
 );
 const canToggleRaw = computed(
   () => Boolean(presentation.value.text) && content.value.format === 'markdown',

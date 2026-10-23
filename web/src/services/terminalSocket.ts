@@ -1,3 +1,4 @@
+import { applicationURL } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey } from '@/services/graphqlClient';
 
 interface TerminalSocketHandlers {
@@ -106,7 +107,10 @@ export function connectTerminal(
 }
 
 function terminalWebSocketURL(sessionId: string) {
-  const url = new URL(`/api/terminals/${encodeURIComponent(sessionId)}/ws`, window.location.href);
+  const url = new URL(
+    applicationURL(`/api/terminals/${encodeURIComponent(sessionId)}/ws`),
+    window.location.href,
+  );
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }

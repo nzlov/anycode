@@ -1,3 +1,4 @@
+import { applicationURL, applicationAuthorizationHeader } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey } from '@/services/graphqlClient';
 import { hasNewerRelease } from '@/services/appVersionModel.js';
 
@@ -39,8 +40,8 @@ export async function getAppVersionStatus(): Promise<AppVersionStatus> {
 async function getBuildVersion() {
   const headers = new Headers();
   const accessKey = getGraphQLAccessKey();
-  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
-  const response = await fetch('/api/version', { headers });
+  if (accessKey) headers.set(applicationAuthorizationHeader(), `Bearer ${accessKey}`);
+  const response = await fetch(applicationURL('/api/version'), { headers });
   if (!response.ok) throw new Error(`读取程序版本失败：HTTP ${response.status}`);
   const payload = (await response.json()) as BuildVersionResponse;
   return typeof payload.version === 'string' && payload.version.trim()

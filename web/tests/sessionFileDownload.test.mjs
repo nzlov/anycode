@@ -3,14 +3,24 @@ import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
+const pathSource = readFileSync(
+  new URL('../src/services/applicationPath.js', import.meta.url),
+  'utf8',
+).replaceAll('export ', '');
 
 const source = stripTypeScriptTypes(
   readFileSync(new URL('../src/services/sessionFiles.ts', import.meta.url), 'utf8'),
 )
   .replace(/^import .*graphqlClient';\n/m, '')
+  .replace(/^import .*applicationPath.js';\n/m, '')
   .replaceAll('export ', '');
 
-function setup(response) {
+function setup(response, pathname = '/') {
+  const window = { location: { origin: 'https://anycode.test', pathname } };
+  const { applicationURL, applicationAuthorizationHeader } = runInNewContext(
+    `${pathSource}\n({applicationURL,applicationAuthorizationHeader})`,
+    { window },
+  );
   const requests = [];
   const actions = [];
   const anchor = {
@@ -21,29 +31,34 @@ function setup(response) {
       actions.push('remove');
     },
   };
-  const download = runInNewContext(`${source}\ndownloadSessionFile;`, {
-    URL,
-    Headers,
-    window: { location: { origin: 'https://anycode.test' } },
-    getGraphQLAccessKey: () => 'secret',
-    fetch: async (url, options) => {
-      requests.push({ url, options });
-      return response;
-    },
-    document: {
-      createElement(tag) {
-        assert.equal(tag, 'a');
-        return anchor;
+  const { download, preview } = runInNewContext(
+    `${source}\n({download:downloadSessionFile,preview:requestSessionFilePreviewURL});`,
+    {
+      applicationURL,
+      applicationAuthorizationHeader,
+      URL,
+      Headers,
+      window,
+      getGraphQLAccessKey: () => 'secret',
+      fetch: async (url, options) => {
+        requests.push({ url, options });
+        return response;
       },
-      body: {
-        appendChild(element) {
-          assert.equal(element, anchor);
-          actions.push('append');
+      document: {
+        createElement(tag) {
+          assert.equal(tag, 'a');
+          return anchor;
+        },
+        body: {
+          appendChild(element) {
+            assert.equal(element, anchor);
+            actions.push('append');
+          },
         },
       },
     },
-  });
-  return { download, requests, anchor, actions };
+  );
+  return { download, preview, requests, anchor, actions };
 }
 
 for (const target of [
@@ -108,5 +123,51 @@ test('invalid token responses do not navigate the browser', async () => {
       /文件下载凭据响应无效/,
     );
     assert.deepEqual(context.actions, []);
+  }
+});
+
+test('local tunnel downloads use instance credentials and stay inside the tunnel', async () => {
+  const context = setup(
+    { ok: true, json: async () => ({ url: '/files/file-1/download?token=short-lived' }) },
+    '/tunnel/local-one/',
+  );
+  await context.download({ filename: 'photo.png', downloadUrl: '/files/file-1/download' });
+  assert.equal(context.requests[0].url, '/tunnel/local-one/files/file-1/download-token');
+  assert.equal(context.requests[0].options.headers.get('authorization'), null);
+  assert.equal(
+    context.requests[0].options.headers.get('x-anycode-instance-authorization'),
+    'Bearer secret',
+  );
+  assert.equal(
+    context.anchor.href,
+    'https://anycode.test/tunnel/local-one/files/file-1/download?token=short-lived',
+  );
+});
+
+test('local image preview exchanges instance credentials for a resource-scoped URL', async () => {
+  const context = setup(
+    { ok: true, json: async () => ({ url: '/files/image/preview?token=signed' }) },
+    '/tunnel/local-one/',
+  );
+  const url = await context.preview({ id: 'image', previewUrl: '/files/image/preview' });
+  assert.equal(url, '/tunnel/local-one/files/image/preview?token=signed');
+  assert.equal(context.requests[0].url, '/tunnel/local-one/files/image/preview-token');
+  assert.equal(context.requests[0].options.headers.get('authorization'), null);
+  assert.equal(
+    context.requests[0].options.headers.get('x-anycode-instance-authorization'),
+    'Bearer secret',
+  );
+});
+
+test('local preview still rejects signed URLs for another resource or host', async () => {
+  for (const url of [
+    '/files/other/preview?token=signed',
+    'https://outside.test/files/image/preview?token=signed',
+  ]) {
+    const context = setup({ ok: true, json: async () => ({ url }) }, '/tunnel/local-one/');
+    await assert.rejects(
+      context.preview({ id: 'image', previewUrl: '/files/image/preview' }),
+      /文件预览凭据响应无效/,
+    );
   }
 });

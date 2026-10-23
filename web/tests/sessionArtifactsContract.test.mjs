@@ -77,7 +77,10 @@ test('session artifacts use paginated latest-version queries and unified file ac
 });
 
 test('all server file previews use direct authenticated URLs', () => {
-  assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
+  assert.match(
+    service,
+    /headers\.set\(applicationAuthorizationHeader\(\), `Bearer \$\{accessKey\}`\)/,
+  );
   assert.match(service, /\/files\/\$\{encodeURIComponent\(file\.id\)\}\/preview-token/);
   assert.match(service, /method: 'POST'/);
   assert.doesNotMatch(preview, /createObjectURL|response\.blob\(/);

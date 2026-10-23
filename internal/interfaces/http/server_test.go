@@ -784,3 +784,30 @@ func (u *fakeAttachmentUseCase) OpenAttachment(_ context.Context, id sessiondoma
 	u.openedMode = mode
 	return u.stream, u.err
 }
+
+func TestLocalPreviewInstanceCredentialsAreSeparate(t *testing.T) {
+	handler := NewHandler(config.Config{AccessKey: "instance-key"}, WithGraphQLUseCases(graph.UseCases{}))
+	for _, test := range []struct {
+		name, prefix, bearer, instance string
+		want                           int
+	}{
+		{"root bearer", "", "Bearer instance-key", "", http.StatusNoContent},
+		{"root ignores instance header", "", "", "Bearer instance-key", http.StatusUnauthorized},
+		{"tunnel instance", "/tunnel/test-id", "", "Bearer instance-key", http.StatusNoContent},
+		{"tunnel ignores host bearer", "/tunnel/test-id", "Bearer instance-key", "", http.StatusUnauthorized},
+		{"tunnel wrong instance", "/tunnel/test-id", "Bearer instance-key", "Bearer host-key", http.StatusUnauthorized},
+		{"invalid prefix", "/tunnel/test-id/extra", "", "Bearer instance-key", http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+			req.Header.Set("X-Forwarded-Prefix", test.prefix)
+			req.Header.Set("Authorization", test.bearer)
+			req.Header.Set("X-Anycode-Instance-Authorization", test.instance)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != test.want {
+				t.Fatalf("status=%d want=%d", rec.Code, test.want)
+			}
+		})
+	}
+}

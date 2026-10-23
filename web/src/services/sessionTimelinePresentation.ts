@@ -1,5 +1,6 @@
 import type {
   TranscriptStatusContent,
+  TranscriptImage,
   TranscriptPhase,
   TranscriptFileChange,
   TranscriptToolContent,
@@ -202,4 +203,45 @@ export function stripUnsupportedAnsiControls(value: string) {
     'g',
   );
   return value.replace(oscSequence, '');
+}
+
+// GLUE: Codex user messages serialize uploaded images as trailing path tags.
+// Convert only managed attachment references until the transcript supplies their file IDs.
+export function sessionMessageImages(
+  role: string,
+  text: string,
+  images: readonly TranscriptImage[],
+) {
+  const tagged: TranscriptImage[] = [];
+  let body = text;
+  if (role === 'user') {
+    while (true) {
+      const tag = body.match(/(?:^|\r?\n)[ \t]*<image\b([^\r\n>]*)>\s*<\/image>[ \t\r\n]*$/);
+      if (!tag) break;
+      const path = tag[1]?.match(/\bpath="([^"]+)"/)?.[1];
+      const src = path ? uploadedImageURL(path) : null;
+      if (!src) break;
+      tagged.unshift({ src, detail: '' });
+      body = body.slice(0, tag.index).trimEnd();
+    }
+  }
+  const seen = new Set<string>();
+  const resolved = [...images, ...tagged]
+    .map((image) => ({
+      ...image,
+      src: uploadedImageURL(image.src) || image.src,
+    }))
+    .filter((image) => {
+      if (seen.has(image.src)) return false;
+      seen.add(image.src);
+      return true;
+    });
+  return { text: body, images: resolved };
+}
+
+function uploadedImageURL(path: string): string | null {
+  const match = path.match(
+    /\/attachments\/sessions\/[^/]+\/(?:(?:requirement|prompt_append)\/[A-Za-z0-9_-]+\/(?:upload\/)?)?([A-Za-z0-9_-]+)\/[^/]+$/,
+  );
+  return match?.[1] ? `/files/${encodeURIComponent(match[1])}/preview` : null;
 }

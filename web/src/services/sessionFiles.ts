@@ -1,3 +1,4 @@
+import { applicationURL, applicationAuthorizationHeader } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey, graphqlFetch } from '@/services/graphqlClient';
 
 export type SessionFilePreviewKind =
@@ -101,7 +102,7 @@ export async function resolveSessionWorkspaceFile(
 ): Promise<SessionFile> {
   const query = new URLSearchParams({ path });
   const previewUrl = `/api/sessions/${encodeURIComponent(sessionId)}/workspace-file?${query}`;
-  const response = await fetch(previewUrl, {
+  const response = await fetch(applicationURL(previewUrl), {
     method: 'HEAD',
     headers: sessionFileHeaders(),
     signal: signal ?? null,
@@ -157,7 +158,7 @@ export async function requestSessionFilePreviewURL(
   const tokenURL = file.previewRequiresBearer
     ? `${target.pathname}/preview-token${target.search}`
     : `/files/${encodeURIComponent(file.id)}/preview-token`;
-  const response = await fetch(tokenURL, {
+  const response = await fetch(applicationURL(tokenURL), {
     method: 'POST',
     headers: sessionFileHeaders(),
     signal: signal ?? null,
@@ -171,13 +172,13 @@ export async function requestSessionFilePreviewURL(
   ) {
     throw new Error('文件预览凭据响应无效');
   }
-  return payload.url;
+  return applicationURL(payload.url);
 }
 
 function sessionFileHeaders() {
   const headers = new Headers();
   const accessKey = getGraphQLAccessKey();
-  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  if (accessKey) headers.set(applicationAuthorizationHeader(), `Bearer ${accessKey}`);
   return headers;
 }
 
@@ -193,7 +194,7 @@ export async function downloadSessionFile(file: SessionFileAccess) {
   const tokenPath = target.pathname.endsWith('/download')
     ? `${target.pathname}-token`
     : `${target.pathname}/download-token`;
-  const response = await fetch(`${tokenPath}${target.search}`, {
+  const response = await fetch(applicationURL(`${tokenPath}${target.search}`), {
     method: 'POST',
     headers: sessionFileHeaders(),
   });
@@ -205,7 +206,7 @@ export async function downloadSessionFile(file: SessionFileAccess) {
     throw new Error('文件下载凭据响应无效');
   }
   const anchor = document.createElement('a');
-  anchor.href = url.href;
+  anchor.href = new URL(applicationURL(url.pathname + url.search), window.location.origin).href;
   anchor.download = file.filename;
   anchor.rel = 'noreferrer';
   document.body.appendChild(anchor);

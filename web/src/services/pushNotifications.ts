@@ -1,3 +1,4 @@
+import { applicationBasePath, applicationStorageKey } from '@/services/applicationPath.js';
 import { graphqlFetch } from '@/services/graphqlClient';
 
 const subscriptionStorageKey = 'anycode.push-subscription-id';
@@ -121,6 +122,7 @@ export async function disablePushNotifications() {
 function browserSupportsPush() {
   return (
     typeof window !== 'undefined' &&
+    !applicationBasePath() &&
     window.isSecureContext &&
     'serviceWorker' in navigator &&
     'PushManager' in window &&
@@ -169,7 +171,10 @@ async function registerBrowserSubscription(subscription: PushSubscription) {
     },
     notify: false,
   });
-  window.localStorage.setItem(subscriptionStorageKey, data.registerPushSubscription.id);
+  window.localStorage.setItem(
+    applicationStorageKey(subscriptionStorageKey),
+    data.registerPushSubscription.id,
+  );
 }
 
 async function unregisterBrowserSubscription(id: string) {
@@ -185,10 +190,10 @@ async function unregisterBrowserSubscription(id: string) {
 }
 
 async function unregisterStoredSubscription() {
-  const id = window.localStorage.getItem(subscriptionStorageKey);
+  const id = window.localStorage.getItem(applicationStorageKey(subscriptionStorageKey));
   if (!id) return;
   await unregisterBrowserSubscription(id);
-  window.localStorage.removeItem(subscriptionStorageKey);
+  window.localStorage.removeItem(applicationStorageKey(subscriptionStorageKey));
 }
 
 function subscriptionUsesKey(subscription: PushSubscription, publicKey: string) {

@@ -63,7 +63,18 @@ export default defineConfig((/* ctx */) => {
       // minify: false,
       distDir: '../internal/interfaces/http/static/pwa',
 
-      // extendViteConf (viteConf) {},
+      // Relative assets let the same build run at the root or inside a local tunnel.
+      extendViteConf(viteConf) {
+        viteConf.base = './';
+        // GLUE: Quasar injects the manifest independently of Vite's base; remove when it supports relative publicPath.
+        viteConf.plugins?.push({
+          name: 'relative-pwa-manifest',
+          transformIndexHtml: {
+            order: 'post',
+            handler: (html) => html.replace('href="/manifest.json"', 'href="./manifest.json"'),
+          },
+        });
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [

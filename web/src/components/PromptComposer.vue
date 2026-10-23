@@ -74,7 +74,6 @@
                 <q-tooltip>移除图片</q-tooltip>
               </q-btn>
             </div>
-            <span class="attachment-image-name ellipsis" :title="file.name">{{ file.name }}</span>
           </div>
           <q-chip
             v-else
@@ -111,18 +110,15 @@
             <div class="annotation-attachment-preview">{{ annotation.content }}</div>
           </q-tooltip>
         </q-chip>
-        <q-chip
+        <SessionFileAttachment
           v-for="artifact in artifacts"
           :key="artifact.id"
+          :file="artifact"
+          :label="artifact.logicalPath || artifact.filename"
           removable
-          square
-          :disable="disabled"
-          class="attachment-chip"
-          :icon="artifactIcon(artifact)"
+          :disabled="disabled"
           @remove="removeArtifact(artifact)"
-        >
-          <span class="ellipsis">{{ artifact.logicalPath || artifact.filename }}</span>
-        </q-chip>
+        />
       </div>
       <div v-else class="text-caption text-muted attachment-empty">松开添加附件</div>
     </div>
@@ -339,6 +335,7 @@
 </template>
 
 <script setup lang="ts">
+import SessionFileAttachment from '@/components/SessionFileAttachment.vue';
 import {
   computed,
   defineAsyncComponent,
@@ -570,16 +567,6 @@ function revokeFileThumbnailUrls() {
     URL.revokeObjectURL(url);
   }
   fileThumbnailUrls.clear();
-}
-
-function artifactIcon(artifact: SessionFile) {
-  if (artifact.artifactKind === 'image') return 'image';
-  if (artifact.artifactKind === 'video') return 'movie';
-  if (artifact.artifactKind === 'audio') return 'audio_file';
-  if (artifact.artifactKind === 'model') return 'view_in_ar';
-  if (artifact.artifactKind === 'archive') return 'folder_zip';
-  if (artifact.artifactKind === 'pdf') return 'picture_as_pdf';
-  return 'description';
 }
 
 function canPreview(file: File) {

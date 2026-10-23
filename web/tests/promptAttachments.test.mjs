@@ -92,7 +92,7 @@ test('image attachments use viewport-relative previews without scrolling', () =>
   assert.doesNotMatch(composerSource, /<q-chip\s+v-if="isImageFile\(file\)"/);
   assert.match(
     composerSource,
-    /class="attachment-image-trigger"[\s\S]*?class="attachment-thumbnail"[\s\S]*?class="attachment-image-name ellipsis"/,
+    /class="attachment-image-trigger"[\s\S]*?class="attachment-thumbnail"/,
   );
   assert.match(
     composerSource,

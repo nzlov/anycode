@@ -34,6 +34,12 @@
       </q-btn>
     </div>
 
+    <SessionFilePreview
+      v-if="!deleted && previewUrl && ['image', 'video', 'audio'].includes(previewKind)"
+      class="artifact-event__inline"
+      :file="previewFile"
+      :annotatable="false"
+    />
     <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.md" @hide="clearPreview">
       <q-card
         class="artifact-event-preview"
@@ -220,6 +226,20 @@ function payloadString(key: string, fallback = '') {
 </script>
 
 <style scoped>
+.artifact-event__inline {
+  flex-basis: 100%;
+  max-width: 100%;
+  min-height: 0;
+  height: 220px;
+  max-height: 220px;
+  overflow: auto;
+}
+.artifact-event__inline :deep(img),
+.artifact-event__inline :deep(video) {
+  max-height: 220px;
+  object-fit: contain;
+}
+
 .artifact-event,
 .artifact-event__actions,
 .artifact-event-preview__header {
@@ -229,6 +249,7 @@ function payloadString(key: string, fallback = '') {
 }
 
 .artifact-event {
+  flex-wrap: wrap;
   padding: 10px 12px;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);

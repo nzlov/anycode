@@ -23,7 +23,7 @@
           round
           dense
           class="app-icon-btn"
-          icon="img:/icons/anycode.svg"
+          icon="img:./icons/anycode.svg"
           aria-label="返回总览"
           :to="{ name: 'overview' }"
         >

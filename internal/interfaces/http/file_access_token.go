@@ -60,7 +60,7 @@ func fileAccessTokenPayload(resource string, expiresAt int64) string {
 
 func fileAccessAuth(accessKey string, tokens fileAccessTokens, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if accessKey == "" || validBearer(accessKey, r.Header.Get("Authorization")) || tokens.valid(fileAccessResource(r.URL), r.URL.Query().Get("token")) {
+		if accessKey == "" || validBearer(accessKey, requestAuthorization(r)) || tokens.valid(fileAccessResource(r.URL), r.URL.Query().Get("token")) {
 			if r.URL.Query().Has("token") {
 				w.Header().Set("Cache-Control", "private, no-store")
 				w.Header().Set("Referrer-Policy", "no-referrer")

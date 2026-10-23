@@ -329,7 +329,7 @@ func graphqlAuth(accessKey string, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !validBearer(accessKey, r.Header.Get("Authorization")) {
+		if !validBearer(accessKey, requestAuthorization(r)) {
 			writeApplicationError(w, http.StatusUnauthorized, apperror.New(apperror.CodeAuthFailed, apperror.CategoryAuthError, "unauthorized"))
 			return
 		}
@@ -343,7 +343,7 @@ func bearerAuth(accessKey string, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !validBearer(accessKey, r.Header.Get("Authorization")) {
+		if !validBearer(accessKey, requestAuthorization(r)) {
 			writeApplicationError(w, http.StatusUnauthorized, apperror.New(apperror.CodeAuthFailed, apperror.CategoryAuthError, "unauthorized"))
 			return
 		}
@@ -361,6 +361,19 @@ func websocketInitFunc(accessKey string) transport.WebsocketInitFunc {
 		}
 		return graph.WithPrincipal(ctx, accessPrincipal(accessKey, "websocket_connection_init")), nil, nil
 	}
+}
+
+// Local tunnels strip host credentials. The embedded instance validates its own
+// explicitly supplied credential, independently of the tunnel access cookie.
+func requestAuthorization(r *http.Request) string {
+	prefix := r.Header.Get("X-Forwarded-Prefix")
+	if strings.HasPrefix(prefix, "/tunnel/") {
+		id := strings.TrimPrefix(prefix, "/tunnel/")
+		if id != "" && !strings.ContainsAny(id, "/\\?#") {
+			return r.Header.Get("X-Anycode-Instance-Authorization")
+		}
+	}
+	return r.Header.Get("Authorization")
 }
 
 func validBearer(accessKey string, authorization string) bool {

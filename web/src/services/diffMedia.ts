@@ -1,3 +1,4 @@
+import { applicationURL, applicationAuthorizationHeader } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey } from '@/services/graphqlClient';
 
 import type { DiffMediaVersion } from '@/services/diffMediaModel';
@@ -11,9 +12,11 @@ export async function requestDiffMediaPreviewURL(
   const query = new URLSearchParams({ path: filePath, version });
   const headers = new Headers();
   const accessKey = getGraphQLAccessKey();
-  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  if (accessKey) headers.set(applicationAuthorizationHeader(), `Bearer ${accessKey}`);
   const response = await fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/diff-media/preview-token?${query.toString()}`,
+    applicationURL(
+      `/api/sessions/${encodeURIComponent(sessionId)}/diff-media/preview-token?${query.toString()}`,
+    ),
     { method: 'POST', headers, signal: signal ?? null },
   );
   if (!response.ok)
@@ -27,5 +30,5 @@ export async function requestDiffMediaPreviewURL(
   ) {
     throw new Error('文件预览地址无效');
   }
-  return payload.url;
+  return applicationURL(payload.url);
 }

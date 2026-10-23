@@ -531,9 +531,6 @@ func (s *Service) resolveHistoryImages(ctx context.Context, sessionID sessiondom
 	case processdomain.CodexToolContent:
 		images = content.Images
 	case processdomain.CodexMessageContent:
-		if content.Role != "assistant" {
-			return processdomain.PrepareCodexEventForTranscript(event, false), nil
-		}
 		images = content.Images
 	}
 	stored := make([]processdomain.CodexImage, 0, len(images))

@@ -1,3 +1,4 @@
+import { applicationBasePath } from '@/services/applicationPath.js';
 import { defineRouter } from '#q-app';
 import {
   createMemoryHistory,
@@ -32,7 +33,9 @@ export default defineRouter((/* { store, ssrContext } */) => {
     // Leave this as is and make changes in quasar.conf.js instead!
     // quasar.conf.js -> build -> vueRouterMode
     // quasar.conf.js -> build -> publicPath
-    history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
+    history: createHistory(
+      applicationBasePath() ? `${applicationBasePath()}/` : import.meta.env.QUASAR_VUE_ROUTER_BASE,
+    ),
   });
 
   Router.beforeEach((to) => {

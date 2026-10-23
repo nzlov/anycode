@@ -43,11 +43,11 @@ test('route pages render their titles and actions into the application toolbar',
 });
 
 test('overview navigation and title use the AnyCode project icon', () => {
-  assert.match(layoutSource, /icon="img:\/icons\/anycode\.svg"/);
+  assert.match(layoutSource, /icon="img:\.\/icons\/anycode\.svg"/);
   assert.match(layoutSource, /aria-label="返回总览"/);
   assert.match(
     indexSource,
-    /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg" compact-title-on-mobile/,
+    /<PageToolbar title="AnyCode" title-icon="img:\.\/icons\/anycode\.svg" compact-title-on-mobile/,
   );
   assert.match(toolbarSource, /<q-icon v-if="titleIcon" :name="titleIcon"/);
   assert.match(toolbarSource, /class="page-toolbar__title-text"/);

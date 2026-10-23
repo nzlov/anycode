@@ -152,3 +152,38 @@ test('sessionTextPresentation leaves unmatched and assistant messages unchanged'
     foldedText: '',
   });
 });
+
+test('user image path tags become authenticated previews without leaking the tag into the body', async () => {
+  const { sessionMessageImages } = await import('../src/services/sessionTimelinePresentation.ts');
+  const tag =
+    '<image name=[Image #1] path="/root/.local/share/anycode/attachments/sessions/card-1/prompt_append/YXBwZW5k/upload/file-1/image.png">\n</image>';
+  const result = sessionMessageImages('user', `查看这张图片\n${tag}`, []);
+  assert.equal(result.text, '查看这张图片');
+  assert.deepEqual(result.images, [{ src: '/files/file-1/preview', detail: '' }]);
+  assert.deepEqual(sessionMessageImages('user', tag, []).images, result.images);
+  assert.deepEqual(sessionMessageImages('user', `${tag}\n${tag}`, []).images, result.images);
+});
+
+test('image path conversion preserves unsupported tags, code examples and assistant text', async () => {
+  const { sessionMessageImages } = await import('../src/services/sessionTimelinePresentation.ts');
+  const tag = '<image name=[Image #1] path="/tmp/image.png">\n</image>';
+  assert.equal(sessionMessageImages('user', tag, []).text, tag);
+  const managed = tag.replace('/tmp/image.png', '/data/attachments/sessions/card/file-1/image.png');
+  const code = `\`\`\`xml\n${managed}\n\`\`\``;
+  assert.equal(sessionMessageImages('user', code, []).text, code);
+  assert.equal(sessionMessageImages('assistant', managed, []).text, managed);
+  assert.equal(
+    sessionMessageImages('user', managed.replace('</image>', ''), []).text,
+    managed.replace('</image>', ''),
+  );
+});
+
+test('structured and tagged copies of the same uploaded image are deduplicated', async () => {
+  const { sessionMessageImages } = await import('../src/services/sessionTimelinePresentation.ts');
+  const path = '/data/attachments/sessions/card/requirement/Y2FyZA/upload/file-1/image.png';
+  const result = sessionMessageImages('user', `<image name=[Image #1] path="${path}">\n</image>`, [
+    { src: path, detail: 'high' },
+  ]);
+  assert.equal(result.text, '');
+  assert.deepEqual(result.images, [{ src: '/files/file-1/preview', detail: 'high' }]);
+});

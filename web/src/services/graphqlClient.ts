@@ -1,3 +1,9 @@
+import {
+  applicationBasePath,
+  applicationURL,
+  applicationStorageKey,
+  applicationAuthorizationHeader,
+} from '@/services/applicationPath.js';
 import { Notify } from 'quasar';
 
 import {
@@ -46,7 +52,7 @@ export interface GraphQLSubscriptionClose {
   completedByServer: boolean;
 }
 
-const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_ENDPOINT ?? '/graphql';
+const graphqlEndpoint = applicationURL(import.meta.env.VITE_GRAPHQL_ENDPOINT ?? '/graphql');
 let subscriptionTransport: ReturnType<typeof createGraphQLSubscriptionTransport> | null = null;
 
 export class AnyCodeGraphQLError extends Error {
@@ -71,8 +77,8 @@ export class AnyCodeGraphQLError extends Error {
 export function getGraphQLAccessKey() {
   if (typeof window === 'undefined') return '';
   return (
-    window.localStorage.getItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY) ??
-    window.localStorage.getItem('ANYCODE_ACCESS_KEY') ??
+    window.localStorage.getItem(applicationStorageKey(GRAPHQL_ACCESS_KEY_STORAGE_KEY)) ??
+    (!applicationBasePath() ? window.localStorage.getItem('ANYCODE_ACCESS_KEY') : null) ??
     ''
   );
 }
@@ -80,18 +86,21 @@ export function getGraphQLAccessKey() {
 export function setGraphQLAccessKey(accessKey: string) {
   if (typeof window === 'undefined') return;
   if (accessKey.trim() === '') {
-    window.localStorage.removeItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY);
+    window.localStorage.removeItem(applicationStorageKey(GRAPHQL_ACCESS_KEY_STORAGE_KEY));
     subscriptionTransport?.reset();
     return;
   }
-  window.localStorage.setItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY, accessKey.trim());
+  window.localStorage.setItem(
+    applicationStorageKey(GRAPHQL_ACCESS_KEY_STORAGE_KEY),
+    accessKey.trim(),
+  );
   subscriptionTransport?.reset();
 }
 
 export function clearGraphQLAccessKey() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY);
-  window.localStorage.removeItem('ANYCODE_ACCESS_KEY');
+  window.localStorage.removeItem(applicationStorageKey(GRAPHQL_ACCESS_KEY_STORAGE_KEY));
+  if (!applicationBasePath()) window.localStorage.removeItem('ANYCODE_ACCESS_KEY');
   subscriptionTransport?.reset();
 }
 
@@ -102,7 +111,7 @@ function graphqlHeaders(contentType?: string) {
   }
   const accessKey = getGraphQLAccessKey();
   if (accessKey) {
-    headers.set('authorization', `Bearer ${accessKey}`);
+    headers.set(applicationAuthorizationHeader(), `Bearer ${accessKey}`);
   }
   return headers;
 }
@@ -188,8 +197,8 @@ function markNotified(err: unknown) {
 }
 
 export async function verifyGraphQLAccessKey(accessKey: string) {
-  const response = await fetch('/api/healthz', {
-    headers: { authorization: `Bearer ${accessKey.trim()}` },
+  const response = await fetch(applicationURL('/api/healthz'), {
+    headers: { [applicationAuthorizationHeader()]: `Bearer ${accessKey.trim()}` },
   });
   return response.ok;
 }

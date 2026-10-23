@@ -1,3 +1,4 @@
+import { applicationURL, applicationAuthorizationHeader } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey } from '@/services/graphqlClient';
 import {
   createMaterialPalettes,
@@ -238,7 +239,7 @@ async function activateFetchedBackground(
   activeScheme = scheme;
   const version = ++requestVersion;
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(applicationURL(endpoint), {
       cache: 'no-cache',
       headers: authorizationHeaders(),
     });
@@ -263,7 +264,7 @@ async function activateFetchedBackground(
 function authorizationHeaders() {
   const headers = new Headers();
   const accessKey = getGraphQLAccessKey();
-  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  if (accessKey) headers.set(applicationAuthorizationHeader(), `Bearer ${accessKey}`);
   return headers;
 }
 

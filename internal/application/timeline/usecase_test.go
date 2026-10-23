@@ -261,11 +261,11 @@ func (r *fakeArtifactReader) FindArtifactByContent(_ context.Context, id session
 
 func TestHistoryImagesResolveExistingFilesOnPageAndDetail(t *testing.T) {
 	for _, found := range []bool{true, false} {
-		for _, message := range []bool{true, false} {
+		for _, role := range []string{"assistant", "user", "tool"} {
 			images := []processdomain.CodexImage{{Source: "data:image/png;base64,cG5n", SourceKind: "inline"}}
 			var content processdomain.CodexEventContent = processdomain.CodexToolContent{Images: images}
-			if message {
-				content = processdomain.CodexMessageContent{Role: "assistant", Images: images}
+			if role != "tool" {
+				content = processdomain.CodexMessageContent{Role: role, Images: images}
 			}
 			raw := processdomain.CodexEvent{EventID: "event-1", CodexSessionID: "thread-1", Type: processdomain.CodexEventMessage, Content: content}
 			codex := &fakeCodexHistory{page: processdomain.CodexHistoryPage{Events: []processdomain.CodexEvent{raw}}, event: raw}
