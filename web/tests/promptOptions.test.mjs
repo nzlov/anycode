@@ -26,7 +26,7 @@ const dynamicOptions = [
 
 test('Codex model defaults come from the loaded model catalog', () => {
   assert.equal(firstCodexModelValue(dynamicOptions), 'gpt-5.6-sol');
-  assert.equal(normalizeCodexModel(dynamicOptions, 'missing-model'), 'gpt-5.6-sol');
+  assert.equal(normalizeCodexModel(dynamicOptions, ''), 'gpt-5.6-sol');
   assert.deepEqual(
     reasoningEffortOptionsForModel(dynamicOptions, 'gpt-5.6-sol').map(({ label, value }) => ({
       label,
@@ -58,9 +58,16 @@ test('combined selection preserves a supported model and effort', () => {
   });
 });
 
-test('combined selection normalizes an invalid cached pair to catalog defaults', () => {
-  assert.deepEqual(normalizeCodexSelection(dynamicOptions, 'unsupported-model', 'missing-effort'), {
-    model: 'gpt-5.6-sol',
+test('custom model names preserve the current effort even outside the catalog', () => {
+  assert.deepEqual(normalizeCodexSelection(dynamicOptions, ' gpt-6.1-terra ', 'high'), {
+    model: 'gpt-6.1-terra',
+    effort: 'high',
+  });
+});
+
+test('custom models without a saved effort use the existing default', () => {
+  assert.deepEqual(normalizeCodexSelection(dynamicOptions, 'gpt-6.1-terra', ''), {
+    model: 'gpt-6.1-terra',
     effort: 'low',
   });
 });

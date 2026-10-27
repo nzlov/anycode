@@ -13,7 +13,7 @@
     <q-select
       :model-value="model"
       :display-value="modelLabel"
-      :options="modelOptions"
+      :options="selectableModels"
       :loading="loading"
       :disable="disabled"
       dense
@@ -27,8 +27,8 @@
       @popup-show="loadOptions"
       @update:model-value="selectModel"
     >
-      <template #no-option>
-        <q-item>
+      <template #before-options>
+        <q-item v-if="modelOptions.length === 0">
           <q-item-section class="codex-model-select__status">
             <div v-if="loading" class="row items-center justify-center q-gutter-sm">
               <q-spinner color="primary" size="20px" />
@@ -115,6 +115,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 
 import {
   type CodexModelOption,
@@ -144,6 +145,11 @@ const emit = defineEmits<{
 }>();
 
 const modelOptions = ref<CodexModelOption[]>([]);
+const $q = useQuasar();
+const selectableModels = computed(() => [
+  ...modelOptions.value,
+  { label: '自定义…', value: null },
+]);
 const loading = ref(false);
 const loadError = ref(false);
 const effortOptions = computed(() =>
@@ -168,7 +174,24 @@ async function loadOptions() {
   }
 }
 
-function selectModel(value: string) {
+function selectModel(value: string | null) {
+  if (value === null) {
+    $q.dialog({
+      title: '自定义模型',
+      prompt: {
+        model: props.model,
+        type: 'text',
+        label: '模型名称',
+        placeholder: '例如 gpt-6.1-terra',
+        isValid: (name: string) => name.trim().length > 0,
+      },
+      ok: '使用',
+      cancel: '取消',
+    }).onOk((name: string) => {
+      if (!props.disabled && name.trim()) emit('update:model', name.trim());
+    });
+    return;
+  }
   emit('update:model', value);
 }
 

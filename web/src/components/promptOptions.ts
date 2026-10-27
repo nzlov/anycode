@@ -15,7 +15,7 @@ export function firstCodexModelValue(options: CodexModelOption[]) {
 
 export function normalizeCodexModel(options: CodexModelOption[], value: string) {
   if (options.length === 0) return value;
-  if (options.some((option) => option.value === value)) return value;
+  if (value.trim()) return value.trim();
   return firstCodexModelValue(options);
 }
 
@@ -33,6 +33,7 @@ export function reasoningEffortOptionsForModel(options: CodexModelOption[], mode
 
 export function normalizeReasoningEffort(options: CodexModelOption[], model: string, value: string) {
   if (options.length === 0) return value;
+  if (model && value && !options.some((option) => option.value === model)) return value;
   const efforts = reasoningEffortOptionsForModel(options, model);
   if (efforts.some((option) => option.value === value)) return value;
   return defaultReasoningEffortForModel(options, model);
