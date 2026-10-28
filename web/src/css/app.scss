@@ -1774,6 +1774,12 @@ body.desktop
   min-height: 188px;
 }
 
+.prompt-input textarea.q-field__native {
+  max-height: min(400px, 40dvh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
 .prompt-shell--compact .prompt-input .q-field__control {
   min-height: 92px;
 }
