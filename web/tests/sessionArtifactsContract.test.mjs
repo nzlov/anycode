@@ -139,7 +139,7 @@ test('full-size artifact previews fit media and support mouse or touch dragging'
     panel,
     /\.artifact-preview-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
   );
-  assert.match(event, /:maximized="\$q\.screen\.lt\.md"/);
+  assert.match(event, /:maximized="\$q\.screen\.lt\.md && previewKind !== 'image'"/);
   assert.match(
     event,
     /v-if="!\$q\.screen\.lt\.md && !annotationToolbarVisible"[\s\S]*?class="artifact-event-preview__header"/,

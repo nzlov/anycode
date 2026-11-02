@@ -3,6 +3,7 @@
     class="session-file-preview"
     :class="{
       'session-file-preview--text': file?.previewKind === 'text',
+      'session-file-preview--fit-image': fitImage && file?.previewKind === 'image',
       'session-file-preview--thumbnail': thumbnail,
     }"
   >
@@ -137,6 +138,7 @@ const props = withDefaults(
   defineProps<{
     file: SessionFilePreviewData | null;
     zoomable?: boolean;
+    fitImage?: boolean;
     annotationSource?: string;
     annotationSessionId?: string;
     annotatable?: boolean;
@@ -145,6 +147,7 @@ const props = withDefaults(
   }>(),
   {
     zoomable: false,
+    fitImage: false,
     annotationSource: '',
     annotationSessionId: '',
     annotatable: true,
@@ -386,6 +389,32 @@ onBeforeUnmount(clear);
   place-items: center;
   overflow: auto;
   background: var(--ac-surface-muted);
+}
+
+/* Event previews size to the image; workspace previews keep their panel layout. */
+.session-file-preview--fit-image {
+  width: max-content;
+  max-width: min(100%, var(--preview-image-max-width, 90vw));
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-file-preview--fit-image .session-file-preview__zoom-surface,
+.session-file-preview--fit-image :deep(.preview-annotator) {
+  height: auto;
+}
+
+.session-file-preview--fit-image .session-file-preview__image {
+  width: auto;
+  height: auto;
+  max-width: min(100%, var(--preview-image-max-width, 90vw));
+  max-height: var(--preview-image-max-height, calc(90dvh - 120px));
+}
+
+.session-file-preview--fit-image:has(.session-file-preview__loading) {
+  min-width: 64px;
+  min-height: 64px;
 }
 
 .session-file-preview--thumbnail {

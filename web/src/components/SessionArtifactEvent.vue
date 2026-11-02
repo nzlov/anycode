@@ -34,18 +34,28 @@
       </q-btn>
     </div>
 
-    <SessionFilePreview
+    <div
       v-if="!deleted && previewUrl && ['image', 'video', 'audio'].includes(previewKind)"
-      class="artifact-event__inline"
-      :file="previewFile"
-      :annotatable="false"
-    />
-    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.md" @hide="clearPreview">
+      class="artifact-event__media"
+    >
+      <SessionFilePreview
+        fit-image
+        class="artifact-event__inline"
+        :file="previewFile"
+        :annotatable="false"
+      />
+    </div>
+    <q-dialog
+      v-model="previewOpen"
+      :maximized="$q.screen.lt.md && previewKind !== 'image'"
+      @hide="clearPreview"
+    >
       <q-card
         class="artifact-event-preview"
         :class="{
-          'app-content-dialog': !$q.screen.lt.md,
-          'artifact-event-preview--mobile': $q.screen.lt.md,
+          'app-content-dialog': !$q.screen.lt.md && previewKind !== 'image',
+          'artifact-event-preview--image': previewKind === 'image',
+          'artifact-event-preview--mobile': $q.screen.lt.md && previewKind !== 'image',
         }"
       >
         <q-card-section
@@ -94,6 +104,7 @@
         <q-separator v-if="$q.screen.lt.md && !annotationToolbarVisible" />
         <SessionFilePreview
           :file="selectedPreview"
+          fit-image
           zoomable
           :annotation-source="`临时文件 ${filename}`"
         >
@@ -226,13 +237,22 @@ function payloadString(key: string, fallback = '') {
 </script>
 
 <style scoped>
-.artifact-event__inline {
+.artifact-event__media {
   flex-basis: 100%;
+  min-width: 0;
+}
+.artifact-event__inline {
   max-width: 100%;
   min-height: 0;
   height: 220px;
   max-height: 220px;
   overflow: auto;
+}
+.artifact-event__inline.session-file-preview--fit-image {
+  --preview-image-max-width: 560px;
+  --preview-image-max-height: 220px;
+  max-width: min(100%, 560px);
+  height: auto;
 }
 .artifact-event__inline :deep(img),
 .artifact-event__inline :deep(video) {
@@ -272,6 +292,16 @@ function payloadString(key: string, fallback = '') {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.artifact-event-preview--image {
+  width: max-content;
+  min-width: min(320px, 90vw);
+  max-width: 90vw;
+}
+
+.artifact-event-preview--image > .session-file-preview {
+  width: 100%;
 }
 
 .artifact-event-preview--mobile {

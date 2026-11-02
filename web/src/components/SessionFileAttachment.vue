@@ -23,7 +23,12 @@
       :aria-label="`放大预览 ${file.filename}`"
       @click="open = true"
     >
-      <SessionFilePreview class="file-attachment__inline" :file="file" :annotatable="false" />
+      <SessionFilePreview
+        class="file-attachment__inline"
+        fit-image
+        :file="file"
+        :annotatable="false"
+      />
       <q-tooltip
         v-if="!open && !$q.platform.has.touch"
         anchor="top middle"
@@ -31,7 +36,12 @@
         :delay="200"
         class="file-attachment__tooltip"
       >
-        <SessionFilePreview class="file-attachment__hover" :file="file" :annotatable="false" />
+        <SessionFilePreview
+          class="file-attachment__hover"
+          fit-image
+          :file="file"
+          :annotatable="false"
+        />
       </q-tooltip>
     </button>
     <q-btn
@@ -54,8 +64,13 @@
       :file="file"
       :annotatable="false"
     />
-    <q-dialog v-model="open" :maximized="$q.screen.lt.md">
-      <q-card class="file-attachment__dialog app-content-dialog">
+    <q-dialog v-model="open" :maximized="$q.screen.lt.md && file.previewKind !== 'image'">
+      <q-card
+        class="file-attachment__dialog"
+        :class="
+          file.previewKind === 'image' ? 'file-attachment__dialog--image' : 'app-content-dialog'
+        "
+      >
         <q-card-section class="row items-center no-wrap q-gutter-sm">
           <span class="col ellipsis">{{ file.filename }}</span>
           <q-btn
@@ -72,7 +87,7 @@
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭预览" />
         </q-card-section>
         <q-separator />
-        <SessionFilePreview :file="file" zoomable :annotatable="false" />
+        <SessionFilePreview :file="file" fit-image zoomable :annotatable="false" />
       </q-card>
     </q-dialog>
   </div>
@@ -134,6 +149,12 @@ async function download() {
   max-height: 140px;
   overflow: auto;
 }
+.file-attachment__image-trigger .file-attachment__inline {
+  --preview-image-max-width: 240px;
+  --preview-image-max-height: 140px;
+  width: max-content;
+  height: auto;
+}
 .file-attachment__inline--audio {
   height: 64px;
 }
@@ -144,7 +165,7 @@ async function download() {
   border-radius: var(--ac-radius);
   background: transparent;
   cursor: zoom-in;
-  max-width: 100%;
+  max-width: min(100%, 242px);
 }
 .file-attachment__image-trigger:focus-visible {
   outline: 2px solid var(--q-primary);
@@ -155,12 +176,9 @@ async function download() {
   padding: 4px;
 }
 .file-attachment__hover {
-  width: min(560px, 80vw);
-  height: min(400px, 60vh);
+  --preview-image-max-width: min(560px, 80vw);
+  --preview-image-max-height: min(400px, 60vh);
   min-height: 0;
-}
-.file-attachment__hover :deep(img) {
-  max-height: min(400px, 60vh);
 }
 .file-attachment__inline :deep(img),
 .file-attachment__inline :deep(video) {
@@ -170,6 +188,14 @@ async function download() {
 .file-attachment__dialog {
   width: 960px;
   max-width: 95vw;
+}
+.file-attachment__dialog--image {
+  width: max-content;
+  max-width: 90vw;
+  min-width: min(200px, 90vw);
+}
+.file-attachment__dialog--image > .session-file-preview {
+  margin-inline: auto;
 }
 .file-attachment__dialog > .session-file-preview {
   max-height: calc(100dvh - 100px);
