@@ -1,9 +1,14 @@
 package codextool
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,6 +22,7 @@ import (
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	tunneldomain "github.com/nzlov/anycode/internal/domain/tunnel"
+	"github.com/nzlov/anycode/internal/infra/filestore"
 )
 
 func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
@@ -62,29 +68,110 @@ func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
 	}
 }
 
-func TestQuestionsResolvesOptionalFilesForEachQuestion(t *testing.T) {
-	artifacts := &fakeArtifacts{resolved: []sessiondomain.SessionFile{{
-		ID: "artifact-1", SessionID: "session-1", Filename: "style.png", MimeType: "image/png",
-		Size: 42, PreviewKind: sessiondomain.PreviewKindImage,
-	}}}
+func TestQuestionsResolvesOptionalFilePathsForEachQuestion(t *testing.T) {
+	ctx := context.Background()
+	store := filestore.New(t.TempDir())
+	root, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var imageData bytes.Buffer
+	if err := png.Encode(&imageData, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "styles", "style.png"), imageData.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	sessions := &fakeSessions{result: questionapp.RequestDTO{
 		ID: "call-1", SessionID: "session-1", Status: questiondomain.RequestAnswered,
 	}}
-	service := New(sessions, artifacts)
+	service := New(sessions, artifactapp.New(store))
 
-	_, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
+	_, err = service.HandleDynamicTool(ctx, processdomain.DynamicToolCall{
 		CallID: "call-1", SessionID: "session-1", Tool: questionsTool,
-		Arguments: json.RawMessage(`{"questions":[{"body":"Use this style?","files":["artifact-1"]}]}`),
+		Arguments: json.RawMessage(`{"questions":[{"body":"Use this style?","files":["styles/style.png","styles/style.png"]},{"body":"Continue?"}]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if artifacts.resolveSessionID != "session-1" || len(artifacts.resolveIDs) != 1 || artifacts.resolveIDs[0] != "artifact-1" {
-		t.Fatalf("resolve input = session %q ids %#v", artifacts.resolveSessionID, artifacts.resolveIDs)
-	}
 	files := sessions.input.Questions[0].Files
-	if len(files) != 1 || files[0].ID != "artifact-1" || files[0].Filename != "style.png" || files[0].PreviewKind != "image" {
+	if len(files) != 1 || files[0].ID == "" || files[0].Filename != "style.png" || files[0].MimeType != "image/png" || files[0].PreviewKind != "image" || files[0].Size != int64(imageData.Len()) {
 		t.Fatalf("question files = %#v", files)
+	}
+	stored, err := store.FindArtifact(ctx, sessiondomain.SessionFileID(files[0].ID))
+	if err != nil || stored.SessionID != "session-1" || stored.LogicalPath != "styles/style.png" {
+		t.Fatalf("resolved file = %#v, %v", stored, err)
+	}
+	if len(sessions.input.Questions[1].Files) != 0 {
+		t.Fatalf("question without files = %#v", sessions.input.Questions[1])
+	}
+}
+
+func TestQuestionsRejectsInvalidFileReferencesBeforeRequesting(t *testing.T) {
+	ctx := context.Background()
+	store := filestore.New(t.TempDir())
+	root, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "existing.txt"), []byte("text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("existing.txt", filepath.Join(root, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "folder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	otherRoot, err := store.EnsureArtifactDir(ctx, "session-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherRoot, "other.txt"), []byte("other session"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	otherFiles, _, err := store.ListArtifacts(ctx, sessiondomain.ArtifactQuery{SessionID: "session-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tooMany := make([]string, artifactapp.MaxResolveArtifactPaths+1)
+	for index := range tooMany {
+		tooMany[index] = "existing.txt"
+	}
+	cases := map[string][]string{
+		"missing":            {"existing.txt", "missing.txt"},
+		"absolute":           {filepath.Join(root, "existing.txt")},
+		"windows absolute":   {`C:\private.txt`},
+		"parent":             {"../session-2/other.txt"},
+		"dot segment":        {"folder/../existing.txt"},
+		"empty":              {""},
+		"symlink":            {"link.txt"},
+		"directory":          {"folder"},
+		"other session path": {"other.txt"},
+		"file ID":            {string(otherFiles[0].ID)},
+		"too many":           tooMany,
+	}
+	for name, paths := range cases {
+		t.Run(name, func(t *testing.T) {
+			sessions := &fakeSessions{}
+			service := New(sessions, artifactapp.New(store))
+			arguments, err := json.Marshal(map[string]any{"questions": []any{map[string]any{"body": "Use these files?", "files": paths}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.HandleDynamicTool(ctx, processdomain.DynamicToolCall{
+				CallID: "call-1", SessionID: "session-1", Tool: questionsTool, Arguments: arguments,
+			})
+			if err == nil || !strings.Contains(err.Error(), "resolve question files") {
+				t.Fatalf("error = %v", err)
+			}
+			if sessions.input.RequestID != "" {
+				t.Fatalf("invalid files created question request: %#v", sessions.input)
+			}
+		})
 	}
 }
 
@@ -109,40 +196,12 @@ func TestQuestionsRejectsMissingBody(t *testing.T) {
 	}
 }
 
-func TestPublishArtifactReturnsMetadataAndImageContent(t *testing.T) {
-	artifacts := &fakeArtifacts{
-		artifact: sessiondomain.SessionFile{
-			ID: "artifact-1", SessionID: "session-1", LogicalPath: "report/chart.png", Filename: "chart.png",
-			MimeType: "image/png", ArtifactKind: sessiondomain.ArtifactKindImage, PreviewKind: sessiondomain.PreviewKindImage, Size: 3,
-		},
-		content:    artifactapp.ToolContent{Type: "image", MIMEType: "image/png", Data: []byte{1, 2, 3}},
-		hasContent: true,
-	}
-	service := New(nil, artifacts)
-
-	result, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
-		SessionID: "session-1", Tool: publishArtifactTool, Arguments: json.RawMessage(`{"path":"report/chart.png"}`),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if artifacts.input.SessionID != "session-1" || artifacts.input.Path != "report/chart.png" {
-		t.Fatalf("publish input = %#v", artifacts.input)
-	}
-	if len(result.Content) != 2 || result.Content[0].Type != "inputText" || result.Content[1].Type != "inputImage" || result.Content[1].ImageURL != "data:image/png;base64,AQID" {
-		t.Fatalf("result = %#v", result)
-	}
-}
-
-func TestDynamicToolRejectsUnknownToolAndParentPath(t *testing.T) {
-	service := New(nil, &fakeArtifacts{})
-	if _, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{Tool: "unknown"}); err == nil {
-		t.Fatal("unknown tool error = nil")
-	}
-	if _, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
-		SessionID: "session-1", Tool: publishArtifactTool, Arguments: json.RawMessage(`{"path":"../secret"}`),
-	}); err == nil {
-		t.Fatal("parent path error = nil")
+func TestDynamicToolRejectsUnknownTool(t *testing.T) {
+	service := New(nil, nil)
+	for _, name := range []string{"unknown", "publish_artifact"} {
+		if _, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{Tool: name}); err == nil {
+			t.Fatalf("tool %q error = nil", name)
+		}
 	}
 }
 
@@ -300,32 +359,6 @@ type fakeSessions struct {
 func (f *fakeSessions) RequestQuestions(_ context.Context, input sessionapp.RequestQuestionsInput) (questionapp.RequestDTO, error) {
 	f.input = input
 	return f.result, f.err
-}
-
-type fakeArtifacts struct {
-	input            artifactapp.PublishInput
-	artifact         sessiondomain.SessionFile
-	resolved         []sessiondomain.SessionFile
-	resolveSessionID sessiondomain.ID
-	resolveIDs       []sessiondomain.SessionFileID
-	content          artifactapp.ToolContent
-	hasContent       bool
-	err              error
-}
-
-func (f *fakeArtifacts) ResolveIDs(_ context.Context, sessionID sessiondomain.ID, ids []sessiondomain.SessionFileID) ([]sessiondomain.SessionFile, error) {
-	f.resolveSessionID = sessionID
-	f.resolveIDs = ids
-	return f.resolved, f.err
-}
-
-func (f *fakeArtifacts) Publish(_ context.Context, input artifactapp.PublishInput) (sessiondomain.SessionFile, error) {
-	f.input = input
-	return f.artifact, f.err
-}
-
-func (f *fakeArtifacts) ReadToolContent(context.Context, sessiondomain.SessionFileID) (artifactapp.ToolContent, bool, error) {
-	return f.content, f.hasContent, f.err
 }
 
 type fakeTunnels struct {

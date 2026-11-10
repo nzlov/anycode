@@ -35,7 +35,7 @@ import (
 
 func TestAnyCodeDeveloperInstructionsDoNotExposeArtifactPath(t *testing.T) {
 	got := anyCodeDeveloperInstructions(domain.Session{}, "/data/attachments/outputs/session-1")
-	if !strings.Contains(got, "ANYCODE_ARTIFACT_DIR") {
+	if !strings.Contains(got, "ANYCODE_ARTIFACT_DIR") || !strings.Contains(got, "`questions.files` 也直接使用这些相对路径") {
 		t.Fatalf("artifact guidance = %q", got)
 	}
 	if !strings.Contains(got, "临时文件") || strings.Contains(got, "产物") {
@@ -6393,10 +6393,11 @@ func TestCloseSessionDeletesOutputDirectoryAndPreservesInput(t *testing.T) {
 	if err := os.WriteFile(source, []byte("result"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := artifacts.Publish(ctx, artifactapp.PublishInput{SessionID: "session-1", Path: source})
+	resolved, err := artifacts.Resolve(ctx, "session-1", []string{"result.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	artifact := resolved[0]
 	if err := store.Sessions().UpdateArtifactCount(ctx, "session-1", 1); err != nil {
 		t.Fatal(err)
 	}
@@ -6520,26 +6521,6 @@ func TestArchiveCodexEventImagesIsolatesCandidateFailure(t *testing.T) {
 	}
 	if images := event.Content.(processdomain.CodexToolContent).Images; len(images) != 0 {
 		t.Fatalf("failed candidate remained in event = %#v", images)
-	}
-}
-
-func TestArchiveCodexEventImagesDoesNotRepublishPublishArtifactResult(t *testing.T) {
-	publisher := &fakeInlineArtifactPublisher{}
-	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithArtifactPublisher(publisher))
-	event := processdomain.CodexEvent{
-		EventID: "event-publish",
-		Content: processdomain.CodexToolContent{
-			QualifiedName: "publish_artifact",
-			Output:        processdomain.CodexStructuredText{Format: processdomain.CodexTextJSON, Text: `{"content":[{"type":"image","data":"cG5n","mimeType":"image/png"}]}`},
-			Images:        []processdomain.CodexImage{{Source: "data:image/png;base64,cG5n", SourceKind: "inline"}},
-		},
-	}
-	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
-		t.Fatalf("archive failures = %#v", failures)
-	}
-	content := event.Content.(processdomain.CodexToolContent)
-	if len(publisher.input.Data) != 0 || len(content.Images) != 0 || strings.Contains(content.Output.Text, "cG5n") {
-		t.Fatalf("publish_artifact result was re-archived: input=%#v event=%#v", publisher.input, event.Content)
 	}
 }
 

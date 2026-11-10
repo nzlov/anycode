@@ -29,28 +29,26 @@ func TestArtifactDirectoryIsTheSourceOfTruth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: "reports/result.txt"})
-	if err != nil {
-		t.Fatal(err)
+	listed, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("listed artifacts = %#v, %v", listed, err)
 	}
+	first := listed[0]
 	if first.Path != path || first.LogicalPath != "reports/result.txt" || first.Role != session.FileRoleArtifact {
-		t.Fatalf("published artifact = %#v", first)
+		t.Fatalf("directory artifact = %#v", first)
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "attachments", "sessions", "session-1")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact copy exists: %v", err)
 	}
 
-	listed, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
-	if err != nil || len(listed) != 1 || listed[0].ID != first.ID {
-		t.Fatalf("listed artifacts = %#v, %v", listed, err)
-	}
 	if err := os.WriteFile(path, []byte("second"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: path})
-	if err != nil {
-		t.Fatal(err)
+	inspected, err := service.Inspect(ctx, "session-1", []string{"reports/result.txt", `reports\result.txt`})
+	if err != nil || len(inspected) != 1 {
+		t.Fatalf("inspected artifacts = %#v, %v", inspected, err)
 	}
+	second := inspected[0]
 	if second.ID != first.ID || second.Size != int64(len("second")) {
 		t.Fatalf("path identity/content metadata = first:%#v second:%#v", first, second)
 	}
@@ -109,21 +107,22 @@ func TestResolveArtifactIDsRequiresCallingSessionOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New(files)
-	published, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: "style.png"})
+	listed, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	artifact := listed[0]
 
-	resolved, err := service.ResolveIDs(ctx, "session-1", []session.SessionFileID{published.ID, published.ID})
-	if err != nil || len(resolved) != 1 || resolved[0].ID != published.ID {
+	resolved, err := service.ResolveIDs(ctx, "session-1", []session.SessionFileID{artifact.ID, artifact.ID})
+	if err != nil || len(resolved) != 1 || resolved[0].ID != artifact.ID {
 		t.Fatalf("resolved artifacts = %#v, %v", resolved, err)
 	}
-	if _, err := service.ResolveIDs(ctx, "session-2", []session.SessionFileID{published.ID}); !errors.Is(err, session.ErrSessionFileNotFound) {
+	if _, err := service.ResolveIDs(ctx, "session-2", []session.SessionFileID{artifact.ID}); !errors.Is(err, session.ErrSessionFileNotFound) {
 		t.Fatalf("cross-session resolve error = %v", err)
 	}
 }
 
-func TestPublishRejectsSessionQuotaOverflow(t *testing.T) {
+func TestInspectRejectsQuotaOverflow(t *testing.T) {
 	ctx := context.Background()
 	files := filestore.New(t.TempDir())
 	root, err := files.EnsureArtifactDir(ctx, "session-1")
@@ -134,9 +133,20 @@ func TestPublishRejectsSessionQuotaOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New(files)
-	service.SetLimits(Limits{MaxFileBytes: 10, MaxSessionBytes: 4})
-	if _, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: "result.txt"}); err == nil || !strings.Contains(err.Error(), "session limit") {
-		t.Fatalf("quota error = %v", err)
+	for _, tc := range []struct {
+		name   string
+		limits Limits
+		want   string
+	}{
+		{"file", Limits{MaxFileBytes: 4, MaxSessionBytes: 10}, "file_too_large"},
+		{"session", Limits{MaxFileBytes: 10, MaxSessionBytes: 4}, "session limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service.SetLimits(tc.limits)
+			if _, err := service.Inspect(ctx, "session-1", []string{"result.txt"}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("quota error = %v", err)
+			}
+		})
 	}
 }
 
@@ -180,10 +190,11 @@ func TestPublishInlineArtifactReusesExistingContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New(files)
-	published, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: namedPath})
+	resolved, err := service.Resolve(ctx, "session-1", []string{"generated-image.bin"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	artifact := resolved[0]
 	service.SetLimits(Limits{MaxSessionBytes: int64(len(data))})
 
 	inline, err := service.PublishInlineArtifact(ctx, session.InlineArtifactRequest{
@@ -195,8 +206,8 @@ func TestPublishInlineArtifactReusesExistingContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if inline.ID != published.ID || inline.LogicalPath != published.LogicalPath {
-		t.Fatalf("inline artifact = %#v, want existing %#v", inline, published)
+	if inline.ID != artifact.ID || inline.LogicalPath != artifact.LogicalPath {
+		t.Fatalf("inline artifact = %#v, want existing %#v", inline, artifact)
 	}
 	listed, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
 	if err != nil || len(listed) != 1 {
@@ -213,7 +224,7 @@ func TestPublishInlineArtifactReusesExistingContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if different.ID == published.ID {
+	if different.ID == artifact.ID {
 		t.Fatalf("different content reused existing artifact: %#v", different)
 	}
 	listed, err = service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})

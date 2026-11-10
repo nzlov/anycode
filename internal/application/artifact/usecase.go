@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"path/filepath"
 	"strings"
@@ -23,24 +22,12 @@ const (
 )
 
 type UseCase interface {
-	Publish(ctx context.Context, input PublishInput) (session.SessionFile, error)
+	Inspect(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
 	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error)
 	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
 	ResolveIDs(ctx context.Context, sessionID session.ID, ids []session.SessionFileID) ([]session.SessionFile, error)
-	ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error)
 	ReconcileQuarantines(ctx context.Context) (int, error)
 	ReconcileOutputs(ctx context.Context) (int, error)
-}
-
-type PublishInput struct {
-	SessionID session.ID
-	Path      string
-}
-
-type ToolContent struct {
-	Type     string
-	MIMEType string
-	Data     []byte
 }
 
 type Limits struct {
@@ -85,45 +72,43 @@ func (s *Service) SetLimits(limits Limits) {
 	}
 }
 
-func (s *Service) Publish(ctx context.Context, input PublishInput) (session.SessionFile, error) {
+func (s *Service) Inspect(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error) {
 	if s == nil || s.store == nil {
-		return session.SessionFile{}, errors.New("artifact usecase is not configured")
+		return nil, errors.New("artifact usecase is not configured")
 	}
-	if input.SessionID == "" {
-		return session.SessionFile{}, errors.New("session id is required")
+	if sessionID == "" {
+		return nil, errors.New("session id is required")
 	}
-	unlock := s.lockSession(input.SessionID)
+	normalized, err := normalizeLogicalPathReferences(logicalPaths)
+	if err != nil {
+		return nil, err
+	}
+	unlock := s.lockSession(sessionID)
 	defer unlock()
-	if err := s.validateSessionWritable(ctx, input.SessionID); err != nil {
-		return session.SessionFile{}, err
+	if err := s.validateSessionWritable(ctx, sessionID); err != nil {
+		return nil, err
 	}
-	root, err := s.store.EnsureArtifactDir(ctx, input.SessionID)
+	root := s.store.ArtifactDir(sessionID)
+	artifacts := make([]session.SessionFile, 0, len(normalized))
+	for _, logicalPath := range normalized {
+		artifact, err := s.store.InspectArtifact(ctx, session.InspectArtifactInput{
+			SessionID:  sessionID,
+			SourcePath: filepath.Join(root, filepath.FromSlash(logicalPath)),
+			MaxBytes:   s.maxFileBytes,
+		})
+		if err != nil {
+			return nil, err
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	used, err := s.store.SumArtifactSize(ctx, sessionID)
 	if err != nil {
-		return session.SessionFile{}, err
-	}
-	sourcePath := strings.TrimSpace(input.Path)
-	if sourcePath == "" {
-		return session.SessionFile{}, errors.New("artifact path is required")
-	}
-	if !filepath.IsAbs(sourcePath) {
-		sourcePath = filepath.Join(root, filepath.FromSlash(sourcePath))
-	}
-	artifact, err := s.store.InspectArtifact(ctx, session.InspectArtifactInput{
-		SessionID:  input.SessionID,
-		SourcePath: sourcePath,
-		MaxBytes:   s.maxFileBytes,
-	})
-	if err != nil {
-		return session.SessionFile{}, err
-	}
-	used, err := s.store.SumArtifactSize(ctx, input.SessionID)
-	if err != nil {
-		return session.SessionFile{}, err
+		return nil, err
 	}
 	if used > s.maxSessionBytes {
-		return session.SessionFile{}, fmt.Errorf("artifact exceeds %d byte session limit", s.maxSessionBytes)
+		return nil, fmt.Errorf("artifact exceeds %d byte session limit", s.maxSessionBytes)
 	}
-	return artifact, nil
+	return artifacts, nil
 }
 
 func (s *Service) List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error) {
@@ -149,21 +134,9 @@ func (s *Service) Resolve(ctx context.Context, sessionID session.ID, logicalPath
 	if sessionID == "" {
 		return nil, errors.New("session id is required")
 	}
-	if len(logicalPaths) > MaxResolveArtifactPaths {
-		return nil, fmt.Errorf("artifact reference count exceeds %d", MaxResolveArtifactPaths)
-	}
-	normalized := make([]string, 0, len(logicalPaths))
-	seen := make(map[string]struct{}, len(logicalPaths))
-	for _, logicalPath := range logicalPaths {
-		value, err := normalizeLogicalPathReference(logicalPath)
-		if err != nil {
-			return nil, err
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		normalized = append(normalized, value)
+	normalized, err := normalizeLogicalPathReferences(logicalPaths)
+	if err != nil {
+		return nil, err
 	}
 	return s.store.ResolveArtifacts(ctx, sessionID, normalized)
 }
@@ -198,39 +171,6 @@ func (s *Service) ResolveIDs(ctx context.Context, sessionID session.ID, ids []se
 		artifacts = append(artifacts, artifact)
 	}
 	return artifacts, nil
-}
-
-func (s *Service) ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error) {
-	if s == nil || s.store == nil {
-		return ToolContent{}, false, errors.New("artifact usecase is not configured")
-	}
-	artifact, err := s.store.FindArtifact(ctx, id)
-	if err != nil {
-		return ToolContent{}, false, err
-	}
-	contentType := ""
-	switch artifact.ArtifactKind {
-	case session.ArtifactKindImage:
-		contentType = "image"
-	case session.ArtifactKindAudio:
-		contentType = "audio"
-	}
-	if contentType == "" || artifact.Size > MaxInlineArtifactBytes {
-		return ToolContent{}, false, nil
-	}
-	stream, err := s.store.OpenArtifact(ctx, id)
-	if err != nil {
-		return ToolContent{}, false, err
-	}
-	defer stream.Reader.Close()
-	data, err := io.ReadAll(io.LimitReader(stream.Reader, MaxInlineArtifactBytes+1))
-	if err != nil {
-		return ToolContent{}, false, err
-	}
-	if int64(len(data)) > MaxInlineArtifactBytes {
-		return ToolContent{}, false, nil
-	}
-	return ToolContent{Type: contentType, MIMEType: artifact.MimeType, Data: data}, true, nil
 }
 
 func (s *Service) PublishInlineArtifact(ctx context.Context, input session.InlineArtifactRequest) (session.SessionFile, error) {
@@ -378,6 +318,26 @@ func (s *Service) lockSession(sessionID session.ID) func() {
 		}
 		s.lockMu.Unlock()
 	}
+}
+
+func normalizeLogicalPathReferences(logicalPaths []string) ([]string, error) {
+	if len(logicalPaths) > MaxResolveArtifactPaths {
+		return nil, fmt.Errorf("artifact reference count exceeds %d", MaxResolveArtifactPaths)
+	}
+	normalized := make([]string, 0, len(logicalPaths))
+	seen := make(map[string]struct{}, len(logicalPaths))
+	for _, logicalPath := range logicalPaths {
+		value, err := normalizeLogicalPathReference(logicalPath)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized, nil
 }
 
 func normalizeLogicalPathReference(value string) (string, error) {

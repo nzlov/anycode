@@ -13,8 +13,11 @@ Files in this directory do not appear in the card Git diff.
 
 Codex writes screenshots, generated images, PDF, audio, video, archives, and other user deliverables
 to this directory. The directory is the only source of truth for generated files; AnyCode does not
-copy them into a database-backed file catalog. The `publish_artifact` App Server dynamic tool validates a file and
-returns its path-based ID, current metadata, and optional inline preview without copying it.
+copy them into a database-backed file catalog. Files are available for preview and download as soon
+as they are written; no publication step is required. Agents reference files using paths relative to
+`ANYCODE_ARTIFACT_DIR`, including `questions.files` and workflow `results.artifacts[].ref`.
+Question attachments are checked and resolved to path-based file IDs by the backend before the
+question is created. Missing or invalid files reject the request; duplicate paths are attached once.
 
 Uploaded requirement and prompt-append inputs are also directory-backed after promotion. Their
 source type and source ID are encoded in the directory layout under
@@ -44,13 +47,17 @@ source type and source ID are encoded in the directory layout under
 
 All values are positive decimal byte counts. Invalid values stop service startup.
 
-| Variable                             |              Default | Purpose                                               |
-| ------------------------------------ | -------------------: | ----------------------------------------------------- |
-| `ANYCODE_ARTIFACT_MAX_FILE_BYTES`    |          `536870912` | Maximum file accepted by `publish_artifact` (512 MiB) |
-| `ANYCODE_ARTIFACT_MAX_SESSION_BYTES` |        `10737418240` | Maximum active artifact bytes per card (10 GiB)       |
-| `ANYCODE_ARTIFACT_PREVIEW_MAX_BYTES` |          `134217728` | Maximum browser preview response (128 MiB)            |
-| `PLAYWRIGHT_MCP_BIN`                 | empty outside Docker | Enables Playwright MCP when set                       |
-| `CHROMIUM_BIN`                       |  `/usr/bin/chromium` | Browser executable passed to Playwright MCP           |
+| Variable                             |              Default | Purpose                                                        |
+| ------------------------------------ | -------------------: | -------------------------------------------------------------- |
+| `ANYCODE_ARTIFACT_MAX_FILE_BYTES`      |          `536870912` | Maximum question attachment or archived inline file (512 MiB)   |
+| `ANYCODE_ARTIFACT_MAX_SESSION_BYTES`   |        `10737418240` | Card output quota checked when attaching or archiving (10 GiB)  |
+| `ANYCODE_ARTIFACT_PREVIEW_MAX_BYTES`   |          `134217728` | Maximum browser preview response (128 MiB)                      |
+| `PLAYWRIGHT_MCP_BIN`                  | empty outside Docker | Enables Playwright MCP when set                                 |
+| `CHROMIUM_BIN`                        |  `/usr/bin/chromium` | Browser executable passed to Playwright MCP                     |
+
+The file and card quotas are checked when resolving question attachments and archiving inline
+content. They do not restrict shell writes to the output directory. Inline archiving also has a
+25 MiB content limit.
 
 The Docker image pins `@playwright/mcp@0.0.78`, runs it headless and isolated, and writes each
 ProcessRun's browser output under `ANYCODE_ARTIFACT_DIR/browser/<processRunID>/`. The Chromium
@@ -71,8 +78,8 @@ inside the output directory remain available through the directory catalog.
   40 million pixels, including VP8, VP8L, and VP8X WebP images.
 - File responses use `nosniff`, a restrictive CSP, safe content disposition, Last-Modified,
   Content-Length, and HTTP Range handling.
-- Publishing rejects files outside the card output directory, symbolic links, directories, devices,
-  and quota violations.
+- File access stays within the card output directory and rejects symbolic links, directories, and
+  devices. Question attachments also enforce the configured file and card quotas.
 
 Anyone holding `ANYCODE_ACCESS_KEY` already has AnyCode's documented service-account execution
 boundary. Generated-file access does not weaken that boundary, but it increases the data that the

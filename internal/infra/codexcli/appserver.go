@@ -314,7 +314,7 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 			"body": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"},
 			"files": map[string]any{
 				"type": "array", "maxItems": 100, "items": map[string]any{"type": "string"},
-				"description": "Optional published file IDs returned by publish_artifact. Files are shown below this question.",
+				"description": "Optional file paths relative to this card's ANYCODE_ARTIFACT_DIR. Existing files are shown below this question.",
 			},
 			"options": map[string]any{"type": "array", "items": optionSchema},
 		},
@@ -328,14 +328,6 @@ func anyCodeDynamicTools(enabled ...process.DynamicToolName) []map[string]any {
 				"properties": map[string]any{"questions": map[string]any{
 					"type": "array", "minItems": 1, "items": questionSchema,
 				}},
-			},
-		},
-		{
-			"type": "function", "name": "publish_artifact",
-			"description": "Inspect a file in this card's ANYCODE_ARTIFACT_DIR and return its stable metadata and preview content.",
-			"inputSchema": map[string]any{
-				"type": "object", "required": []string{"path"},
-				"properties": map[string]any{"path": map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."}},
 			},
 		},
 		{

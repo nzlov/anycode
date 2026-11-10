@@ -1614,7 +1614,7 @@ async function runGitSession(projectId) {
       '先使用 update_plan 建立两项 TODO，并把两项都标记为完成。',
       '请直接执行 shell 命令：',
       "`printf 'ANYCODE_GIT_E2E_OK\\n' > e2e-codex-output.txt`",
-      "再执行 `printf 'dark theme artifact\\n' > \"$ANYCODE_ARTIFACT_DIR/theme-audit.txt\"`，然后调用 publish_artifact，path 为 theme-audit.txt。",
+      "再执行 `printf 'dark theme artifact\\n' > \"$ANYCODE_ARTIFACT_DIR/theme-audit.txt\"`，完成后使用相对路径 theme-audit.txt 引用该临时文件。",
       '不要修改其他文件，然后结束。',
     ].join('\n'),
     mode: 'chat',

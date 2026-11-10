@@ -2,14 +2,11 @@ package codextool
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
-	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	mindmapapp "github.com/nzlov/anycode/internal/application/mindmap"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
@@ -23,7 +20,6 @@ import (
 
 const (
 	questionsTool                   = "questions"
-	publishArtifactTool             = "publish_artifact"
 	tunnelCreateTool                = "tunnel_create"
 	tunnelListTool                  = "tunnel_list"
 	tunnelCloseTool                 = "tunnel_close"
@@ -36,9 +32,7 @@ type SessionUseCase interface {
 }
 
 type ArtifactUseCase interface {
-	Publish(ctx context.Context, input artifactapp.PublishInput) (sessiondomain.SessionFile, error)
-	ResolveIDs(ctx context.Context, sessionID sessiondomain.ID, ids []sessiondomain.SessionFileID) ([]sessiondomain.SessionFile, error)
-	ReadToolContent(ctx context.Context, id sessiondomain.SessionFileID) (artifactapp.ToolContent, bool, error)
+	Inspect(ctx context.Context, sessionID sessiondomain.ID, logicalPaths []string) ([]sessiondomain.SessionFile, error)
 }
 
 type TunnelUseCase interface {
@@ -92,8 +86,6 @@ func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.Dyna
 		return s.mcp.HandleDynamicTool(ctx, call)
 	case questionsTool:
 		return s.questions(ctx, call)
-	case publishArtifactTool:
-		return s.publishArtifact(ctx, call)
 	case tunnelCreateTool:
 		return s.createTunnel(ctx, call)
 	case tunnelListTool:
@@ -425,55 +417,6 @@ func (s *Service) questions(ctx context.Context, call processdomain.DynamicToolC
 	return textResult(payload), nil
 }
 
-func (s *Service) publishArtifact(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
-	if s == nil || s.artifacts == nil {
-		return processdomain.DynamicToolResult{}, errors.New("artifact service is unavailable")
-	}
-	var input struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(call.Arguments, &input); err != nil {
-		return processdomain.DynamicToolResult{}, fmt.Errorf("decode publish_artifact arguments: %w", err)
-	}
-	path := strings.TrimSpace(input.Path)
-	clean := filepath.Clean(path)
-	if path == "" || filepath.IsAbs(path) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return processdomain.DynamicToolResult{}, errors.New("artifact path must be relative to ANYCODE_ARTIFACT_DIR")
-	}
-	artifact, err := s.artifacts.Publish(ctx, artifactapp.PublishInput{SessionID: sessiondomain.ID(call.SessionID), Path: path})
-	if err != nil {
-		return processdomain.DynamicToolResult{}, err
-	}
-	payload, err := json.Marshal(map[string]any{
-		"id":           string(artifact.ID),
-		"logicalPath":  artifact.LogicalPath,
-		"filename":     artifact.Filename,
-		"mimeType":     artifact.MimeType,
-		"artifactKind": string(artifact.ArtifactKind),
-		"previewKind":  string(artifact.PreviewKind),
-		"size":         artifact.Size,
-	})
-	if err != nil {
-		return processdomain.DynamicToolResult{}, fmt.Errorf("encode publish_artifact result: %w", err)
-	}
-	result := textResult(payload)
-	media, ok, err := s.artifacts.ReadToolContent(ctx, artifact.ID)
-	if err != nil {
-		return processdomain.DynamicToolResult{}, err
-	}
-	if !ok {
-		return result, nil
-	}
-	dataURL := "data:" + media.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(media.Data)
-	switch media.Type {
-	case "image":
-		result.Content = append(result.Content, processdomain.DynamicToolContent{Type: "inputImage", ImageURL: dataURL})
-	case "audio":
-		result.Content = append(result.Content, processdomain.DynamicToolContent{Type: "inputAudio", AudioURL: dataURL})
-	}
-	return result, nil
-}
-
 type questionsInput struct {
 	Questions []questionInput `json:"questions"`
 }
@@ -533,18 +476,14 @@ func (s *Service) buildQuestions(ctx context.Context, sessionID sessiondomain.ID
 	return questions, nil
 }
 
-func (s *Service) resolveQuestionFiles(ctx context.Context, sessionID sessiondomain.ID, ids []string) ([]questiondomain.File, error) {
-	if len(ids) == 0 {
+func (s *Service) resolveQuestionFiles(ctx context.Context, sessionID sessiondomain.ID, logicalPaths []string) ([]questiondomain.File, error) {
+	if len(logicalPaths) == 0 {
 		return nil, nil
 	}
 	if s.artifacts == nil {
 		return nil, errors.New("artifact service is unavailable")
 	}
-	artifactIDs := make([]sessiondomain.SessionFileID, len(ids))
-	for i, id := range ids {
-		artifactIDs[i] = sessiondomain.SessionFileID(strings.TrimSpace(id))
-	}
-	artifacts, err := s.artifacts.ResolveIDs(ctx, sessionID, artifactIDs)
+	artifacts, err := s.artifacts.Inspect(ctx, sessionID, logicalPaths)
 	if err != nil {
 		return nil, fmt.Errorf("resolve question files: %w", err)
 	}
