@@ -33,8 +33,10 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionshare"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sharedmessage"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -118,8 +120,10 @@ func checkColumn(t, c string) error {
 			questionrequest.Table:           questionrequest.ValidColumn,
 			quickcommand.Table:              quickcommand.ValidColumn,
 			entsession.Table:                entsession.ValidColumn,
+			sessionshare.Table:              sessionshare.ValidColumn,
 			sessionside.Table:               sessionside.ValidColumn,
 			sessionsideevent.Table:          sessionsideevent.ValidColumn,
+			sharedmessage.Table:             sharedmessage.ValidColumn,
 			stagedattachment.Table:          stagedattachment.ValidColumn,
 			systemconfiguration.Table:       systemconfiguration.ValidColumn,
 			workflowdefinition.Table:        workflowdefinition.ValidColumn,

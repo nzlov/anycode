@@ -393,6 +393,7 @@ const props = withDefaults(
     readonlyConfig?: boolean;
     readonlyPermission?: boolean;
     showConfig?: boolean;
+    allowCompletions?: boolean;
     allowAttachments?: boolean;
     collapsible?: boolean;
     collapsed?: boolean;
@@ -415,6 +416,7 @@ const props = withDefaults(
     readonlyConfig: false,
     readonlyPermission: false,
     showConfig: true,
+    allowCompletions: true,
     allowAttachments: true,
     collapsible: false,
     collapsed: false,
@@ -506,6 +508,7 @@ const completionItems = computed(() => {
 });
 const completionOpen = computed(
   () =>
+    props.allowCompletions &&
     Boolean(completionRange.value) &&
     !props.disabled &&
     !isCollapsed.value &&
@@ -645,7 +648,7 @@ function queuePromptCompletionRefresh() {
 }
 
 function refreshPromptCompletion() {
-  if (props.disabled || isCollapsed.value) {
+  if (!props.allowCompletions || props.disabled || isCollapsed.value) {
     closePromptCompletion();
     return;
   }
@@ -818,7 +821,10 @@ watch(isCollapsed, async (collapsed) => {
   input.focus();
   input.nativeEl.setSelectionRange(cursor, cursor);
 });
-watch(() => [props.completionProjectId, props.completionSessionId], closePromptCompletion);
+watch(
+  () => [props.allowCompletions, props.completionProjectId, props.completionSessionId],
+  closePromptCompletion,
+);
 watch(
   () => completionItems.value.length,
   (length) => {

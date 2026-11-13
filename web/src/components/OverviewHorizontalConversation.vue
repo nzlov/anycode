@@ -2,109 +2,120 @@
   <article
     class="overview-horizontal-conversation"
     :class="`overview-horizontal-conversation--${layout}`"
-    :aria-label="`${card.title} 会话详情`"
+    :aria-label="`${props.card?.title || '分享会话'} 会话详情`"
   >
-    <header class="overview-horizontal-conversation__header">
-      <div class="overview-horizontal-conversation__identity">
-        <div class="overview-horizontal-conversation__title" :title="card.title">
-          {{ card.title }}
-        </div>
-        <div class="overview-horizontal-conversation__meta">
-          <span :title="card.projectName">{{ card.projectName }}</span>
-          <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
-          <span v-if="layout === 'desktop' && card.projectIsGit" :title="card.branch">
-            {{ card.branch }}
-          </span>
-          <span v-if="layout === 'desktop' && card.mode === 'workflow'" :title="card.node">
-            {{ card.node }}
-          </span>
-        </div>
-      </div>
-      <div class="overview-horizontal-conversation__badges">
-        <SessionPriorityControl
-          :priority="card.priority"
-          :loading="priorityLoading"
-          :disabled="card.status === 'closed'"
-          @change="emit('set-priority', $event)"
-        />
-        <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-        <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
-      </div>
-      <div class="overview-horizontal-conversation__actions">
-        <SessionTunnelButton :tunnels="tunnels" />
-        <SessionTerminalButton
-          :source-session-id="card.id"
-          stay-on-page
-          @opened="emit('terminal-opened', $event)"
-        />
-        <SessionForkButton
-          v-if="card.availableActions.includes('fork')"
-          :source-session-id="card.id"
-          :project-is-git="card.projectIsGit"
-          stay-on-page
-          @forked="emit('forked', $event)"
-        />
-        <q-btn
-          v-if="mindMapUpdated"
-          flat
-          round
-          dense
-          class="app-icon-btn"
-          icon="hub"
-          aria-label="打开思维图"
-          :to="{
-            name: 'project-mind-map',
-            params: { projectId: card.projectId },
-            query: { card: card.id },
-          }"
-        >
-          <q-tooltip>打开思维图</q-tooltip>
-        </q-btn>
-        <q-btn
-          flat
-          round
-          dense
-          class="app-icon-btn"
-          icon="open_in_new"
-          aria-label="打开会话详情"
-          :to="{ name: 'session-detail', params: { id: card.id } }"
-        >
-          <q-tooltip>打开会话详情</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="mindMapRealtime && card.availableActions.includes('close')"
-          flat
-          dense
-          class="lane-icon-btn app-icon-btn"
-          color="positive"
-          icon="merge"
-          aria-label="合并思维图并关闭"
-          :loading="closeLoading"
-          @click="emit('merge-close')"
-        >
-          <q-tooltip>合并思维图并关闭</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="card.availableActions.includes('close')"
-          flat
-          dense
-          class="lane-icon-btn app-icon-btn"
-          color="negative"
-          icon="close"
-          :aria-label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
-          :loading="closeLoading"
-          @click="emit('close')"
-        >
-          <q-tooltip>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-tooltip>
-        </q-btn>
-      </div>
-    </header>
     <SessionDetailView
       class="overview-horizontal-conversation__detail"
-      :session-id="card.id"
+      :session-id="props.card?.id ?? sessionId ?? ''"
+      :share-id="shareId"
       :layout="layout"
       :mind-map-realtime="mindMapRealtime"
-    />
+    >
+      <template #header="{ session: card, usage }">
+        <header v-if="card" class="overview-horizontal-conversation__header">
+          <div class="overview-horizontal-conversation__identity">
+            <div class="overview-horizontal-conversation__title" :title="card.title">
+              {{ card.title }}
+            </div>
+            <div v-if="!shareId" class="overview-horizontal-conversation__meta">
+              <span :title="card.projectName">{{ card.projectName }}</span>
+              <TokenUsageDisplay v-if="usage" :usage="usage" />
+              <span v-if="layout === 'desktop' && card.projectIsGit" :title="card.branch">
+                {{ card.branch }}
+              </span>
+              <span v-if="layout === 'desktop' && card.mode === 'workflow'" :title="card.node">
+                {{ card.node }}
+              </span>
+            </div>
+          </div>
+          <div class="overview-horizontal-conversation__badges">
+            <SessionPriorityControl
+              v-if="!shareId"
+              :priority="card.priority"
+              :loading="priorityLoading"
+              :disabled="card.status === 'closed'"
+              @change="emit('set-priority', $event)"
+            />
+            <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
+            <q-badge
+              v-if="!shareId"
+              rounded
+              class="lane-mode-chip"
+              :label="modeBadgeLabel(card.mode)"
+            />
+            <q-badge v-else outline color="primary" label="每条消息需审核" />
+          </div>
+          <div v-if="!shareId" class="overview-horizontal-conversation__actions">
+            <SessionTunnelButton :tunnels="tunnels" />
+            <SessionTerminalButton
+              :source-session-id="card.id"
+              stay-on-page
+              @opened="emit('terminal-opened', $event)"
+            />
+            <SessionForkButton
+              v-if="card.availableActions.includes('fork')"
+              :source-session-id="card.id"
+              :project-is-git="card.projectIsGit"
+              stay-on-page
+              @forked="emit('forked', $event)"
+            />
+            <q-btn
+              v-if="mindMapUpdated"
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              icon="hub"
+              aria-label="打开思维图"
+              :to="{
+                name: 'project-mind-map',
+                params: { projectId: card.projectId },
+                query: { card: card.id },
+              }"
+            >
+              <q-tooltip>打开思维图</q-tooltip>
+            </q-btn>
+            <q-btn
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              icon="open_in_new"
+              aria-label="打开会话详情"
+              :to="{ name: 'session-detail', params: { id: card.id } }"
+            >
+              <q-tooltip>打开会话详情</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="mindMapRealtime && card.availableActions.includes('close')"
+              flat
+              dense
+              class="lane-icon-btn app-icon-btn"
+              color="positive"
+              icon="merge"
+              aria-label="合并思维图并关闭"
+              :loading="closeLoading"
+              @click="emit('merge-close')"
+            >
+              <q-tooltip>合并思维图并关闭</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="card.availableActions.includes('close')"
+              flat
+              dense
+              class="lane-icon-btn app-icon-btn"
+              color="negative"
+              icon="close"
+              :aria-label="mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片'"
+              :loading="closeLoading"
+              @click="emit('close')"
+            >
+              <q-tooltip>{{ mindMapRealtime ? '关闭，不合并思维图' : '关闭卡片' }}</q-tooltip>
+            </q-btn>
+          </div>
+        </header>
+      </template>
+    </SessionDetailView>
   </article>
 </template>
 
@@ -123,15 +134,20 @@ import {
 import type { SessionCard, SessionPriority } from '@/services/sessions';
 import type { Tunnel } from '@/services/tunnels';
 
-defineProps<{
-  card: SessionCard;
-  tunnels: Tunnel[];
-  layout: 'mobile' | 'desktop';
-  priorityLoading?: boolean;
-  closeLoading?: boolean;
-  mindMapRealtime?: boolean;
-  mindMapUpdated?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    card?: SessionCard;
+    sessionId?: string;
+    shareId?: string;
+    tunnels?: Tunnel[];
+    layout: 'mobile' | 'desktop';
+    priorityLoading?: boolean;
+    closeLoading?: boolean;
+    mindMapRealtime?: boolean;
+    mindMapUpdated?: boolean;
+  }>(),
+  { shareId: '', tunnels: () => [] },
+);
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];

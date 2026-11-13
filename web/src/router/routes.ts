@@ -1,6 +1,11 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
+  {
+    path: '/share/:shareId',
+    name: 'shared-session',
+    component: () => import('@/pages/SharedSessionPage.vue'),
+  },
   { path: '/login', name: 'login', component: () => import('@/pages/LoginPage.vue') },
   {
     path: '/',

@@ -17,6 +17,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	sharingapp "github.com/nzlov/anycode/internal/application/sharing"
 	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
@@ -36,6 +37,7 @@ type UseCases struct {
 	Projects         projectapp.UseCase
 	MindMaps         mindmapapp.UseCase
 	Sessions         sessionapp.UseCase
+	Sharing          *sharingapp.Service
 	SessionSides     sessionapp.SideUseCase
 	Timeline         timelineapp.UseCase
 	SessionEvents    sessioneventapp.UseCase

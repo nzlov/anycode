@@ -12,11 +12,11 @@ const sessionTranscriptEventLoaderKey: InjectionKey<SessionTranscriptEventLoader
   'session-transcript-event-loader',
 );
 
-export function provideSessionTranscriptEventLoader(sessionId: string) {
+export function provideSessionTranscriptEventLoader(sessionId: string | (() => string)) {
   provide(sessionTranscriptEventLoaderKey, (event) => {
     if (!event.deferred) return Promise.resolve(event);
     return getSessionTranscriptEvent(
-      sessionId,
+      typeof sessionId === 'function' ? sessionId() : sessionId,
       event.deferredEventId ?? event.id,
       event.deferred.byteOffset,
     );

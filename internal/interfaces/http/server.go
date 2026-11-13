@@ -51,6 +51,7 @@ type handlerOptions struct {
 	playground      bool
 	previewMaxBytes int64
 	buildVersion    string
+	useCases        graph.UseCases
 }
 
 func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
@@ -59,6 +60,8 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 		schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
 		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
 		opts.sessions = useCases.Sessions
+		opts.attachments = useCases.Attachments
+		opts.useCases = useCases
 		opts.artifacts = useCases.Artifacts
 		opts.diff = useCases.Diff
 		opts.settings = useCases.Settings
@@ -117,6 +120,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	registerSharingRoutes(mux, cfg.AccessKey, opts)
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("GET /api/healthz", bearerAuth(cfg.AccessKey, http.HandlerFunc(healthz)))
 	mux.Handle("GET /api/version", bearerAuth(cfg.AccessKey, buildVersionHandler(opts.buildVersion)))

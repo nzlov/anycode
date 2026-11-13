@@ -6,13 +6,16 @@ import { runInNewContext } from 'node:vm';
 const pathSource = readFileSync(
   new URL('../src/services/applicationPath.js', import.meta.url),
   'utf8',
-).replaceAll('export ', '');
+)
+  .replace(/^import[^;]+;\n/gm, '')
+  .replaceAll('export ', '');
 
 const source = stripTypeScriptTypes(
   readFileSync(new URL('../src/services/sessionFiles.ts', import.meta.url), 'utf8'),
 )
   .replace(/^import .*graphqlClient';\n/m, '')
   .replace(/^import .*applicationPath.js';\n/m, '')
+  .replace(/^import[^;]+;\n/gm, '')
   .replaceAll('export ', '');
 
 function setup(response, pathname = '/') {
@@ -39,6 +42,7 @@ function setup(response, pathname = '/') {
       URL,
       Headers,
       window,
+      sharedResourcePath: (path) => path,
       getGraphQLAccessKey: () => 'secret',
       fetch: async (url, options) => {
         requests.push({ url, options });

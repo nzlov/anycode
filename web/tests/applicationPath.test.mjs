@@ -64,8 +64,13 @@ test('local instance login and logout never read or erase host credentials', () 
     .replace(/^import[\s\S]*?from '[^']+';\n/gm, '')
     .replaceAll('export ', '')
     .replaceAll('import.meta.env.', 'env.');
+  const shared = stripTypeScriptTypes(
+    readFileSync(new URL('../src/services/sharedAccess.ts', import.meta.url), 'utf8'),
+  )
+    .replace(/^import[^;]+;\n/gm, '')
+    .replaceAll('export ', '');
   const api = runInNewContext(
-    `${paths}\n${client}\n({getGraphQLAccessKey,setGraphQLAccessKey,clearGraphQLAccessKey})`,
+    `${paths}\n${shared}\n${client}\n({getGraphQLAccessKey,setGraphQLAccessKey,clearGraphQLAccessKey})`,
     { window, env: {} },
   );
   assert.equal(api.getGraphQLAccessKey(), '');

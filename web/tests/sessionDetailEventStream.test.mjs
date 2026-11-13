@@ -402,7 +402,7 @@ test('running session detail keeps a rotating thought at the fixed bottom of the
 
   assert.match(
     streamCard,
-    /<\/div>\s*<SessionThinkingPhrase\s+v-if="session\?\.status === 'running'"[\s\S]*?:refresh-key="latestStreamEvent"/,
+    /<\/div>\s*<template v-if="!shareId">\s*<SessionThinkingPhrase\s+v-if="session\?\.status === 'running'"[\s\S]*?:refresh-key="latestStreamEvent"/,
   );
   assert.match(pageSource, /\.stream-card__thinking\s*{[^}]*flex:\s*0 0 auto[^}]*border-top:/s);
 });

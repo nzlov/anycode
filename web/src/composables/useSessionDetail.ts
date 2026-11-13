@@ -4,6 +4,13 @@ import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionC
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { deleteStagedAttachment } from '@/services/attachments';
 import {
+  getSharedSession,
+  getGuestMessages,
+  submitSharedMessage,
+  SharingRequestError,
+  type ShareMessage,
+} from '@/services/sharing';
+import {
   AnyCodeGraphQLError,
   getGraphQLAccessKey,
   type GraphQLSubscriptionClose,
@@ -50,7 +57,7 @@ import {
 const eventPageSize = 200;
 const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
 
-export function useSessionDetail(sessionId: string) {
+export function useSessionDetail(sessionId: string, shareId = '') {
   const session = ref<SessionDetailData['session'] | null>(null);
   const events = ref<SessionDetailData['events']>([]);
   const tokenUsage = ref<TranscriptTokenUsage | null>(null);
@@ -73,6 +80,9 @@ export function useSessionDetail(sessionId: string) {
   const artifactUpdateVersion = ref(0);
   const diffUpdateVersion = ref(0);
   const error = ref('');
+  const sharedMessages = ref<ShareMessage[]>([]);
+  const sharedActive = ref(!shareId);
+  let sharePollTimer: ReturnType<typeof setTimeout> | null = null;
   let liveStopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionEventSubscription: { unsubscribe: () => void } | null = null;
@@ -81,6 +91,7 @@ export function useSessionDetail(sessionId: string) {
   const detailRequests = createLatestRequestTracker();
   const sessionRequests = createLatestRequestTracker();
   const questionRequests = createLatestRequestTracker();
+  const sharedMessageRequests = createLatestRequestTracker();
 
   const { start: startSessionUpdates, stop: stopSessionUpdates } = useSessionUpdates({
     onData: handleSessionUpdate,
@@ -144,6 +155,7 @@ export function useSessionDetail(sessionId: string) {
     annotations: PreviewAnnotationAttachment[] = [],
     mentions: PromptMention[] = [],
   ) {
+    if (shareId) throw new Error('分享消息需要逐条审核');
     const text = body.trim() || 'continue';
 
     appending.value = true;
@@ -166,6 +178,68 @@ export function useSessionDetail(sessionId: string) {
       throw err;
     } finally {
       appending.value = false;
+    }
+  }
+
+  async function submitSharedDescription(body: string, files: File[]) {
+    const current = session.value;
+    if (
+      !shareId ||
+      liveStopped ||
+      !sharedActive.value ||
+      !current ||
+      appending.value ||
+      (!body.trim() && !files.length)
+    )
+      return false;
+    const generation = subscriptionGeneration;
+    appending.value = true;
+    error.value = '';
+    try {
+      const message = await submitSharedMessage(shareId, body, current.config, files);
+      if (liveStopped || generation !== subscriptionGeneration) return false;
+      sharedMessageRequests.invalidate();
+      sharedMessages.value = [message, ...sharedMessages.value];
+      return true;
+    } catch (err) {
+      if (!liveStopped && generation === subscriptionGeneration)
+        error.value = err instanceof Error ? err.message : '提交审核失败';
+      throw err;
+    } finally {
+      appending.value = false;
+    }
+  }
+
+  async function loadSharedMessages() {
+    const request = sharedMessageRequests.next();
+    const messages = await getGuestMessages(shareId);
+    if (sharedMessageRequests.isCurrent(request)) sharedMessages.value = messages;
+  }
+
+  async function refreshSharedSession(generation: number) {
+    try {
+      await getSharedSession(shareId);
+      if (liveStopped || generation !== subscriptionGeneration) return;
+      const previous = session.value;
+      await Promise.all([
+        loadSessionDetail({ mergeEvents: true, background: true }),
+        loadPendingQuestions(),
+        loadSharedMessages(),
+      ]);
+      if (liveStopped || generation !== subscriptionGeneration) return;
+      sharedActive.value = true;
+      if (previous?.artifactCount !== session.value?.artifactCount) artifactUpdateVersion.value++;
+      if (previous?.filesChanged !== session.value?.filesChanged) diffUpdateVersion.value++;
+    } catch (err) {
+      if (liveStopped || generation !== subscriptionGeneration) return;
+      error.value = err instanceof Error ? err.message : '刷新分享会话失败';
+      if (err instanceof SharingRequestError && [401, 403].includes(err.status)) {
+        sharedActive.value = false;
+        stopLiveUpdates();
+      }
+    } finally {
+      if (!liveStopped && generation === subscriptionGeneration)
+        sharePollTimer = setTimeout(() => void refreshSharedSession(generation), 2000);
     }
   }
 
@@ -371,6 +445,10 @@ export function useSessionDetail(sessionId: string) {
   function startLiveUpdates() {
     if (!liveStopped) return;
     liveStopped = false;
+    if (shareId) {
+      void refreshSharedSession(++subscriptionGeneration);
+      return;
+    }
     openSessionEvents();
     startSessionUpdates();
   }
@@ -379,6 +457,17 @@ export function useSessionDetail(sessionId: string) {
     liveStopped = true;
     approvalLoadGeneration += 1;
     subscriptionGeneration += 1;
+    if (sharePollTimer) {
+      clearTimeout(sharePollTimer);
+      sharePollTimer = null;
+    }
+    if (shareId) {
+      sharedActive.value = false;
+      detailRequests.invalidate();
+      sessionRequests.invalidate();
+      questionRequests.invalidate();
+      sharedMessageRequests.invalidate();
+    }
     sessionEventSubscription?.unsubscribe();
     sessionEventSubscription = null;
     stopSessionUpdates();
@@ -543,8 +632,11 @@ export function useSessionDetail(sessionId: string) {
     approvalLoading,
     approvalSubmitting,
     error,
+    sharedMessages,
+    sharedActive,
     loadSessionDetail,
     appendDescription,
+    submitSharedDescription,
     updatePromptAppendBody,
     executeSession,
     stopSession,

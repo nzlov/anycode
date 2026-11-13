@@ -121,6 +121,7 @@ export interface SessionDetail extends SessionCard {
   config: SessionConfig;
   closeReason?: string | null;
   promptAppends: PromptAppend[];
+  attachments: SessionAttachment[];
   availableActions: string[];
   canResume: boolean;
   worktreeCleanup: WorktreeCleanup;
@@ -344,6 +345,7 @@ interface GraphQLSessionDetail {
   config: SessionConfig;
   usage?: TranscriptTokenUsage | null;
   promptAppends?: GraphQLPromptAppend[];
+  attachments?: GraphQLSessionAttachment[];
   availableActions?: string[];
   canResume: boolean;
   lastRunAt: string | null;
@@ -529,6 +531,7 @@ const sessionDetailFields = `
     fastMode
   }
   usage { ${transcriptUsageFields} }
+  attachments { id sessionId kind filename mimeType size previewable createdAt }
   promptAppends {
     id
     sessionId
@@ -1308,6 +1311,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     config: session.config,
     closeReason: session.closeReason ?? null,
     promptAppends: (session.promptAppends ?? []).map(normalizePromptAppend),
+    attachments: (session.attachments ?? []).map(normalizeAttachment),
     availableActions: normalizeAvailableActions(session.availableActions),
     canResume: session.canResume,
     worktreeCleanup: session.worktreeCleanup,

@@ -130,7 +130,10 @@ test('event stream routes local markdown and authenticated images through modal 
   assert.match(detail, /resolveSessionArtifacts/);
   assert.match(detail, /resolveSessionWorkspaceFile\(sessionId, reference\.path\)/);
   assert.match(detail, /workspaceResult\.status === 'fulfilled'/);
-  assert.match(detail, /:annotatable="eventResourceFile\?\.sourceType !== 'workspace'"/);
+  assert.match(
+    detail,
+    /:annotatable="!shareId && eventResourceFile\?\.sourceType !== 'workspace'"/,
+  );
   assert.match(detail, /<SessionFilePreview[\s\S]*?v-else[\s\S]*?:file="eventResourceFile"/);
   assert.match(detail, /'app-content-dialog': !isMobileLayout/);
 });

@@ -35,8 +35,10 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionshare"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sharedmessage"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -71,8 +73,10 @@ const (
 	TypeQuestionRequest           = "QuestionRequest"
 	TypeQuickCommand              = "QuickCommand"
 	TypeSession                   = "Session"
+	TypeSessionShare              = "SessionShare"
 	TypeSessionSide               = "SessionSide"
 	TypeSessionSideEvent          = "SessionSideEvent"
+	TypeSharedMessage             = "SharedMessage"
 	TypeStagedAttachment          = "StagedAttachment"
 	TypeSystemConfiguration       = "SystemConfiguration"
 	TypeWorkflowDefinition        = "WorkflowDefinition"
@@ -18140,6 +18144,649 @@ func (m *SessionMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Session edge %s", name)
 }
 
+// SessionShareMutation represents an operation that mutates the SessionShare nodes in the graph.
+type SessionShareMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	session_id    *string
+	token_hash    *string
+	guest_hash    *string
+	created_at    *time.Time
+	claimed_at    *time.Time
+	revoked_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*SessionShare, error)
+	predicates    []predicate.SessionShare
+}
+
+var _ ent.Mutation = (*SessionShareMutation)(nil)
+
+// sessionshareOption allows management of the mutation configuration using functional options.
+type sessionshareOption func(*SessionShareMutation)
+
+// newSessionShareMutation creates new mutation for the SessionShare entity.
+func newSessionShareMutation(c config, op Op, opts ...sessionshareOption) *SessionShareMutation {
+	m := &SessionShareMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSessionShare,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSessionShareID sets the ID field of the mutation.
+func withSessionShareID(id string) sessionshareOption {
+	return func(m *SessionShareMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SessionShare
+		)
+		m.oldValue = func(ctx context.Context) (*SessionShare, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SessionShare.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSessionShare sets the old SessionShare of the mutation.
+func withSessionShare(node *SessionShare) sessionshareOption {
+	return func(m *SessionShareMutation) {
+		m.oldValue = func(context.Context) (*SessionShare, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SessionShareMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SessionShareMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SessionShare entities.
+func (m *SessionShareMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SessionShareMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SessionShareMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SessionShare.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SessionShareMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SessionShareMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SessionShareMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetTokenHash sets the "token_hash" field.
+func (m *SessionShareMutation) SetTokenHash(s string) {
+	m.token_hash = &s
+}
+
+// TokenHash returns the value of the "token_hash" field in the mutation.
+func (m *SessionShareMutation) TokenHash() (r string, exists bool) {
+	v := m.token_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenHash returns the old "token_hash" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldTokenHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenHash: %w", err)
+	}
+	return oldValue.TokenHash, nil
+}
+
+// ResetTokenHash resets all changes to the "token_hash" field.
+func (m *SessionShareMutation) ResetTokenHash() {
+	m.token_hash = nil
+}
+
+// SetGuestHash sets the "guest_hash" field.
+func (m *SessionShareMutation) SetGuestHash(s string) {
+	m.guest_hash = &s
+}
+
+// GuestHash returns the value of the "guest_hash" field in the mutation.
+func (m *SessionShareMutation) GuestHash() (r string, exists bool) {
+	v := m.guest_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGuestHash returns the old "guest_hash" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldGuestHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGuestHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGuestHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGuestHash: %w", err)
+	}
+	return oldValue.GuestHash, nil
+}
+
+// ResetGuestHash resets all changes to the "guest_hash" field.
+func (m *SessionShareMutation) ResetGuestHash() {
+	m.guest_hash = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SessionShareMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SessionShareMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SessionShareMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetClaimedAt sets the "claimed_at" field.
+func (m *SessionShareMutation) SetClaimedAt(t time.Time) {
+	m.claimed_at = &t
+}
+
+// ClaimedAt returns the value of the "claimed_at" field in the mutation.
+func (m *SessionShareMutation) ClaimedAt() (r time.Time, exists bool) {
+	v := m.claimed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClaimedAt returns the old "claimed_at" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldClaimedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClaimedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClaimedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClaimedAt: %w", err)
+	}
+	return oldValue.ClaimedAt, nil
+}
+
+// ClearClaimedAt clears the value of the "claimed_at" field.
+func (m *SessionShareMutation) ClearClaimedAt() {
+	m.claimed_at = nil
+	m.clearedFields[sessionshare.FieldClaimedAt] = struct{}{}
+}
+
+// ClaimedAtCleared returns if the "claimed_at" field was cleared in this mutation.
+func (m *SessionShareMutation) ClaimedAtCleared() bool {
+	_, ok := m.clearedFields[sessionshare.FieldClaimedAt]
+	return ok
+}
+
+// ResetClaimedAt resets all changes to the "claimed_at" field.
+func (m *SessionShareMutation) ResetClaimedAt() {
+	m.claimed_at = nil
+	delete(m.clearedFields, sessionshare.FieldClaimedAt)
+}
+
+// SetRevokedAt sets the "revoked_at" field.
+func (m *SessionShareMutation) SetRevokedAt(t time.Time) {
+	m.revoked_at = &t
+}
+
+// RevokedAt returns the value of the "revoked_at" field in the mutation.
+func (m *SessionShareMutation) RevokedAt() (r time.Time, exists bool) {
+	v := m.revoked_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevokedAt returns the old "revoked_at" field's value of the SessionShare entity.
+// If the SessionShare object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionShareMutation) OldRevokedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevokedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevokedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevokedAt: %w", err)
+	}
+	return oldValue.RevokedAt, nil
+}
+
+// ClearRevokedAt clears the value of the "revoked_at" field.
+func (m *SessionShareMutation) ClearRevokedAt() {
+	m.revoked_at = nil
+	m.clearedFields[sessionshare.FieldRevokedAt] = struct{}{}
+}
+
+// RevokedAtCleared returns if the "revoked_at" field was cleared in this mutation.
+func (m *SessionShareMutation) RevokedAtCleared() bool {
+	_, ok := m.clearedFields[sessionshare.FieldRevokedAt]
+	return ok
+}
+
+// ResetRevokedAt resets all changes to the "revoked_at" field.
+func (m *SessionShareMutation) ResetRevokedAt() {
+	m.revoked_at = nil
+	delete(m.clearedFields, sessionshare.FieldRevokedAt)
+}
+
+// Where appends a list predicates to the SessionShareMutation builder.
+func (m *SessionShareMutation) Where(ps ...predicate.SessionShare) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SessionShareMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SessionShareMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SessionShare, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SessionShareMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SessionShareMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SessionShare).
+func (m *SessionShareMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SessionShareMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.session_id != nil {
+		fields = append(fields, sessionshare.FieldSessionID)
+	}
+	if m.token_hash != nil {
+		fields = append(fields, sessionshare.FieldTokenHash)
+	}
+	if m.guest_hash != nil {
+		fields = append(fields, sessionshare.FieldGuestHash)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sessionshare.FieldCreatedAt)
+	}
+	if m.claimed_at != nil {
+		fields = append(fields, sessionshare.FieldClaimedAt)
+	}
+	if m.revoked_at != nil {
+		fields = append(fields, sessionshare.FieldRevokedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SessionShareMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sessionshare.FieldSessionID:
+		return m.SessionID()
+	case sessionshare.FieldTokenHash:
+		return m.TokenHash()
+	case sessionshare.FieldGuestHash:
+		return m.GuestHash()
+	case sessionshare.FieldCreatedAt:
+		return m.CreatedAt()
+	case sessionshare.FieldClaimedAt:
+		return m.ClaimedAt()
+	case sessionshare.FieldRevokedAt:
+		return m.RevokedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SessionShareMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sessionshare.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sessionshare.FieldTokenHash:
+		return m.OldTokenHash(ctx)
+	case sessionshare.FieldGuestHash:
+		return m.OldGuestHash(ctx)
+	case sessionshare.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case sessionshare.FieldClaimedAt:
+		return m.OldClaimedAt(ctx)
+	case sessionshare.FieldRevokedAt:
+		return m.OldRevokedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SessionShare field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionShareMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sessionshare.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sessionshare.FieldTokenHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenHash(v)
+		return nil
+	case sessionshare.FieldGuestHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGuestHash(v)
+		return nil
+	case sessionshare.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case sessionshare.FieldClaimedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClaimedAt(v)
+		return nil
+	case sessionshare.FieldRevokedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevokedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SessionShare field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SessionShareMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SessionShareMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SessionShareMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown SessionShare numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SessionShareMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sessionshare.FieldClaimedAt) {
+		fields = append(fields, sessionshare.FieldClaimedAt)
+	}
+	if m.FieldCleared(sessionshare.FieldRevokedAt) {
+		fields = append(fields, sessionshare.FieldRevokedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SessionShareMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SessionShareMutation) ClearField(name string) error {
+	switch name {
+	case sessionshare.FieldClaimedAt:
+		m.ClearClaimedAt()
+		return nil
+	case sessionshare.FieldRevokedAt:
+		m.ClearRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionShare nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SessionShareMutation) ResetField(name string) error {
+	switch name {
+	case sessionshare.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sessionshare.FieldTokenHash:
+		m.ResetTokenHash()
+		return nil
+	case sessionshare.FieldGuestHash:
+		m.ResetGuestHash()
+		return nil
+	case sessionshare.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case sessionshare.FieldClaimedAt:
+		m.ResetClaimedAt()
+		return nil
+	case sessionshare.FieldRevokedAt:
+		m.ResetRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SessionShare field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SessionShareMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SessionShareMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SessionShareMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SessionShareMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SessionShareMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SessionShareMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SessionShareMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SessionShare unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SessionShareMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SessionShare edge %s", name)
+}
+
 // SessionSideMutation represents an operation that mutates the SessionSide nodes in the graph.
 type SessionSideMutation struct {
 	config
@@ -20057,6 +20704,720 @@ func (m *SessionSideEventMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *SessionSideEventMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown SessionSideEvent edge %s", name)
+}
+
+// SharedMessageMutation represents an operation that mutates the SharedMessage nodes in the graph.
+type SharedMessageMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *string
+	share_id          *string
+	session_id        *string
+	content           *session.SharedMessageContent
+	status            *string
+	created_at        *time.Time
+	approval_order    *int64
+	addapproval_order *int64
+	reviewed_at       *time.Time
+	clearedFields     map[string]struct{}
+	done              bool
+	oldValue          func(context.Context) (*SharedMessage, error)
+	predicates        []predicate.SharedMessage
+}
+
+var _ ent.Mutation = (*SharedMessageMutation)(nil)
+
+// sharedmessageOption allows management of the mutation configuration using functional options.
+type sharedmessageOption func(*SharedMessageMutation)
+
+// newSharedMessageMutation creates new mutation for the SharedMessage entity.
+func newSharedMessageMutation(c config, op Op, opts ...sharedmessageOption) *SharedMessageMutation {
+	m := &SharedMessageMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSharedMessage,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSharedMessageID sets the ID field of the mutation.
+func withSharedMessageID(id string) sharedmessageOption {
+	return func(m *SharedMessageMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SharedMessage
+		)
+		m.oldValue = func(ctx context.Context) (*SharedMessage, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SharedMessage.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSharedMessage sets the old SharedMessage of the mutation.
+func withSharedMessage(node *SharedMessage) sharedmessageOption {
+	return func(m *SharedMessageMutation) {
+		m.oldValue = func(context.Context) (*SharedMessage, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SharedMessageMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SharedMessageMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SharedMessage entities.
+func (m *SharedMessageMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SharedMessageMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SharedMessageMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SharedMessage.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetShareID sets the "share_id" field.
+func (m *SharedMessageMutation) SetShareID(s string) {
+	m.share_id = &s
+}
+
+// ShareID returns the value of the "share_id" field in the mutation.
+func (m *SharedMessageMutation) ShareID() (r string, exists bool) {
+	v := m.share_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldShareID returns the old "share_id" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldShareID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldShareID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldShareID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldShareID: %w", err)
+	}
+	return oldValue.ShareID, nil
+}
+
+// ResetShareID resets all changes to the "share_id" field.
+func (m *SharedMessageMutation) ResetShareID() {
+	m.share_id = nil
+}
+
+// SetSessionID sets the "session_id" field.
+func (m *SharedMessageMutation) SetSessionID(s string) {
+	m.session_id = &s
+}
+
+// SessionID returns the value of the "session_id" field in the mutation.
+func (m *SharedMessageMutation) SessionID() (r string, exists bool) {
+	v := m.session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSessionID returns the old "session_id" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSessionID: %w", err)
+	}
+	return oldValue.SessionID, nil
+}
+
+// ResetSessionID resets all changes to the "session_id" field.
+func (m *SharedMessageMutation) ResetSessionID() {
+	m.session_id = nil
+}
+
+// SetContent sets the "content" field.
+func (m *SharedMessageMutation) SetContent(smc session.SharedMessageContent) {
+	m.content = &smc
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *SharedMessageMutation) Content() (r session.SharedMessageContent, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldContent(ctx context.Context) (v session.SharedMessageContent, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *SharedMessageMutation) ResetContent() {
+	m.content = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *SharedMessageMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *SharedMessageMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *SharedMessageMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SharedMessageMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SharedMessageMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SharedMessageMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetApprovalOrder sets the "approval_order" field.
+func (m *SharedMessageMutation) SetApprovalOrder(i int64) {
+	m.approval_order = &i
+	m.addapproval_order = nil
+}
+
+// ApprovalOrder returns the value of the "approval_order" field in the mutation.
+func (m *SharedMessageMutation) ApprovalOrder() (r int64, exists bool) {
+	v := m.approval_order
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldApprovalOrder returns the old "approval_order" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldApprovalOrder(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldApprovalOrder is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldApprovalOrder requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldApprovalOrder: %w", err)
+	}
+	return oldValue.ApprovalOrder, nil
+}
+
+// AddApprovalOrder adds i to the "approval_order" field.
+func (m *SharedMessageMutation) AddApprovalOrder(i int64) {
+	if m.addapproval_order != nil {
+		*m.addapproval_order += i
+	} else {
+		m.addapproval_order = &i
+	}
+}
+
+// AddedApprovalOrder returns the value that was added to the "approval_order" field in this mutation.
+func (m *SharedMessageMutation) AddedApprovalOrder() (r int64, exists bool) {
+	v := m.addapproval_order
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetApprovalOrder resets all changes to the "approval_order" field.
+func (m *SharedMessageMutation) ResetApprovalOrder() {
+	m.approval_order = nil
+	m.addapproval_order = nil
+}
+
+// SetReviewedAt sets the "reviewed_at" field.
+func (m *SharedMessageMutation) SetReviewedAt(t time.Time) {
+	m.reviewed_at = &t
+}
+
+// ReviewedAt returns the value of the "reviewed_at" field in the mutation.
+func (m *SharedMessageMutation) ReviewedAt() (r time.Time, exists bool) {
+	v := m.reviewed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReviewedAt returns the old "reviewed_at" field's value of the SharedMessage entity.
+// If the SharedMessage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SharedMessageMutation) OldReviewedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReviewedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReviewedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReviewedAt: %w", err)
+	}
+	return oldValue.ReviewedAt, nil
+}
+
+// ClearReviewedAt clears the value of the "reviewed_at" field.
+func (m *SharedMessageMutation) ClearReviewedAt() {
+	m.reviewed_at = nil
+	m.clearedFields[sharedmessage.FieldReviewedAt] = struct{}{}
+}
+
+// ReviewedAtCleared returns if the "reviewed_at" field was cleared in this mutation.
+func (m *SharedMessageMutation) ReviewedAtCleared() bool {
+	_, ok := m.clearedFields[sharedmessage.FieldReviewedAt]
+	return ok
+}
+
+// ResetReviewedAt resets all changes to the "reviewed_at" field.
+func (m *SharedMessageMutation) ResetReviewedAt() {
+	m.reviewed_at = nil
+	delete(m.clearedFields, sharedmessage.FieldReviewedAt)
+}
+
+// Where appends a list predicates to the SharedMessageMutation builder.
+func (m *SharedMessageMutation) Where(ps ...predicate.SharedMessage) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SharedMessageMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SharedMessageMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SharedMessage, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SharedMessageMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SharedMessageMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SharedMessage).
+func (m *SharedMessageMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SharedMessageMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.share_id != nil {
+		fields = append(fields, sharedmessage.FieldShareID)
+	}
+	if m.session_id != nil {
+		fields = append(fields, sharedmessage.FieldSessionID)
+	}
+	if m.content != nil {
+		fields = append(fields, sharedmessage.FieldContent)
+	}
+	if m.status != nil {
+		fields = append(fields, sharedmessage.FieldStatus)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sharedmessage.FieldCreatedAt)
+	}
+	if m.approval_order != nil {
+		fields = append(fields, sharedmessage.FieldApprovalOrder)
+	}
+	if m.reviewed_at != nil {
+		fields = append(fields, sharedmessage.FieldReviewedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SharedMessageMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sharedmessage.FieldShareID:
+		return m.ShareID()
+	case sharedmessage.FieldSessionID:
+		return m.SessionID()
+	case sharedmessage.FieldContent:
+		return m.Content()
+	case sharedmessage.FieldStatus:
+		return m.Status()
+	case sharedmessage.FieldCreatedAt:
+		return m.CreatedAt()
+	case sharedmessage.FieldApprovalOrder:
+		return m.ApprovalOrder()
+	case sharedmessage.FieldReviewedAt:
+		return m.ReviewedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SharedMessageMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sharedmessage.FieldShareID:
+		return m.OldShareID(ctx)
+	case sharedmessage.FieldSessionID:
+		return m.OldSessionID(ctx)
+	case sharedmessage.FieldContent:
+		return m.OldContent(ctx)
+	case sharedmessage.FieldStatus:
+		return m.OldStatus(ctx)
+	case sharedmessage.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case sharedmessage.FieldApprovalOrder:
+		return m.OldApprovalOrder(ctx)
+	case sharedmessage.FieldReviewedAt:
+		return m.OldReviewedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SharedMessage field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SharedMessageMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sharedmessage.FieldShareID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetShareID(v)
+		return nil
+	case sharedmessage.FieldSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSessionID(v)
+		return nil
+	case sharedmessage.FieldContent:
+		v, ok := value.(session.SharedMessageContent)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case sharedmessage.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case sharedmessage.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case sharedmessage.FieldApprovalOrder:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetApprovalOrder(v)
+		return nil
+	case sharedmessage.FieldReviewedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReviewedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SharedMessage field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SharedMessageMutation) AddedFields() []string {
+	var fields []string
+	if m.addapproval_order != nil {
+		fields = append(fields, sharedmessage.FieldApprovalOrder)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SharedMessageMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sharedmessage.FieldApprovalOrder:
+		return m.AddedApprovalOrder()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SharedMessageMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sharedmessage.FieldApprovalOrder:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddApprovalOrder(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SharedMessage numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SharedMessageMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sharedmessage.FieldReviewedAt) {
+		fields = append(fields, sharedmessage.FieldReviewedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SharedMessageMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SharedMessageMutation) ClearField(name string) error {
+	switch name {
+	case sharedmessage.FieldReviewedAt:
+		m.ClearReviewedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SharedMessage nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SharedMessageMutation) ResetField(name string) error {
+	switch name {
+	case sharedmessage.FieldShareID:
+		m.ResetShareID()
+		return nil
+	case sharedmessage.FieldSessionID:
+		m.ResetSessionID()
+		return nil
+	case sharedmessage.FieldContent:
+		m.ResetContent()
+		return nil
+	case sharedmessage.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case sharedmessage.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case sharedmessage.FieldApprovalOrder:
+		m.ResetApprovalOrder()
+		return nil
+	case sharedmessage.FieldReviewedAt:
+		m.ResetReviewedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SharedMessage field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SharedMessageMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SharedMessageMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SharedMessageMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SharedMessageMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SharedMessageMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SharedMessageMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SharedMessageMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SharedMessage unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SharedMessageMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SharedMessage edge %s", name)
 }
 
 // StagedAttachmentMutation represents an operation that mutates the StagedAttachment nodes in the graph.

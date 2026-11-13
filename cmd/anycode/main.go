@@ -26,6 +26,7 @@ import (
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
+	sharingapp "github.com/nzlov/anycode/internal/application/sharing"
 	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
@@ -104,6 +105,20 @@ func main() {
 	if err := recoverInitializingSessions(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("recover initializing sessions: %s", err.Error())
 	}
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := useCases.Sharing.DispatchApproved(ctx); err != nil {
+					log.Printf("dispatch shared message: %s", err)
+				}
+			}
+		}
+	}()
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -273,6 +288,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
 		Sessions:         sessionService,
+		Sharing:          sharingapp.New(store.Shares(), store.Sessions(), sessionService, attachmentapp.New(attachments, files), attachments, files),
 		SessionSides:     sessionService,
 		Timeline:         timelineService,
 		SessionEvents:    sessionEventService,

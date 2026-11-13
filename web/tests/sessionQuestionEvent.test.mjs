@@ -44,5 +44,5 @@ test('questions panel is read-only by default and restores persisted answers', (
   assert.match(questionsPanelSource, /\{\{ readonly \? '用户回答' : '选择答案' \}\}/);
   assert.match(questionsPanelSource, /<q-card-actions v-if="!readonly"/);
   assert.match(questionsDialogSource, /<QuestionsPanel[\s\S]*?:readonly="false"/);
-  assert.match(sessionDetailSource, /<QuestionsPanel[\s\S]*?:readonly="false"/);
+  assert.match(sessionDetailSource, /<QuestionsPanel[\s\S]*?:readonly="!!shareId && !sharedActive"/);
 });

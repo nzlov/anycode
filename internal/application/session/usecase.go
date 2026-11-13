@@ -137,6 +137,9 @@ type AppendPromptInput struct {
 	FileReferences      []domain.PromptFileReference
 	Annotations         []domain.PromptAnnotation
 	Mentions            []domain.PromptMention
+	ExpectedConfig      *domain.Config
+	RequireIdle         bool
+	ApprovedMessageID   string
 }
 
 type UpdatePromptAppendInput struct {
@@ -7719,17 +7722,26 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
-	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
-	if err != nil {
-		return PromptAppendDTO{}, err
-	}
+	var stagedAttachments []domain.StagedAttachment
 	if body == "" {
-		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(annotations) == 0 && len(fileReferences) == 0 && len(mentions) == 0 {
+		if len(input.StagedAttachmentIDs) == 0 && len(artifactIDs) == 0 && len(annotations) == 0 && len(fileReferences) == 0 && len(mentions) == 0 {
 			return PromptAppendDTO{}, errors.New("prompt append body is required")
 		}
 	}
 	var append domain.PromptAppend
 	err = s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) (err error) {
+		if input.ApprovedMessageID != "" {
+			previous, err := s.repo.ListPromptAppends(ctx, input.SessionID)
+			if err != nil {
+				return err
+			}
+			for _, v := range previous {
+				if v.ID == "share-"+input.ApprovedMessageID {
+					append = v
+					return nil
+				}
+			}
+		}
 		var archivedAttachments []domain.SessionAttachment
 		appendSaved := false
 		defer func() {
@@ -7749,6 +7761,12 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if session.Status == domain.StatusClosed {
 			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session cannot be appended")
 		}
+		if input.ExpectedConfig != nil && session.Config != *input.ExpectedConfig {
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "会话执行配置已变化，请重新提交消息审核")
+		}
+		if input.RequireIdle && !session.CanAcceptSharedMessage() {
+			return domain.ErrShareSessionBusy
+		}
 		if err := requireActiveWorktree(session); err != nil {
 			return err
 		}
@@ -7760,9 +7778,16 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if err != nil {
 			return err
 		}
-		id, err := s.generateID()
+		id := domain.ID("share-" + input.ApprovedMessageID)
+		if input.ApprovedMessageID == "" {
+			id, err = s.generateID()
+			if err != nil {
+				return fmt.Errorf("generate prompt append id: %w", err)
+			}
+		}
+		stagedAttachments, err = s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
 		if err != nil {
-			return fmt.Errorf("generate prompt append id: %w", err)
+			return err
 		}
 		archivedAttachments, err = s.archiveStagedAttachments(ctx, input.SessionID, domain.AttachmentSourcePromptAppend, string(id), stagedAttachments)
 		if err != nil {

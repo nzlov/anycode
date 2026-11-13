@@ -6,8 +6,29 @@
       'detail-page--embedded': !props.page,
       'detail-page--mobile': isMobileLayout,
       'detail-page--desktop': !isMobileLayout,
+      'detail-page--shared': !!shareId,
     }"
   >
+    <slot name="header" :session="session" :usage="latestTokenUsage" />
+    <div v-if="!shareId" class="row justify-end q-mb-sm">
+      <q-btn
+        outline
+        dense
+        color="primary"
+        icon="share"
+        label="分享与审核"
+        @click="shareManagerOpen = true"
+        ><q-badge v-if="pendingShareMessages" floating color="warning">{{
+          pendingShareMessages
+        }}</q-badge></q-btn
+      >
+    </div>
+    <SessionShareManager
+      v-if="!shareId"
+      v-model="shareManagerOpen"
+      :session-id="sessionId"
+      @pending="pendingShareMessages = $event"
+    />
     <q-splitter
       class="detail-grid detail-splitter"
       reverse
@@ -46,12 +67,27 @@
                   <SessionEventMessage :event="event" :known-user-prompts="knownUserPrompts" />
                 </div>
               </div>
+              <q-list v-if="shareId && sharedMessages.length" bordered separator class="q-mt-sm">
+                <q-item v-for="message in sharedMessages" :key="message.id">
+                  <q-item-section>
+                    <q-item-label>{{ shareMessageStatus(message.status) }}</q-item-label>
+                    <q-item-label caption class="append-history__body">{{
+                      message.content.body || '附件消息'
+                    }}</q-item-label>
+                    <q-item-label caption>{{
+                      message.content.attachments.map((file) => file.filename).join('、')
+                    }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
             </div>
-            <SessionThinkingPhrase
-              v-if="session?.status === 'running'"
-              class="stream-card__thinking"
-              :refresh-key="latestStreamEvent"
-            />
+            <template v-if="!shareId">
+              <SessionThinkingPhrase
+                v-if="session?.status === 'running'"
+                class="stream-card__thinking"
+                :refresh-key="latestStreamEvent"
+              />
+            </template>
           </q-card>
 
           <div
@@ -83,7 +119,7 @@
                 :requests="pendingQuestionRequests"
                 :loading="questionsLoading"
                 :submitting="questionsSubmitting"
-                :readonly="false"
+                :readonly="!!shareId && !sharedActive"
                 @submit="submitAnswers"
               />
             </q-card>
@@ -105,6 +141,45 @@
                 <q-spinner color="primary" size="32px" />
               </q-inner-loading>
             </div>
+            <PromptComposer
+              v-else-if="shareId"
+              v-model:prompt="appendText"
+              v-model:files="appendFiles"
+              class="shared-composer"
+              compact
+              :show-badge="false"
+              :show-config="false"
+              :allow-completions="false"
+              placeholder="追加描述，审核通过后自动发送"
+              :disabled="!sharedActive || appending || !session"
+              @submit="sendAppend"
+            >
+              <template #actions>
+                <q-btn
+                  v-if="session?.availableActions.includes('stop')"
+                  flat
+                  round
+                  class="app-icon-btn"
+                  color="negative"
+                  icon="stop"
+                  aria-label="停止会话"
+                  :loading="stopping"
+                  :disable="!sharedActive || stopping"
+                  @click="stopSession"
+                  ><q-tooltip>停止会话</q-tooltip></q-btn
+                >
+                <q-btn
+                  unelevated
+                  class="app-command-btn"
+                  color="primary"
+                  icon="send"
+                  label="提交审核"
+                  :loading="appending"
+                  :disable="!sharedActive || (!appendText.trim() && !appendFiles.length)"
+                  @click="sendAppend"
+                />
+              </template>
+            </PromptComposer>
             <CodexPromptComposer
               v-else
               v-model:prompt="appendText"
@@ -235,7 +310,7 @@
             </q-tabs>
             <q-separator v-if="!isMobileLayout" />
             <q-tab-panels v-model="rightPanelTab" animated>
-              <q-tab-panel name="info">
+              <q-tab-panel v-if="!shareId" name="info">
                 <div v-if="session?.mode === 'workflow'" class="workflow-progress">
                   <div class="workflow-progress__header">
                     <div>
@@ -498,9 +573,22 @@
                   <div v-else class="append-history__empty">暂无追加描述</div>
                 </div>
               </q-tab-panel>
+              <q-tab-panel v-else name="info">
+                <div class="text-subtitle2 q-mb-sm">会话描述</div>
+                <div class="append-history__body q-mb-md">{{ session?.summary }}</div>
+                <div class="text-subtitle2 q-mb-sm">会话附件</div>
+                <div class="row q-gutter-sm">
+                  <SessionFileAttachment
+                    v-for="file in sharedInputAttachments"
+                    :key="file.id"
+                    :file="attachmentPreviewFile(file)"
+                  />
+                </div>
+              </q-tab-panel>
 
               <q-tab-panel v-if="session?.projectIsGit" name="changes" class="detail-diff-panel">
                 <q-btn
+                  v-if="!shareId"
                   class="full-width q-mb-md app-command-btn"
                   outline
                   color="primary"
@@ -522,7 +610,8 @@
                 <SessionArtifactsPanel
                   :session-id="sessionId"
                   :refresh-key="artifactRefreshKey"
-                  allow-reference
+                  :allow-reference="!shareId"
+                  :readonly="!!shareId"
                   @reference-artifact="referenceArtifact"
                   @artifact-deleted="handleArtifactDeleted"
                 />
@@ -562,7 +651,7 @@
       </q-tab>
     </q-tabs>
 
-    <q-dialog v-model="mcpDialogOpen">
+    <q-dialog v-if="!shareId" v-model="mcpDialogOpen">
       <q-card class="app-content-dialog" style="width: 600px; max-width: calc(100vw - 24px)">
         <q-card-section class="row items-center q-pb-sm"
           ><div class="text-subtitle1 text-weight-bold">卡片工具</div>
@@ -670,7 +759,7 @@
             v-else
             :file="eventResourceFile"
             zoomable
-            :annotatable="eventResourceFile?.sourceType !== 'workspace'"
+            :annotatable="!shareId && eventResourceFile?.sourceType !== 'workspace'"
             :annotation-read-only="Boolean(eventResourceAnnotation)"
             :annotation-session-id="sessionId"
             :annotation-source="`临时文件 ${eventResourceTitle}`"
@@ -680,7 +769,7 @@
       </q-card>
     </q-dialog>
     <SessionSideDialog
-      v-if="session"
+      v-if="session && !shareId"
       v-model="sideDialogOpen"
       :session-id="sessionId"
       :config="session.config"
@@ -689,6 +778,7 @@
 </template>
 
 <script setup lang="ts">
+import SessionShareManager from '@/components/SessionShareManager.vue';
 import SessionFileAttachment from '@/components/SessionFileAttachment.vue';
 import { attachmentPreviewFile } from '@/services/attachments';
 import MCPServiceManager from '@/components/MCPServiceManager.vue';
@@ -698,6 +788,8 @@ import { useRouter } from 'vue-router';
 
 import QuestionsPanel from '@/components/QuestionsPanel.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
+import PromptComposer from '@/components/PromptComposer.vue';
+import { shareMessageStatus } from '@/services/sharing';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
@@ -756,6 +848,7 @@ const emit = defineEmits<{
 const props = withDefaults(
   defineProps<{
     sessionId: string;
+    shareId?: string;
     layout?: 'responsive' | 'mobile' | 'desktop';
     page?: boolean;
     mindMapAvailable?: boolean;
@@ -763,12 +856,15 @@ const props = withDefaults(
   }>(),
   {
     layout: 'responsive',
+    shareId: '',
     page: false,
     mindMapAvailable: false,
     mindMapRealtime: false,
   },
 );
 const $q = useQuasar();
+const shareManagerOpen = ref(false);
+const pendingShareMessages = ref(0);
 const router = useRouter();
 const sessionId = props.sessionId;
 const isMobileLayout = computed(
@@ -913,7 +1009,10 @@ const {
   submitApproval,
   startLiveUpdates,
   stopLiveUpdates,
-} = useSessionDetail(sessionId);
+  sharedMessages,
+  sharedActive,
+  submitSharedDescription,
+} = useSessionDetail(sessionId, props.shareId);
 
 provideSessionEventResourceOpener(openSessionEventResource);
 provideSessionTranscriptEventLoader(sessionId);
@@ -1127,14 +1226,14 @@ const canCancelQueue = computed(
 );
 const isClosed = computed(() => session.value?.status === 'closed');
 provideAnnotationDraftInjector({
-  canInject: () => !isClosed.value,
+  canInject: () => !props.shareId && !isClosed.value,
   inject: (attachment) => appendAnnotationAttachment(attachment),
 });
 const isWaitingForAnswer = computed(
   () => !isClosed.value && session.value?.status === 'waiting_user',
 );
 const isWaitingForApproval = computed(
-  () => !isClosed.value && session.value?.status === 'waiting_approval',
+  () => !props.shareId && !isClosed.value && session.value?.status === 'waiting_approval',
 );
 const approvalPanelKey = computed(() => {
   const approval = session.value?.pendingApproval;
@@ -1162,10 +1261,19 @@ const canSavePromptAppendEdit = computed(() => {
   const body = promptEditBody.value.trim();
   return Boolean(target && body && body !== target.body.trim() && !promptEditSaving.value);
 });
+const sharedInputAttachments = computed(() =>
+  session.value
+    ? [
+        ...session.value.attachments,
+        ...session.value.promptAppends.flatMap((prompt) => prompt.attachments),
+      ]
+    : [],
+);
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
 const latestStreamEvent = computed(() => events.value.at(-1) ?? null);
 const artifactRefreshKey = computed(() => String(artifactUpdateVersion.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
+
 const sessionTunnels = ref<Tunnel[]>([]);
 const latestTunnelEventId = computed(() => {
   const event = events.value.at(-1);
@@ -1386,6 +1494,18 @@ async function savePromptAppendEdit() {
 
 async function sendAppend() {
   if (isClosed.value || appendUploading.value || appending.value) return;
+  if (props.shareId) {
+    try {
+      if (await submitSharedDescription(appendText.value, [...appendFiles.value])) {
+        appendText.value = '';
+        appendFiles.value = [];
+        await scrollEventsToBottom(true);
+      }
+    } catch (err) {
+      notifyError(err, '提交审核失败');
+    }
+    return;
+  }
   const text = appendText.value;
   const selectedFiles = [...appendFiles.value];
   const selectedAnnotations = [...appendAnnotations.value];
@@ -1513,12 +1633,14 @@ async function submitAnswers(requestId: string, answers: QuestionAnswerInput[]) 
 }
 
 watch(latestStreamEvent, followLatestEvent);
+watch(sharedMessages, followLatestEvent);
 
 watch(latestTunnelEventId, (eventId) => {
   if (eventId) void refreshSessionTunnels();
 });
 
 async function refreshSessionTunnels() {
+  if (props.shareId) return;
   try {
     const tunnels = await listTunnels();
     if (mounted) sessionTunnels.value = tunnels.filter((tunnel) => tunnel.sessionId === sessionId);
@@ -1543,6 +1665,10 @@ watch(
 
 onMounted(() => {
   mounted = true;
+  if (props.shareId) {
+    void initializeSessionDetail();
+    return;
+  }
   consumeNavigationAnnotationAttachment();
   const promptAnnotationId = consumeNavigationPromptAnnotationId();
   void initializeSessionDetail().then(() => {
@@ -1984,6 +2110,21 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
 
 .detail-composer--collapsed {
   min-height: 0;
+}
+.detail-page--shared .detail-composer {
+  min-height: 0;
+}
+.shared-composer :deep(.prompt-input) {
+  padding: 8px 12px;
+}
+.shared-composer :deep(.prompt-input .q-field__control) {
+  min-height: 44px;
+}
+.shared-composer :deep(textarea.q-field__native) {
+  max-height: min(160px, 24dvh);
+}
+.shared-composer :deep(.prompt-toolbar) {
+  padding: 4px 8px;
 }
 
 .detail-answer-card {

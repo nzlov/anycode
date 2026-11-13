@@ -128,6 +128,7 @@
                   dense
                   color="negative"
                   icon="delete_outline"
+                  v-if="!readonly"
                   aria-label="删除文件"
                   :loading="deletingId === file.id"
                   @click.stop="confirmDelete(file)"
@@ -162,6 +163,7 @@
         <q-separator />
         <SessionFilePreview
           :file="selected"
+          :annotatable="!readonly"
           :annotation-session-id="sessionId"
           :annotation-source="
             selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
@@ -234,6 +236,7 @@
         <SessionFilePreview
           :file="selected"
           zoomable
+          :annotatable="!readonly"
           :annotation-session-id="sessionId"
           :annotation-source="
             selected ? `临时文件 ${selected.logicalPath || selected.filename}` : ''
@@ -293,6 +296,7 @@ import {
 const props = withDefaults(
   defineProps<{
     sessionId: string;
+    readonly?: boolean;
     refreshKey?: string;
     focusRequest?: SessionArtifactFocusRequest | null;
     inlinePreview?: boolean;

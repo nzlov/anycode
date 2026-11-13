@@ -9,6 +9,7 @@ import {
 
 import routes from './routes';
 import { getGraphQLAccessKey } from '@/services/graphqlClient';
+import { currentShareId } from '@/services/sharedAccess';
 
 /*
  * If not building with SSR mode, you can
@@ -39,6 +40,8 @@ export default defineRouter((/* { store, ssrContext } */) => {
   });
 
   Router.beforeEach((to) => {
+    if (to.name === 'shared-session') return true;
+    if (currentShareId()) return false;
     const hasAccessKey = getGraphQLAccessKey().trim() !== '';
     if (to.name !== 'login' && !hasAccessKey) {
       return { name: 'login', query: { redirect: to.fullPath } };

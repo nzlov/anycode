@@ -634,6 +634,29 @@ var (
 			},
 		},
 	}
+	// SessionSharesColumns holds the columns for the "session_shares" table.
+	SessionSharesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "token_hash", Type: field.TypeString},
+		{Name: "guest_hash", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "claimed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+	}
+	// SessionSharesTable holds the schema information for the "session_shares" table.
+	SessionSharesTable = &schema.Table{
+		Name:       "session_shares",
+		Columns:    SessionSharesColumns,
+		PrimaryKey: []*schema.Column{SessionSharesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionshare_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionSharesColumns[1]},
+			},
+		},
+	}
 	// SessionSidesColumns holds the columns for the "session_sides" table.
 	SessionSidesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -703,6 +726,35 @@ var (
 				Name:    "sessionsideevent_session_id",
 				Unique:  false,
 				Columns: []*schema.Column{SessionSideEventsColumns[2]},
+			},
+		},
+	}
+	// SharedMessagesColumns holds the columns for the "shared_messages" table.
+	SharedMessagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "share_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "content", Type: field.TypeJSON},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "approval_order", Type: field.TypeInt64, Default: 0},
+		{Name: "reviewed_at", Type: field.TypeTime, Nullable: true},
+	}
+	// SharedMessagesTable holds the schema information for the "shared_messages" table.
+	SharedMessagesTable = &schema.Table{
+		Name:       "shared_messages",
+		Columns:    SharedMessagesColumns,
+		PrimaryKey: []*schema.Column{SharedMessagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sharedmessage_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SharedMessagesColumns[2], SharedMessagesColumns[5]},
+			},
+			{
+				Name:    "sharedmessage_share_id",
+				Unique:  false,
+				Columns: []*schema.Column{SharedMessagesColumns[1]},
 			},
 		},
 	}
@@ -812,8 +864,10 @@ var (
 		QuestionRequestsTable,
 		QuickCommandsTable,
 		SessionsTable,
+		SessionSharesTable,
 		SessionSidesTable,
 		SessionSideEventsTable,
+		SharedMessagesTable,
 		StagedAttachmentsTable,
 		SystemConfigurationsTable,
 		WorkflowDefinitionsTable,

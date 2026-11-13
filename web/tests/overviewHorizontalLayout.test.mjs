@@ -197,8 +197,10 @@ test('horizontal headers expose live card metadata and priority controls for con
     assert.match(source, /<SessionPriorityControl/);
     assert.match(source, /:priority="card\.priority"/);
     assert.match(source, /@change="emit\('set-priority', \$event\)"/);
-    assert.match(source, /<TokenUsageDisplay v-if="card\.usage" :usage="card\.usage"/);
   }
+  assert.match(conversationSource, /<TokenUsageDisplay v-if="usage" :usage="usage"/);
+  assert.match(detailViewSource, /:usage="latestTokenUsage"/);
+  assert.match(terminalSource, /<TokenUsageDisplay v-if="card\.usage" :usage="card\.usage"/);
   assert.match(priorityControlSource, /aria-label="变更会话优先级"/);
   assert.match(priorityControlSource, /v-for="option in priorities"/);
   assert.match(indexSource, /@set-priority="setCardPriority\(card, \$event\)"/);
@@ -287,8 +289,8 @@ test('detail tabs show persisted counts and apply websocket count updates', () =
 });
 
 test('horizontal mode keeps one existing detail subscription per session', () => {
-  assert.match(conversationSource, /:session-id="card\.id"/);
-  assert.match(detailViewSource, /useSessionDetail\(sessionId\)/);
+  assert.match(conversationSource, /:session-id="props\.card\?\.id \?\? sessionId \?\? ''"/);
+  assert.match(detailViewSource, /useSessionDetail\(sessionId, props\.shareId\)/);
   assert.match(detailComposableSource, /subscribeSessionEvents\(sessionId/);
   assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): TranscriptEvent!/);
   assert.doesNotMatch(schemaSource, /allSessionEvents/);

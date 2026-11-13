@@ -1,5 +1,6 @@
 import { applicationURL, applicationAuthorizationHeader } from '@/services/applicationPath.js';
 import { getGraphQLAccessKey, graphqlFetch } from '@/services/graphqlClient';
+import { sharedResourcePath } from '@/services/sharedAccess';
 
 export type SessionFilePreviewKind =
   'image' | 'pdf' | 'video' | 'audio' | 'model' | 'text' | 'none';
@@ -102,7 +103,7 @@ export async function resolveSessionWorkspaceFile(
 ): Promise<SessionFile> {
   const query = new URLSearchParams({ path });
   const previewUrl = `/api/sessions/${encodeURIComponent(sessionId)}/workspace-file?${query}`;
-  const response = await fetch(applicationURL(previewUrl), {
+  const response = await fetch(applicationURL(sharedResourcePath(previewUrl)), {
     method: 'HEAD',
     headers: sessionFileHeaders(),
     signal: signal ?? null,
@@ -158,7 +159,7 @@ export async function requestSessionFilePreviewURL(
   const tokenURL = file.previewRequiresBearer
     ? `${target.pathname}/preview-token${target.search}`
     : `/files/${encodeURIComponent(file.id)}/preview-token`;
-  const response = await fetch(applicationURL(tokenURL), {
+  const response = await fetch(applicationURL(sharedResourcePath(tokenURL)), {
     method: 'POST',
     headers: sessionFileHeaders(),
     signal: signal ?? null,
@@ -168,7 +169,7 @@ export async function requestSessionFilePreviewURL(
   if (
     typeof payload.url !== 'string' ||
     new URL(payload.url, window.location.origin).origin !== target.origin ||
-    new URL(payload.url, window.location.origin).pathname !== target.pathname
+    new URL(payload.url, window.location.origin).pathname !== sharedResourcePath(target.pathname)
   ) {
     throw new Error('文件预览凭据响应无效');
   }
@@ -194,7 +195,7 @@ export async function downloadSessionFile(file: SessionFileAccess) {
   const tokenPath = target.pathname.endsWith('/download')
     ? `${target.pathname}-token`
     : `${target.pathname}/download-token`;
-  const response = await fetch(applicationURL(`${tokenPath}${target.search}`), {
+  const response = await fetch(applicationURL(sharedResourcePath(`${tokenPath}${target.search}`)), {
     method: 'POST',
     headers: sessionFileHeaders(),
   });
@@ -202,7 +203,7 @@ export async function downloadSessionFile(file: SessionFileAccess) {
   const payload = (await response.json()) as { url?: unknown };
   if (typeof payload.url !== 'string') throw new Error('文件下载凭据响应无效');
   const url = new URL(payload.url, window.location.origin);
-  if (url.origin !== target.origin || url.pathname !== target.pathname) {
+  if (url.origin !== target.origin || url.pathname !== sharedResourcePath(target.pathname)) {
     throw new Error('文件下载凭据响应无效');
   }
   const anchor = document.createElement('a');

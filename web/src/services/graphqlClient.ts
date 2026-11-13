@@ -5,6 +5,7 @@ import {
   applicationAuthorizationHeader,
 } from '@/services/applicationPath.js';
 import { Notify } from 'quasar';
+import { currentShareId, shareCredential } from '@/services/sharedAccess';
 
 import {
   createGraphQLSubscriptionTransport,
@@ -76,6 +77,7 @@ export class AnyCodeGraphQLError extends Error {
 
 export function getGraphQLAccessKey() {
   if (typeof window === 'undefined') return '';
+  if (currentShareId()) return shareCredential();
   return (
     window.localStorage.getItem(applicationStorageKey(GRAPHQL_ACCESS_KEY_STORAGE_KEY)) ??
     (!applicationBasePath() ? window.localStorage.getItem('ANYCODE_ACCESS_KEY') : null) ??
@@ -136,11 +138,16 @@ export async function graphqlFetch<
   TVariables extends Record<string, unknown> = Record<string, unknown>,
 >({ query, variables, operationName, notify = true }: GraphQLRequest<TVariables>) {
   try {
-    const response = await fetch(graphqlEndpoint, {
-      method: 'POST',
-      headers: graphqlHeaders('application/json'),
-      body: JSON.stringify({ query, variables, operationName }),
-    });
+    const response = await fetch(
+      currentShareId()
+        ? applicationURL(`/api/shared/${currentShareId()}/graphql`)
+        : graphqlEndpoint,
+      {
+        method: 'POST',
+        headers: graphqlHeaders('application/json'),
+        body: JSON.stringify({ query, variables, operationName }),
+      },
+    );
     return await parseGraphQLResponse<TData>(response);
   } catch (err) {
     if (notify) notifyRequestError(err);
@@ -150,11 +157,16 @@ export async function graphqlFetch<
 
 export async function graphqlMultipartFetch<TData>(body: FormData) {
   try {
-    const response = await fetch(graphqlEndpoint, {
-      method: 'POST',
-      headers: graphqlHeaders(),
-      body,
-    });
+    const response = await fetch(
+      currentShareId()
+        ? applicationURL(`/api/shared/${currentShareId()}/graphql`)
+        : graphqlEndpoint,
+      {
+        method: 'POST',
+        headers: graphqlHeaders(),
+        body,
+      },
+    );
     return await parseGraphQLResponse<TData>(response);
   } catch (err) {
     notifyRequestError(err);

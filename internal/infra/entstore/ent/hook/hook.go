@@ -249,6 +249,18 @@ func (f SessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionMutation", m)
 }
 
+// The SessionShareFunc type is an adapter to allow the use of ordinary
+// function as SessionShare mutator.
+type SessionShareFunc func(context.Context, *ent.SessionShareMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionShareFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionShareMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionShareMutation", m)
+}
+
 // The SessionSideFunc type is an adapter to allow the use of ordinary
 // function as SessionSide mutator.
 type SessionSideFunc func(context.Context, *ent.SessionSideMutation) (ent.Value, error)
@@ -271,6 +283,18 @@ func (f SessionSideEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionSideEventMutation", m)
+}
+
+// The SharedMessageFunc type is an adapter to allow the use of ordinary
+// function as SharedMessage mutator.
+type SharedMessageFunc func(context.Context, *ent.SharedMessageMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SharedMessageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SharedMessageMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SharedMessageMutation", m)
 }
 
 // The StagedAttachmentFunc type is an adapter to allow the use of ordinary

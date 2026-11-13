@@ -25,8 +25,10 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionshare"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionside"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionsideevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sharedmessage"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -684,6 +686,12 @@ func init() {
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	entsession.UpdateDefaultUpdatedAt = entsessionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	sessionshareFields := schema.SessionShare{}.Fields()
+	_ = sessionshareFields
+	// sessionshareDescGuestHash is the schema descriptor for guest_hash field.
+	sessionshareDescGuestHash := sessionshareFields[3].Descriptor()
+	// sessionshare.DefaultGuestHash holds the default value on creation for the guest_hash field.
+	sessionshare.DefaultGuestHash = sessionshareDescGuestHash.Default.(string)
 	sessionsideFields := schema.SessionSide{}.Fields()
 	_ = sessionsideFields
 	// sessionsideDescSessionID is the schema descriptor for session_id field.
@@ -784,6 +792,16 @@ func init() {
 	sessionsideeventDescCreatedAt := sessionsideeventFields[13].Descriptor()
 	// sessionsideevent.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sessionsideevent.DefaultCreatedAt = sessionsideeventDescCreatedAt.Default.(func() time.Time)
+	sharedmessageFields := schema.SharedMessage{}.Fields()
+	_ = sharedmessageFields
+	// sharedmessageDescStatus is the schema descriptor for status field.
+	sharedmessageDescStatus := sharedmessageFields[4].Descriptor()
+	// sharedmessage.DefaultStatus holds the default value on creation for the status field.
+	sharedmessage.DefaultStatus = sharedmessageDescStatus.Default.(string)
+	// sharedmessageDescApprovalOrder is the schema descriptor for approval_order field.
+	sharedmessageDescApprovalOrder := sharedmessageFields[6].Descriptor()
+	// sharedmessage.DefaultApprovalOrder holds the default value on creation for the approval_order field.
+	sharedmessage.DefaultApprovalOrder = sharedmessageDescApprovalOrder.Default.(int64)
 	stagedattachmentFields := schema.StagedAttachment{}.Fields()
 	_ = stagedattachmentFields
 	// stagedattachmentDescOwnerKeyHash is the schema descriptor for owner_key_hash field.
