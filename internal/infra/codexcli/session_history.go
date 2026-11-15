@@ -446,6 +446,15 @@ func sessionLogByID(codexHome string, threadID string) (string, error) {
 		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
 			return nil
 		}
+		// Canonical rollout names include the thread ID; legacy names still use metadata.
+		const timestampPrefix = "rollout-2006-01-02T15-04-05-"
+		name := entry.Name()
+		if strings.HasPrefix(name, "rollout-") && len(name) > len(timestampPrefix)+len(".jsonl") && name[len(timestampPrefix)-1] == '-' {
+			if _, err := time.Parse("2006-01-02T15-04-05", name[len("rollout-"):len(timestampPrefix)-1]); err == nil &&
+				name[len(timestampPrefix):len(name)-len(".jsonl")] != threadID {
+				return nil
+			}
+		}
 		if sessionLogMatchesID(path, threadID) {
 			matched = path
 			return filepath.SkipAll

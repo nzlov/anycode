@@ -1,26 +1,64 @@
 <template>
   <div
+    ref="previewRoot"
     class="session-file-preview"
     :class="{
       'session-file-preview--text': file?.previewKind === 'text',
+      'session-file-preview--pending': !activated,
       'session-file-preview--fit-image': fitImage && file?.previewKind === 'image',
       'session-file-preview--thumbnail': thumbnail,
     }"
   >
-    <div v-if="thumbnail" class="text-caption text-muted">缩略图预览 · 下载可获取原图</div>
-    <div
-      v-if="file?.previewKind === 'image'"
-      ref="zoomSurface"
-      class="session-file-preview__zoom-surface"
-      :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
-      @pointerdown="startGesture"
-      @pointermove="moveGesture"
-      @pointerup="endGesture"
-      @pointercancel="endGesture"
-      @wheel="zoomWithWheel"
-    >
+    <div v-if="!activated" class="session-file-preview__state text-muted" aria-label="文件预览">
+      <q-icon name="draft" size="36px" />
+    </div>
+    <template v-else>
+      <div v-if="thumbnail" class="text-caption text-muted">缩略图预览 · 下载可获取原图</div>
+      <div
+        v-if="file?.previewKind === 'image'"
+        ref="zoomSurface"
+        class="session-file-preview__zoom-surface"
+        :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
+        @pointerdown="startGesture"
+        @pointermove="moveGesture"
+        @pointerup="endGesture"
+        @pointercancel="endGesture"
+        @wheel="zoomWithWheel"
+      >
+        <PreviewAnnotator
+          mode="image"
+          :enabled="annotatable && !annotationReadOnly"
+          :source="annotationSource || `临时文件 ${file.filename}`"
+          :session-id="annotationSessionId"
+          :content-key="file.id"
+          :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
+          :display-annotations="displayAnnotations"
+        >
+          <template #toolbar-leading><slot name="toolbar-leading" /></template>
+          <template #toolbar-actions><slot name="toolbar-actions" /></template>
+          <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
+          <img
+            v-if="!error && imageURL"
+            ref="mediaElement"
+            :src="imageURL"
+            :alt="file.filename"
+            draggable="false"
+            class="session-file-preview__image"
+            :style="mediaTransform"
+            @load="finishImageLoad($event)"
+            @error="failImageLoad($event)"
+          />
+          <q-spinner
+            v-if="loading"
+            class="session-file-preview__loading"
+            color="primary"
+            size="32px"
+          />
+        </PreviewAnnotator>
+      </div>
       <PreviewAnnotator
-        mode="image"
+        v-else-if="file?.previewKind === 'text'"
+        mode="text"
         :enabled="annotatable && !annotationReadOnly"
         :source="annotationSource || `临时文件 ${file.filename}`"
         :session-id="annotationSessionId"
@@ -31,101 +69,70 @@
         <template #toolbar-leading><slot name="toolbar-leading" /></template>
         <template #toolbar-actions><slot name="toolbar-actions" /></template>
         <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
-        <img
-          v-if="!error && imageURL"
-          ref="mediaElement"
-          :src="imageURL"
-          :alt="file.filename"
-          draggable="false"
-          class="session-file-preview__image"
-          :style="mediaTransform"
-          @load="finishImageLoad($event)"
-          @error="failImageLoad($event)"
-        />
-        <q-spinner
-          v-if="loading"
-          class="session-file-preview__loading"
-          color="primary"
-          size="32px"
-        />
+        <div v-else-if="loading" class="session-file-preview__state">
+          <q-spinner color="primary" size="32px" />
+        </div>
+        <pre
+          v-else
+          class="session-file-preview__text"
+          data-annotation-text
+          data-annotation-line="1"
+          >{{ text }}</pre>
       </PreviewAnnotator>
-    </div>
-    <PreviewAnnotator
-      v-else-if="file?.previewKind === 'text'"
-      mode="text"
-      :enabled="annotatable && !annotationReadOnly"
-      :source="annotationSource || `临时文件 ${file.filename}`"
-      :session-id="annotationSessionId"
-      :content-key="file.id"
-      :file-references="[{ kind: 'session_file', sessionFileId: file.id }]"
-      :display-annotations="displayAnnotations"
-    >
-      <template #toolbar-leading><slot name="toolbar-leading" /></template>
-      <template #toolbar-actions><slot name="toolbar-actions" /></template>
-      <q-banner v-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
-      <div v-else-if="loading" class="session-file-preview__state">
-        <q-spinner color="primary" size="32px" />
-      </div>
-      <pre
-        v-else
-        class="session-file-preview__text"
-        data-annotation-text
-        data-annotation-line="1"
-        >{{ text }}</pre>
-    </PreviewAnnotator>
-    <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
-    <q-spinner v-else-if="loading" color="primary" size="32px" />
-    <iframe
-      v-else-if="file?.previewKind === 'pdf' && previewURL"
-      :src="previewURL"
-      class="session-file-preview__frame"
-      title="PDF 预览"
-    />
-    <div
-      v-else-if="file?.previewKind === 'video' && previewURL"
-      ref="zoomSurface"
-      class="session-file-preview__zoom-surface"
-      :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
-      @pointerdown="startGesture"
-      @pointermove="moveGesture"
-      @pointerup="endGesture"
-      @pointercancel="endGesture"
-      @wheel="zoomWithWheel"
-    >
-      <video
-        ref="mediaElement"
+      <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
+      <q-spinner v-else-if="loading" color="primary" size="32px" />
+      <iframe
+        v-else-if="file?.previewKind === 'pdf' && previewURL"
         :src="previewURL"
-        draggable="false"
-        class="session-file-preview__media"
-        :style="mediaTransform"
-        controls
-        preload="metadata"
-        @error="failMediaLoad($event)"
+        class="session-file-preview__frame"
+        title="PDF 预览"
       />
-    </div>
-    <audio
-      v-else-if="file?.previewKind === 'audio' && previewURL"
-      :src="previewURL"
-      class="session-file-preview__audio"
-      @error="failMediaLoad($event)"
-      preload="metadata"
-      controls
-    />
-    <ModelFilePreview
-      v-else-if="file?.previewKind === 'model' && previewURL"
-      :src="previewURL"
-      :filename="file.filename"
-      class="session-file-preview__model"
-    />
-    <div v-else class="session-file-preview__state text-muted">
-      <q-icon :name="file ? 'draft' : 'inventory_2'" size="36px" />
-      <span>{{ file ? '此文件仅支持下载' : '暂无临时文件' }}</span>
-    </div>
+      <div
+        v-else-if="file?.previewKind === 'video' && previewURL"
+        ref="zoomSurface"
+        class="session-file-preview__zoom-surface"
+        :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
+        @pointerdown="startGesture"
+        @pointermove="moveGesture"
+        @pointerup="endGesture"
+        @pointercancel="endGesture"
+        @wheel="zoomWithWheel"
+      >
+        <video
+          ref="mediaElement"
+          :src="previewURL"
+          draggable="false"
+          class="session-file-preview__media"
+          :style="mediaTransform"
+          controls
+          preload="metadata"
+          @error="failMediaLoad($event)"
+        />
+      </div>
+      <audio
+        v-else-if="file?.previewKind === 'audio' && previewURL"
+        :src="previewURL"
+        class="session-file-preview__audio"
+        @error="failMediaLoad($event)"
+        preload="metadata"
+        controls
+      />
+      <ModelFilePreview
+        v-else-if="file?.previewKind === 'model' && previewURL"
+        :src="previewURL"
+        :filename="file.filename"
+        class="session-file-preview__model"
+      />
+      <div v-else class="session-file-preview__state text-muted">
+        <q-icon :name="file ? 'draft' : 'inventory_2'" size="36px" />
+        <span>{{ file ? '此文件仅支持下载' : '暂无临时文件' }}</span>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
 import type { PreviewAnnotation } from '@/services/previewAnnotations';
@@ -156,6 +163,10 @@ const props = withDefaults(
   },
 );
 const loading = ref(false);
+const previewRoot = ref<HTMLElement | null>(null);
+const activated = ref(false);
+let visible = false;
+let visibilityObserver: IntersectionObserver | null = null;
 const error = ref('');
 const imageURL = ref('');
 const thumbnail = ref(false);
@@ -372,8 +383,43 @@ function isAbortError(err: unknown) {
   return err instanceof DOMException && err.name === 'AbortError';
 }
 
-watch(() => props.file, load, { immediate: true });
-onBeforeUnmount(clear);
+function activate() {
+  if (!visible || activated.value) return;
+  activated.value = true;
+  void load(props.file);
+}
+
+watch(
+  [
+    () => props.file?.id,
+    () => props.file?.previewUrl,
+    () => props.file?.previewKind,
+    () => props.file?.size,
+    () => props.file?.createdAt,
+    () => props.file?.previewRequiresBearer,
+  ],
+  () => {
+    activated.value = false;
+    clear();
+    activate();
+  },
+);
+onMounted(() => {
+  if (typeof IntersectionObserver === 'undefined') {
+    visible = true;
+    activate();
+    return;
+  }
+  visibilityObserver = new IntersectionObserver((entries) => {
+    visible = entries.some((entry) => entry.isIntersecting);
+    activate();
+  });
+  if (previewRoot.value) visibilityObserver.observe(previewRoot.value);
+});
+onBeforeUnmount(() => {
+  visibilityObserver?.disconnect();
+  clear();
+});
 </script>
 
 <style scoped>
@@ -398,6 +444,11 @@ onBeforeUnmount(clear);
   height: auto;
   min-height: 0;
   overflow: hidden;
+}
+
+.session-file-preview--pending {
+  min-width: 64px;
+  min-height: 64px;
 }
 
 .session-file-preview--fit-image .session-file-preview__zoom-surface,

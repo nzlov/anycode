@@ -36,7 +36,6 @@ function toTranscriptItem(event, id = event.id) {
   return {
     ...event,
     id,
-    content: cloneContent(event.content),
     sourceEventIds: [event.id],
     deferredEventId: event.deferred ? event.id : undefined,
   };
@@ -113,15 +112,6 @@ function mergeImages(current = [], incoming = []) {
   const images = new Map(current.map((image) => [`${image.src}:${image.detail}`, image]));
   for (const image of incoming) images.set(`${image.src}:${image.detail}`, image);
   return [...images.values()];
-}
-
-function cloneContent(content) {
-  if (Array.isArray(content)) return content.map(cloneContent);
-  if (content === null || typeof content !== 'object') return content;
-
-  return Object.fromEntries(
-    Object.entries(content).map(([key, value]) => [key, cloneContent(value)]),
-  );
 }
 
 function compareTranscriptEvents(left, right) {

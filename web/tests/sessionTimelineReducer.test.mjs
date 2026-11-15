@@ -314,7 +314,7 @@ test('standalone events never merge even when their content is identical', () =>
   );
 });
 
-test('proxied event content is copied into a plain timeline item', () => {
+test('unchanged event content retains its identity for timeline rendering', () => {
   const event = messageEvent('message-a', '01', 'proxied');
   const images = new Proxy([{ src: '/preview/image-a', detail: 'auto' }], {});
   event.content = new Proxy({ ...event.content, images }, {});
@@ -328,6 +328,28 @@ test('proxied event content is copied into a plain timeline item', () => {
     format: 'markdown',
     images: [{ src: '/preview/image-a', detail: 'auto' }],
   });
-  assert.notEqual(item.content, event.content);
-  assert.notEqual(item.content.images, event.content.images);
+  assert.equal(item.content, event.content);
+  assert.equal(item.content.images, event.content.images);
+});
+
+test('merging frozen events preserves inputs and unrelated content identities', () => {
+  const message = messageEvent('message', '01', 'unchanged');
+  const start = commandEvent('start', '02', 'call', 'started', {
+    commands: [commandInvocation('go test')],
+  });
+  const complete = commandEvent('complete', '03', 'call', 'completed', {
+    commands: [commandInvocation('', '', { hasOutput: true, output: 'passed' })],
+  });
+  const freeze = (value) => {
+    if (!value || typeof value !== 'object') return;
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  };
+  [message, start, complete].forEach(freeze);
+  const first = reduceTranscriptEvents([message, start]);
+  const second = reduceTranscriptEvents([message, start, complete]);
+  assert.equal(first[0].content, second[0].content);
+  assert.equal(second[1].content.commands[0].command, 'go test');
+  assert.equal(second[1].content.commands[0].output, 'passed');
+  assert.equal(start.content.commands[0].output, '');
 });

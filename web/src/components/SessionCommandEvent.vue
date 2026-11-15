@@ -20,7 +20,7 @@
       />
       <small v-if="duration">{{ duration }}</small>
       <q-spinner
-        v-if="loading || event.phase === 'started' || event.phase === 'progress'"
+        v-if="loading || (running && (event.phase === 'started' || event.phase === 'progress'))"
         size="14px"
       />
       <q-icon
@@ -84,6 +84,7 @@ import {
 
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptCommandContent };
+  running: boolean;
 }>();
 
 const expanded = ref(false);

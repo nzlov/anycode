@@ -405,14 +405,17 @@ func (s *Store) WatchArtifactDir(ctx context.Context, sessionID session.ID) (<-c
 	changes := make(chan struct{}, 1)
 	go func() {
 		defer close(changes)
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
+				started := time.Now()
 				next, err := s.artifactDirectoryState(ctx, sessionID)
+				// Leave nine scan durations idle so large directories do not scan continuously.
+				timer.Reset(max(interval, 9*time.Since(started)))
 				if err != nil || next == state {
 					continue
 				}
@@ -591,6 +594,9 @@ func (s *Store) FindSessionFile(ctx context.Context, id session.SessionFileID) (
 			return nil
 		}
 		if entry.IsDir() || strings.HasSuffix(entry.Name(), ".partial") {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) != string(id) {
 			return nil
 		}
 		input, ok := s.sessionInputFromPath(root, path)

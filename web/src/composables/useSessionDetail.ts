@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 
 import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionClose';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
@@ -59,7 +59,8 @@ const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, ne
 
 export function useSessionDetail(sessionId: string, shareId = '') {
   const session = ref<SessionDetailData['session'] | null>(null);
-  const events = ref<SessionDetailData['events']>([]);
+  // Timeline updates replace the array and changed events; nested proxies add no reactivity.
+  const events = shallowRef<SessionDetailData['events']>([]);
   const tokenUsage = ref<TranscriptTokenUsage | null>(null);
   const nodeUsage = ref<TranscriptUsageAttribution[]>([]);
   const eventsPageInfo = ref<PageInfo>({ ...emptyPageInfo });

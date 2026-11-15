@@ -16,6 +16,7 @@
         v-for="member in groupMembers"
         :key="member.id"
         :event="member"
+        :running="running"
         :known-user-prompts="knownUserPrompts"
       />
     </div>
@@ -32,10 +33,12 @@
   <SessionCommandEvent
     v-else-if="event.content.__typename === 'TranscriptCommandContent'"
     :event="commandEvent"
+    :running="running"
   />
   <SessionToolEvent
     v-else-if="event.content.__typename === 'TranscriptToolContent'"
     :event="toolEvent"
+    :running="running"
   />
   <SessionFileChangeEvent
     v-else-if="event.content.__typename === 'TranscriptFileChangeContent'"
@@ -80,6 +83,7 @@ import type {
 const props = withDefaults(
   defineProps<{
     event: TranscriptItem;
+    running: boolean;
     knownUserPrompts?: readonly string[];
   }>(),
   { knownUserPrompts: () => [] },

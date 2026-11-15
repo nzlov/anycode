@@ -32,7 +32,7 @@ export type SessionFilePreviewData = Pick<
   | 'previewUrl'
   | 'downloadUrl'
   | 'previewRequiresBearer'
->;
+> & { createdAt?: string };
 
 export interface ListSessionFilesInput {
   fileId?: string;
@@ -135,7 +135,7 @@ export async function resolveSessionWorkspaceFile(
     previewKind,
     previewUrl,
     downloadUrl: `/api/sessions/${encodeURIComponent(sessionId)}/workspace-file?${downloadQuery}`,
-    createdAt: '',
+    createdAt: response.headers.get('last-modified') || '',
     previewRequiresBearer: true,
   };
 }

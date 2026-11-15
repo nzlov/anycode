@@ -60,7 +60,7 @@ function setup(overrides = {}, shareId = 'share-1') {
     ...overrides,
   };
   const dependencies = {
-    vue: { ref: (value) => ({ value }) },
+    vue: { ref: (value) => ({ value }), shallowRef: (value) => ({ value }) },
     '@/composables/useConfirmedSessionClose': {},
     '@/composables/useSessionUpdates': {
       useSessionUpdates: () => ({ start: () => calls.globalStarts++, stop() {} }),

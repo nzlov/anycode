@@ -61,10 +61,24 @@
                 <div
                   v-for="event in streamEntries"
                   :key="event.id"
+                  v-memo="[
+                    event.content,
+                    event.phase,
+                    event.occurredAt,
+                    event.deferred,
+                    event.deferredEventId,
+                    event.group,
+                    knownUserPrompts,
+                    timelineRunning,
+                  ]"
                   class="event-list__item"
                   :data-timeline-id="event.id"
                 >
-                  <SessionEventMessage :event="event" :known-user-prompts="knownUserPrompts" />
+                  <SessionEventMessage
+                    :event="event"
+                    :running="timelineRunning"
+                    :known-user-prompts="knownUserPrompts"
+                  />
                 </div>
               </div>
               <q-list v-if="shareId && sharedMessages.length" bordered separator class="q-mt-sm">
@@ -1270,6 +1284,9 @@ const sharedInputAttachments = computed(() =>
     : [],
 );
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
+const timelineRunning = computed(() =>
+  ['starting', 'running', 'stopping'].includes(session.value?.status ?? ''),
+);
 const latestStreamEvent = computed(() => events.value.at(-1) ?? null);
 const artifactRefreshKey = computed(() => String(artifactUpdateVersion.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
@@ -1893,6 +1910,11 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.event-list__item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100px;
 }
 
 .event-list :deep(.session-event-header--sticky) {

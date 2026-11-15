@@ -39,6 +39,7 @@
               v-for="event in selectedEvents"
               :key="event.id"
               :event="event"
+              :running="selectedSide.status === 'running'"
               :known-user-prompts="[selectedSide.prompt, ...selectedSide.followUps]"
             />
           </div>
