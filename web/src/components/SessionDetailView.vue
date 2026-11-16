@@ -9,20 +9,13 @@
       'detail-page--shared': !!shareId,
     }"
   >
-    <slot name="header" :session="session" :usage="latestTokenUsage" />
-    <div v-if="!shareId" class="row justify-end q-mb-sm">
-      <q-btn
-        outline
-        dense
-        color="primary"
-        icon="share"
-        label="分享与审核"
-        @click="shareManagerOpen = true"
-        ><q-badge v-if="pendingShareMessages" floating color="warning">{{
-          pendingShareMessages
-        }}</q-badge></q-btn
-      >
-    </div>
+    <slot
+      name="header"
+      :session="session"
+      :usage="latestTokenUsage"
+      :share="openShareManager"
+      :pending-share-messages="pendingShareMessages"
+    />
     <SessionShareManager
       v-if="!shareId"
       v-model="shareManagerOpen"
@@ -476,20 +469,35 @@
                   </q-item>
                 </q-list>
 
-                <div v-if="session && !isClosed" class="session-detail-tool-row">
+                <div v-if="session" class="session-detail-tool-row">
+                  <q-btn
+                    v-if="!$slots.header"
+                    class="session-detail-tool-button q-mt-md app-command-btn"
+                    outline
+                    color="primary"
+                    icon="share"
+                    label="分享与审核"
+                    no-caps
+                    @click="openShareManager"
+                  >
+                    <q-badge v-if="pendingShareMessages" floating color="warning">{{
+                      pendingShareMessages
+                    }}</q-badge>
+                  </q-btn>
                   <SessionTerminalButton
+                    v-if="!isClosed"
                     class="session-detail-tool-button"
                     :source-session-id="sessionId"
                     full-width
                   />
                   <SessionForkButton
-                    v-if="canFork"
+                    v-if="!isClosed && canFork"
                     :source-session-id="sessionId"
                     :project-is-git="session?.projectIsGit"
                     full-width
                   />
                   <q-btn
-                    v-if="mindMapAvailable"
+                    v-if="!isClosed && mindMapAvailable"
                     class="session-detail-tool-button q-mt-md app-command-btn"
                     outline
                     color="primary"
@@ -879,6 +887,9 @@ const props = withDefaults(
 const $q = useQuasar();
 const shareManagerOpen = ref(false);
 const pendingShareMessages = ref(0);
+function openShareManager() {
+  shareManagerOpen.value = true;
+}
 const router = useRouter();
 const sessionId = props.sessionId;
 const isMobileLayout = computed(

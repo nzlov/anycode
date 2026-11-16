@@ -11,7 +11,7 @@
           icon="refresh"
           aria-label="刷新分享"
           :loading="loading"
-          @click="refresh"
+          @click="refresh()"
           ><q-tooltip>刷新</q-tooltip></q-btn
         >
         <q-btn v-close-popup flat round dense icon="close" aria-label="关闭分享管理" />
@@ -94,50 +94,14 @@
         </q-tab-panel>
         <q-tab-panel name="review">
           <div v-if="!messages.length" class="text-muted q-pa-lg text-center">暂无访客消息</div>
-          <q-card v-for="message in messages" :key="message.id" flat bordered class="q-mb-md">
-            <q-card-section>
-              <div class="share-message-heading">
-                <q-badge :color="message.status === 'pending' ? 'warning' : 'grey'">{{
-                  shareMessageStatus(message.status)
-                }}</q-badge
-                ><span class="text-caption share-id">分享 {{ message.shareId }}</span>
-              </div>
-              <div class="text-caption text-muted q-mt-sm">
-                {{ new Date(message.createdAt).toLocaleString() }} ·
-                {{ message.content.config.CodexModel || '默认模型' }} ·
-                {{ message.content.config.ReasoningEffort || '默认强度' }} ·
-                {{ message.content.config.PermissionMode
-                }}{{ message.content.config.FastMode ? ' · Fast' : '' }}
-              </div>
-              <div class="share-body q-mt-sm">{{ message.content.body }}</div>
-              <q-btn
-                v-for="file in message.content.attachments"
-                :key="file.id"
-                flat
-                dense
-                icon="attach_file"
-                :label="file.filename"
-                @click="downloadReviewAttachment(message.id, file).catch(showError)"
-              />
-            </q-card-section>
-            <q-card-actions v-if="message.status === 'pending'" align="right">
-              <q-btn
-                flat
-                color="negative"
-                label="拒绝"
-                :disable="!!busy"
-                @click="review(message.id, false)"
-              />
-              <q-btn
-                unelevated
-                color="primary"
-                label="批准并发送"
-                :loading="busy === message.id"
-                :disable="!!busy"
-                @click="review(message.id, true)"
-              />
-            </q-card-actions>
-          </q-card>
+          <ShareMessageReviewCard
+            v-for="message in messages"
+            :key="message.id"
+            :message="message"
+            :busy="busy"
+            @review="review"
+            @error="showError"
+          />
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
@@ -146,6 +110,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { copyToClipboard, Notify } from 'quasar';
+import { useSharingUpdates } from '@/composables/useSharingUpdates';
+import ShareMessageReviewCard from '@/components/ShareMessageReviewCard.vue';
 import {
   createSessionShare,
   listSessionShares,
@@ -153,10 +119,9 @@ import {
   revokeSessionShare,
   reviewShareMessage,
   savedShareURL,
-  downloadReviewAttachment,
-  shareMessageStatus,
   type SessionShare,
   type ShareMessage,
+  type SharingUpdate,
 } from '@/services/sharing';
 const props = defineProps<{ sessionId: string }>();
 const emit = defineEmits<{ pending: [count: number] }>();
@@ -170,35 +135,109 @@ const error = ref('');
 const tab = ref('links');
 const pending = computed(() => messages.value.filter((m) => m.status === 'pending').length);
 watch(pending, (value) => emit('pending', value));
-let timer: ReturnType<typeof setInterval> | undefined;
 let generation = 0;
+let stopped = true;
+let refreshPromise: Promise<void> | undefined;
+let reloadLinks = false;
+let reloadMessages = false;
+let linksVersion = 0;
+let messagesVersion = 0;
+const updates = useSharingUpdates(() => props.sessionId, {
+  onData: handleUpdate,
+  onError: showError,
+  onReset: resetRequests,
+});
 function showError(e: unknown) {
   error.value = e instanceof Error ? e.message : '操作失败';
 }
-async function refresh() {
-  if (loading.value) return;
+function refresh(links = open.value, requests = true): Promise<void> {
+  if (stopped) return Promise.resolve();
+  reloadLinks ||= links;
+  reloadMessages ||= requests;
+  if (refreshPromise) return refreshPromise;
   const request = generation;
   loading.value = true;
-  try {
-    const [links, requests] = await Promise.all([
-      listSessionShares(props.sessionId),
-      listShareMessages(props.sessionId),
-    ]);
+  refreshPromise = (async () => {
+    while (request === generation && (reloadLinks || reloadMessages)) {
+      const fetchLinks = reloadLinks;
+      const fetchMessages = reloadMessages;
+      const linkVersion = linksVersion;
+      const messageVersion = messagesVersion;
+      reloadLinks = reloadMessages = false;
+      try {
+        const [links, requests] = await Promise.all([
+          fetchLinks ? listSessionShares(props.sessionId) : null,
+          fetchMessages ? listShareMessages(props.sessionId) : null,
+        ]);
+        if (request !== generation) return;
+        if (links && linkVersion === linksVersion) shares.value = links;
+        if (requests && messageVersion === messagesVersion) messages.value = requests;
+        reloadLinks ||= !!links && linkVersion !== linksVersion;
+        reloadMessages ||= !!requests && messageVersion !== messagesVersion;
+        error.value = '';
+      } catch (e) {
+        if (request === generation) showError(e);
+      }
+    }
+  })().finally(() => {
     if (request !== generation) return;
-    shares.value = links;
-    messages.value = requests;
-    error.value = '';
-  } catch (e) {
-    if (request === generation) showError(e);
-  } finally {
     loading.value = false;
+    refreshPromise = undefined;
+  });
+  return refreshPromise;
+}
+function handleUpdate(update: SharingUpdate) {
+  if (update.sessionId !== props.sessionId) return;
+  switch (update.eventType) {
+    case 'sharing.ready':
+      void refresh();
+      break;
+    case 'sharing.link_created':
+    case 'sharing.link_claimed':
+    case 'sharing.link_revoked': {
+      linksVersion++;
+      const share = shares.value.find((item) => item.id === update.shareId);
+      if (share && update.eventType === 'sharing.link_claimed') {
+        share.claimedAt = update.occurredAt;
+      } else if (share && update.eventType === 'sharing.link_revoked') {
+        share.revokedAt = update.occurredAt;
+      } else if (open.value) {
+        void refresh(true, false);
+      }
+      break;
+    }
+    case 'sharing.message_submitted':
+      messagesVersion++;
+      void refresh(false);
+      break;
+    case 'sharing.message_status_changed': {
+      messagesVersion++;
+      const message = messages.value.find((item) => item.id === update.messageId);
+      if (message && update.status) message.status = update.status;
+      else void refresh(false);
+      break;
+    }
   }
+}
+function start() {
+  if (!stopped) return;
+  stopped = false;
+  updates.start();
+}
+function stop() {
+  stopped = true;
+  updates.stop();
+}
+function resetRequests() {
+  generation++;
+  refreshPromise = undefined;
+  reloadLinks = reloadMessages = false;
+  loading.value = false;
 }
 async function create() {
   creating.value = true;
   try {
     const link = await createSessionShare(props.sessionId);
-    await refresh();
     try {
       await copyToClipboard(link.url);
       Notify.create({ type: 'positive', message: '分享链接已复制' });
@@ -223,7 +262,6 @@ async function revoke(id: string) {
   busy.value = id;
   try {
     await revokeSessionShare(id);
-    await refresh();
   } catch (e) {
     showError(e);
   } finally {
@@ -238,20 +276,23 @@ async function review(id: string, approved: boolean) {
     showError(e);
   } finally {
     busy.value = '';
-    await refresh();
   }
 }
 watch(open, (value) => {
   if (value) void refresh();
 });
-onMounted(() => {
-  void refresh();
-  timer = setInterval(() => void refresh(), 3000);
-});
-onUnmounted(() => {
-  generation++;
-  if (timer) clearInterval(timer);
-});
+watch(
+  () => props.sessionId,
+  () => {
+    stop();
+    shares.value = [];
+    messages.value = [];
+    error.value = '';
+    start();
+  },
+);
+onMounted(start);
+onUnmounted(stop);
 </script>
 <style scoped>
 .app-content-dialog.share-manager {
@@ -275,18 +316,11 @@ onUnmounted(() => {
   width: 100%;
   min-width: 0;
 }
-.share-message-heading {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 .share-main {
   min-width: 0;
 }
 .share-id,
-.share-url,
-.share-body {
+.share-url {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

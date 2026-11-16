@@ -3,7 +3,11 @@ import {
   applicationAuthorizationHeader,
   applicationStorageKey,
 } from '@/services/applicationPath.js';
-import { getGraphQLAccessKey } from '@/services/graphqlClient';
+import {
+  getGraphQLAccessKey,
+  graphqlSubscribe,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
 import { shareCredential } from '@/services/sharedAccess';
 import type { SessionConfig } from '@/services/sessions';
 
@@ -30,6 +34,42 @@ export interface ShareMessage {
     };
     attachments: { id: string; filename: string; mimeType: string; size: number }[];
   };
+}
+export interface SharingUpdate {
+  eventType: string;
+  sessionId: string | null;
+  shareId: string | null;
+  messageId: string | null;
+  status: string | null;
+  occurredAt: string;
+}
+
+export function subscribeSharingUpdates(
+  sessionId: string | null,
+  handlers: {
+    onData: (update: SharingUpdate) => void;
+    onError: (error: Error) => void;
+    onClose: (close: GraphQLSubscriptionClose) => void;
+  },
+) {
+  return graphqlSubscribe<{ sharingUpdates: SharingUpdate }, { sessionId: string | null }>({
+    query: `
+      subscription SharingUpdates($sessionId: ID) {
+        sharingUpdates(sessionId: $sessionId) {
+          eventType
+          sessionId
+          shareId
+          messageId
+          status
+          occurredAt
+        }
+      }
+    `,
+    variables: { sessionId },
+    onData: (data) => handlers.onData(data.sharingUpdates),
+    onError: handlers.onError,
+    onClose: handlers.onClose,
+  });
 }
 export class SharingRequestError extends Error {
   constructor(
@@ -63,6 +103,10 @@ export const listSessionShares = (id: string) =>
   sharingRequest<SessionShare[]>(`/api/sessions/${id}/shares`);
 export const listShareMessages = (id: string) =>
   sharingRequest<ShareMessage[]>(`/api/sessions/${id}/share-messages`);
+export const listPendingShareMessages = () =>
+  sharingRequest<ShareMessage[]>('/api/share-messages/pending');
+export const getShareMessage = (id: string) =>
+  sharingRequest<ShareMessage>(`/api/share-messages/${id}`);
 export const revokeSessionShare = (id: string) =>
   sharingRequest<void>(`/api/session-shares/${id}`, { method: 'DELETE' });
 export const reviewShareMessage = (id: string, approved: boolean) =>

@@ -240,8 +240,8 @@ test('sharing reuses the horizontal card and its authoritative detail state', ()
     page,
     /getSessionTranscriptPage|SessionEventMessage|PromptComposer|setInterval|SessionDetailData/,
   );
-  assert.match(card, /#header="\{ session: card, usage \}"/);
-  assert.match(detail, /<slot name="header" :session="session"/);
+  assert.match(card, /#header="\{ session: card, usage, share, pendingShareMessages \}"/);
+  assert.match(detail, /<slot\s+name="header"\s+:session="session"/);
   assert.match(detail, /<SessionShareManager\s+v-if="!shareId"/);
   assert.match(detail, /:allow-completions="false"/);
   assert.match(detail, /:readonly="!!shareId"/);

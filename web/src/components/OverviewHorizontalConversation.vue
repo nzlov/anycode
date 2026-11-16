@@ -11,7 +11,7 @@
       :layout="layout"
       :mind-map-realtime="mindMapRealtime"
     >
-      <template #header="{ session: card, usage }">
+      <template #header="{ session: card, usage, share, pendingShareMessages }">
         <header v-if="card" class="overview-horizontal-conversation__header">
           <div class="overview-horizontal-conversation__identity">
             <div class="overview-horizontal-conversation__title" :title="card.title">
@@ -46,6 +46,21 @@
             <q-badge v-else outline color="primary" label="每条消息需审核" />
           </div>
           <div v-if="!shareId" class="overview-horizontal-conversation__actions">
+            <q-btn
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              color="primary"
+              icon="share"
+              aria-label="分享与审核"
+              @click="share"
+            >
+              <q-badge v-if="pendingShareMessages" floating color="warning">{{
+                pendingShareMessages
+              }}</q-badge>
+              <q-tooltip>分享与审核</q-tooltip>
+            </q-btn>
             <SessionTunnelButton :tunnels="tunnels" />
             <SessionTerminalButton
               :source-session-id="card.id"
@@ -184,7 +199,7 @@ const emit = defineEmits<{
   grid-template-areas:
     'badges actions'
     'identity identity';
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
   align-items: start;
   padding: 8px 6px 8px 10px;
 }
@@ -252,6 +267,8 @@ const emit = defineEmits<{
 
 .overview-horizontal-conversation__actions {
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   grid-area: actions;
 }
 

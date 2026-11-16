@@ -162,6 +162,16 @@ type Subscription {
   sessionUpdates: SessionUpdateEvent!
   mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+  sharingUpdates(sessionId: ID): SharingUpdateEvent!
+}
+
+type SharingUpdateEvent {
+  eventType: String!
+  sessionId: ID
+  shareId: ID
+  messageId: ID
+  status: String
+  occurredAt: Time!
 }
 
 type SessionSideRun {

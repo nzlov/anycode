@@ -101,6 +101,22 @@ func registerSharingRoutes(mux *http.ServeMux, accessKey string, opts handlerOpt
 		}
 		shareJSON(w, v)
 	})
+	admin("GET /api/share-messages/pending", func(w http.ResponseWriter, r *http.Request) {
+		v, err := s.PendingMessages(r.Context())
+		if err != nil {
+			shareError(w, err)
+			return
+		}
+		shareJSON(w, v)
+	})
+	admin("GET /api/share-messages/{messageID}", func(w http.ResponseWriter, r *http.Request) {
+		v, err := s.Message(r.Context(), r.PathValue("messageID"))
+		if err != nil {
+			shareError(w, err)
+			return
+		}
+		shareJSON(w, v)
+	})
 	admin("GET /api/share-messages/{messageID}/files/{fileID}", func(w http.ResponseWriter, r *http.Request) {
 		v, err := s.OpenReviewAttachment(r.Context(), r.PathValue("messageID"), r.PathValue("fileID"))
 		if err != nil {

@@ -88,3 +88,12 @@ func (r *ShareRepository) ListApprovedSharedMessages(ctx context.Context) ([]ses
 	}
 	return result, err
 }
+
+func (r *ShareRepository) ListPendingSharedMessages(ctx context.Context) ([]session.SharedMessage, error) {
+	rows, err := r.client.SharedMessage.Query().Where(sharedmessage.Status("pending")).Order(ent.Asc(sharedmessage.FieldCreatedAt), ent.Asc(sharedmessage.FieldID)).All(ctx)
+	result := make([]session.SharedMessage, 0, len(rows))
+	for _, v := range rows {
+		result = append(result, sharedMessage(v))
+	}
+	return result, err
+}

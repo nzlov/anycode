@@ -287,7 +287,7 @@ test('session detail links to its mind map card and the page applies the route h
   assert.match(detail, /name: 'project-mind-map'/);
   assert.match(detail, /params: \{ projectId: session\.value\?\.projectId \?\? '' \}/);
   assert.match(detail, /query: \{ card: sessionId \}/);
-  assert.match(detail, /v-if="mindMapAvailable"[\s\S]*label="思维图"[\s\S]*:to="mindMapRoute"/);
+  assert.match(detail, /v-if="!isClosed && mindMapAvailable"[\s\S]*label="思维图"[\s\S]*:to="mindMapRoute"/);
   assert.match(page, /let routeCardHighlightApplied = false/);
   assert.match(page, /typeof route\.query\.card === 'string' \? route\.query\.card : ''/);
   assert.match(page, /activeCardSessionId\.value = requestedCardSessionId/);

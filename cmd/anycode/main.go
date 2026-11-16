@@ -288,7 +288,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
 		Sessions:         sessionService,
-		Sharing:          sharingapp.New(store.Shares(), store.Sessions(), sessionService, attachmentapp.New(attachments, files), attachments, files),
+		Sharing:          sharingapp.New(store.Shares(), store.Sessions(), sessionService, attachmentapp.New(attachments, files), attachments, files, sharingapp.WithEvents(eventService)),
 		SessionSides:     sessionService,
 		Timeline:         timelineService,
 		SessionEvents:    sessionEventService,

@@ -645,6 +645,15 @@ type ComplexityRoot struct {
 		WorktreeCleanup  func(childComplexity int) int
 	}
 
+	SharingUpdateEvent struct {
+		EventType  func(childComplexity int) int
+		MessageID  func(childComplexity int) int
+		OccurredAt func(childComplexity int) int
+		SessionID  func(childComplexity int) int
+		ShareID    func(childComplexity int) int
+		Status     func(childComplexity int) int
+	}
+
 	StatisticsDashboard struct {
 		ByDay func(childComplexity int) int
 		Today func(childComplexity int) int
@@ -675,6 +684,7 @@ type ComplexityRoot struct {
 		SessionEvents     func(childComplexity int, sessionID string) int
 		SessionSideEvents func(childComplexity int, processRunID string) int
 		SessionUpdates    func(childComplexity int) int
+		SharingUpdates    func(childComplexity int, sessionID *string) int
 		TunnelUpdates     func(childComplexity int) int
 	}
 
@@ -1008,6 +1018,7 @@ type SubscriptionResolver interface {
 	SessionUpdates(ctx context.Context) (<-chan *model.SessionUpdateEvent, error)
 	MindMapUpdates(ctx context.Context, projectID string, sessionID *string) (<-chan *model.MindMapUpdateEvent, error)
 	TunnelUpdates(ctx context.Context) (<-chan *model.TunnelCountEvent, error)
+	SharingUpdates(ctx context.Context, sessionID *string) (<-chan *model.SharingUpdateEvent, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -3994,6 +4005,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionUpdateEvent.WorktreeCleanup(childComplexity), true
 
+	case "SharingUpdateEvent.eventType":
+		if e.ComplexityRoot.SharingUpdateEvent.EventType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.EventType(childComplexity), true
+	case "SharingUpdateEvent.messageId":
+		if e.ComplexityRoot.SharingUpdateEvent.MessageID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.MessageID(childComplexity), true
+	case "SharingUpdateEvent.occurredAt":
+		if e.ComplexityRoot.SharingUpdateEvent.OccurredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.OccurredAt(childComplexity), true
+	case "SharingUpdateEvent.sessionId":
+		if e.ComplexityRoot.SharingUpdateEvent.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.SessionID(childComplexity), true
+	case "SharingUpdateEvent.shareId":
+		if e.ComplexityRoot.SharingUpdateEvent.ShareID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.ShareID(childComplexity), true
+	case "SharingUpdateEvent.status":
+		if e.ComplexityRoot.SharingUpdateEvent.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SharingUpdateEvent.Status(childComplexity), true
+
 	case "StatisticsDashboard.byDay":
 		if e.ComplexityRoot.StatisticsDashboard.ByDay == nil {
 			break
@@ -4115,6 +4163,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionUpdates(childComplexity), true
+	case "Subscription.sharingUpdates":
+		if e.ComplexityRoot.Subscription.SharingUpdates == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_sharingUpdates_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.SharingUpdates(childComplexity, args["sessionId"].(*string)), true
 	case "Subscription.tunnelUpdates":
 		if e.ComplexityRoot.Subscription.TunnelUpdates == nil {
 			break
@@ -5301,6 +5360,16 @@ type Subscription {
   sessionUpdates: SessionUpdateEvent!
   mindMapUpdates(projectId: ID!, sessionId: ID): MindMapUpdateEvent!
   tunnelUpdates: TunnelCountEvent!
+  sharingUpdates(sessionId: ID): SharingUpdateEvent!
+}
+
+type SharingUpdateEvent {
+  eventType: String!
+  sessionId: ID
+  shareId: ID
+  messageId: ID
+  status: String
+  occurredAt: Time!
 }
 
 type SessionSideRun {
@@ -7414,6 +7483,17 @@ func (ec *executionContext) field_Subscription_sessionSideEvents_args(ctx contex
 		return nil, err
 	}
 	args["processRunId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_sharingUpdates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -22651,6 +22731,180 @@ func (ec *executionContext) fieldContext_SessionUpdateEvent_updatedAt(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _SharingUpdateEvent_eventType(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_eventType,
+		func(ctx context.Context) (any, error) {
+			return obj.EventType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_eventType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SharingUpdateEvent_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SharingUpdateEvent_shareId(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_shareId,
+		func(ctx context.Context) (any, error) {
+			return obj.ShareID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_shareId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SharingUpdateEvent_messageId(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_messageId,
+		func(ctx context.Context) (any, error) {
+			return obj.MessageID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_messageId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SharingUpdateEvent_status(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SharingUpdateEvent_occurredAt(ctx context.Context, field graphql.CollectedField, obj *model.SharingUpdateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SharingUpdateEvent_occurredAt,
+		func(ctx context.Context) (any, error) {
+			return obj.OccurredAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SharingUpdateEvent_occurredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SharingUpdateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _StatisticsDashboard_today(ctx context.Context, field graphql.CollectedField, obj *model.StatisticsDashboard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23331,6 +23585,61 @@ func (ec *executionContext) fieldContext_Subscription_tunnelUpdates(_ context.Co
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TunnelCountEvent", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_sharingUpdates(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_sharingUpdates,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().SharingUpdates(ctx, fc.Args["sessionId"].(*string))
+		},
+		nil,
+		ec.marshalNSharingUpdateEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSharingUpdateEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_sharingUpdates(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "eventType":
+				return ec.fieldContext_SharingUpdateEvent_eventType(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SharingUpdateEvent_sessionId(ctx, field)
+			case "shareId":
+				return ec.fieldContext_SharingUpdateEvent_shareId(ctx, field)
+			case "messageId":
+				return ec.fieldContext_SharingUpdateEvent_messageId(ctx, field)
+			case "status":
+				return ec.fieldContext_SharingUpdateEvent_status(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_SharingUpdateEvent_occurredAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SharingUpdateEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_sharingUpdates_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -36901,6 +37210,58 @@ func (ec *executionContext) _SessionUpdateEvent(ctx context.Context, sel ast.Sel
 	return out
 }
 
+var sharingUpdateEventImplementors = []string{"SharingUpdateEvent"}
+
+func (ec *executionContext) _SharingUpdateEvent(ctx context.Context, sel ast.SelectionSet, obj *model.SharingUpdateEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sharingUpdateEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SharingUpdateEvent")
+		case "eventType":
+			out.Values[i] = ec._SharingUpdateEvent_eventType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionId":
+			out.Values[i] = ec._SharingUpdateEvent_sessionId(ctx, field, obj)
+		case "shareId":
+			out.Values[i] = ec._SharingUpdateEvent_shareId(ctx, field, obj)
+		case "messageId":
+			out.Values[i] = ec._SharingUpdateEvent_messageId(ctx, field, obj)
+		case "status":
+			out.Values[i] = ec._SharingUpdateEvent_status(ctx, field, obj)
+		case "occurredAt":
+			out.Values[i] = ec._SharingUpdateEvent_occurredAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var statisticsDashboardImplementors = []string{"StatisticsDashboard"}
 
 func (ec *executionContext) _StatisticsDashboard(ctx context.Context, sel ast.SelectionSet, obj *model.StatisticsDashboard) graphql.Marshaler {
@@ -37125,6 +37486,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_mindMapUpdates(ctx, fields[0])
 	case "tunnelUpdates":
 		return ec._Subscription_tunnelUpdates(ctx, fields[0])
+	case "sharingUpdates":
+		return ec._Subscription_sharingUpdates(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -40778,6 +41141,20 @@ func (ec *executionContext) unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzl
 func (ec *executionContext) unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput(ctx context.Context, v any) (model.SetSessionPriorityInput, error) {
 	res, err := ec.unmarshalInputSetSessionPriorityInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSharingUpdateEvent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSharingUpdateEvent(ctx context.Context, sel ast.SelectionSet, v model.SharingUpdateEvent) graphql.Marshaler {
+	return ec._SharingUpdateEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSharingUpdateEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSharingUpdateEvent(ctx context.Context, sel ast.SelectionSet, v *model.SharingUpdateEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SharingUpdateEvent(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNStageAnnotationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐStageAnnotationInput(ctx context.Context, v any) (model.StageAnnotationInput, error) {

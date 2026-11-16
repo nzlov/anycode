@@ -195,6 +195,8 @@
       </q-page>
     </q-page-container>
 
+    <ShareMessageNotifications v-if="applicationReady" />
+
     <GlobalSettingsDialog
       v-if="applicationReady && !$q.screen.lt.sm"
       v-model="settingsDialogOpen"
@@ -286,6 +288,7 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
+import ShareMessageNotifications from '@/components/ShareMessageNotifications.vue';
 import MarkdownContent from '@/components/MarkdownContent.vue';
 import { provideGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';

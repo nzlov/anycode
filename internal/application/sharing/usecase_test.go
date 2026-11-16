@@ -8,10 +8,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	eventapp "github.com/nzlov/anycode/internal/application/event"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	"github.com/nzlov/anycode/internal/application/sharing"
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore"
 	"github.com/nzlov/anycode/internal/infra/filestore"
@@ -35,7 +38,7 @@ func (c *commands) AppendPrompt(_ context.Context, input sessionapp.AppendPrompt
 	}
 	return sessionapp.PromptAppendDTO{}, nil
 }
-func setup(t *testing.T) (*sharing.Service, *entstore.Store, *commands) {
+func setup(t *testing.T, options ...sharing.Option) (*sharing.Service, *entstore.Store, *commands) {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -53,7 +56,141 @@ func setup(t *testing.T) (*sharing.Service, *entstore.Store, *commands) {
 	files := filestore.New(dir)
 	attachments := attachmentapp.New(store.Attachments(), files)
 	cmd := &commands{}
-	return sharing.New(store.Shares(), store.Sessions(), cmd, attachments, store.Attachments(), files), store, cmd
+	return sharing.New(store.Shares(), store.Sessions(), cmd, attachments, store.Attachments(), files, options...), store, cmd
+}
+
+func TestSharingUpdatesFollowCommittedChangesAndSessionScope(t *testing.T) {
+	events := eventapp.New()
+	s, store, _ := setup(t, sharing.WithEvents(events))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	updates, err := s.Updates(ctx, "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect := func(kind, shareID, messageID, status string) {
+		t.Helper()
+		select {
+		case update, ok := <-updates:
+			if !ok || update.Type != kind || update.SessionID != "session" || update.ShareID != shareID || update.MessageID != messageID || update.Status != status || update.OccurredAt.IsZero() {
+				t.Fatalf("update = %#v, want %s / %s / %s / %s", update, kind, shareID, messageID, status)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("missing update %s", kind)
+		}
+	}
+	expect(sharing.TypeReady, "", "", "")
+	if err := store.Sessions().Create(ctx, session.Session{ID: "other", ProjectID: "project", Mode: session.ModeChat, Status: session.StatusStopped}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Create(ctx, "other"); err != nil {
+		t.Fatal(err)
+	}
+	id := eventdomain.SessionID("session")
+	events.PublishAfterCommit(ctx, eventdomain.DomainEvent{Type: "session.status_updated", Scope: eventdomain.Scope{SessionID: &id}})
+	link, token, err := s.Create(ctx, "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeLinkCreated, link.ID, "", "")
+	if links, err := s.List(ctx, "session"); err != nil || len(links) != 1 {
+		t.Fatalf("event preceded commit: %v, %v", links, err)
+	}
+	_, guest, err := s.Claim(ctx, link.ID, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeLinkClaimed, link.ID, "", "")
+	if _, _, err := s.Claim(ctx, link.ID, token); !errors.Is(err, session.ErrShareConflict) {
+		t.Fatal(err)
+	}
+	if _, err := s.Submit(ctx, link.ID, "wrong", "unauthorized", session.Config{}, nil); !errors.Is(err, session.ErrShareAccess) {
+		t.Fatal(err)
+	}
+	msg, err := s.Submit(ctx, link.ID, guest, "private message", session.Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeMessageSubmitted, link.ID, msg.ID, "")
+	if _, err := s.Review(ctx, msg.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeMessageStatusChanged, link.ID, msg.ID, "approved")
+	if _, err := s.Review(ctx, msg.ID, true); !errors.Is(err, session.ErrShareConflict) {
+		t.Fatal(err)
+	}
+	if err := s.DispatchApproved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeMessageStatusChanged, link.ID, msg.ID, "sending")
+	expect(sharing.TypeMessageStatusChanged, link.ID, msg.ID, "sent")
+	if err := s.DispatchApproved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rejected, _ := s.Submit(ctx, link.ID, guest, "reject", session.Config{}, nil)
+	expect(sharing.TypeMessageSubmitted, link.ID, rejected.ID, "")
+	if _, err := s.Review(ctx, rejected.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeMessageStatusChanged, link.ID, rejected.ID, "rejected")
+	queued, _ := s.Submit(ctx, link.ID, guest, "cancel", session.Config{}, nil)
+	expect(sharing.TypeMessageSubmitted, link.ID, queued.ID, "")
+	s.Review(ctx, queued.ID, true)
+	expect(sharing.TypeMessageStatusChanged, link.ID, queued.ID, "approved")
+	if err := s.Revoke(ctx, link.ID); err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeLinkRevoked, link.ID, "", "")
+	s.Revoke(ctx, link.ID)
+	if err := s.DispatchApproved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	expect(sharing.TypeMessageStatusChanged, link.ID, queued.ID, "cancelled")
+	cancel()
+	select {
+	case _, ok := <-updates:
+		if ok {
+			t.Fatal("unexpected duplicate update")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription did not stop")
+	}
+}
+
+type failingEvents struct{ *eventapp.Service }
+
+func (failingEvents) PublishAfterCommit(context.Context, eventdomain.DomainEvent) error {
+	return errors.New("notification failed")
+}
+
+func TestSharingNotificationFailureDoesNotFailCommittedOperations(t *testing.T) {
+	s, _, _ := setup(t, sharing.WithEvents(failingEvents{eventapp.New()}))
+	ctx := context.Background()
+	link, token, err := s.Create(ctx, "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, guest, err := s.Claim(ctx, link.ID, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := s.Submit(ctx, link.ID, guest, "committed", session.Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Review(ctx, msg.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DispatchApproved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := s.Messages(ctx, "session")
+	if err != nil || len(messages) != 1 || messages[0].Status != "sent" {
+		t.Fatalf("messages = %v, error = %v", messages, err)
+	}
+	if err := s.Revoke(ctx, link.ID); err != nil {
+		t.Fatal(err)
+	}
 }
 func TestShareClaimIsSingleUseUnderConcurrencyAndPersists(t *testing.T) {
 	s, store, cmd := setup(t)

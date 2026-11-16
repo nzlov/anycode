@@ -1500,6 +1500,51 @@ func (r *subscriptionResolver) TunnelUpdates(ctx context.Context) (<-chan *model
 	return out, nil
 }
 
+// SharingUpdates is the resolver for the sharingUpdates field.
+func (r *subscriptionResolver) SharingUpdates(ctx context.Context, sessionID *string) (<-chan *model.SharingUpdateEvent, error) {
+	if r.UseCases.Sharing == nil {
+		return nil, missingUseCase("sharing")
+	}
+	source, err := r.UseCases.Sharing.Updates(ctx, sessiondomain.ID(stringValue(sessionID, "")))
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.SharingUpdateEvent)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-source:
+				if !ok {
+					return
+				}
+				update := &model.SharingUpdateEvent{EventType: event.Type, OccurredAt: event.OccurredAt}
+				if event.SessionID != "" {
+					id := string(event.SessionID)
+					update.SessionID = &id
+				}
+				if event.ShareID != "" {
+					update.ShareID = &event.ShareID
+				}
+				if event.MessageID != "" {
+					update.MessageID = &event.MessageID
+				}
+				if event.Status != "" {
+					update.Status = &event.Status
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case out <- update:
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 

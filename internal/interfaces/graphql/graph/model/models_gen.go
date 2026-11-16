@@ -825,6 +825,15 @@ type SetSessionPriorityInput struct {
 	Priority  string `json:"priority"`
 }
 
+type SharingUpdateEvent struct {
+	EventType  string    `json:"eventType"`
+	SessionID  *string   `json:"sessionId,omitempty"`
+	ShareID    *string   `json:"shareId,omitempty"`
+	MessageID  *string   `json:"messageId,omitempty"`
+	Status     *string   `json:"status,omitempty"`
+	OccurredAt time.Time `json:"occurredAt"`
+}
+
 type StageAnnotationInput struct {
 	Filename string `json:"filename"`
 	Content  string `json:"content"`

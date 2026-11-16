@@ -27,12 +27,17 @@ type Service struct {
 	attachments attachmentapp.UseCase
 	staged      session.StagedAttachmentRepository
 	files       session.AttachmentStore
+	events      Events
 	// Serialize reviews and revocations: appends enter the existing session queue in approval order.
 	mu sync.Mutex
 }
 
-func New(repo session.ShareRepository, sessions session.Repository, commands SessionCommands, attachments attachmentapp.UseCase, staged session.StagedAttachmentRepository, files session.AttachmentStore) *Service {
-	return &Service{repo: repo, sessions: sessions, commands: commands, attachments: attachments, staged: staged, files: files}
+func New(repo session.ShareRepository, sessions session.Repository, commands SessionCommands, attachments attachmentapp.UseCase, staged session.StagedAttachmentRepository, files session.AttachmentStore, options ...Option) *Service {
+	s := &Service{repo: repo, sessions: sessions, commands: commands, attachments: attachments, staged: staged, files: files}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 func secret() string {
 	var value [32]byte
@@ -53,6 +58,9 @@ func (s *Service) Create(ctx context.Context, id session.ID) (session.ShareLink,
 	token := secret()
 	link := session.ShareLink{ID: secret()[:24], SessionID: id, TokenHash: hash(token), CreatedAt: time.Now().UTC()}
 	err = s.repo.CreateShare(ctx, link)
+	if err == nil {
+		s.publish(ctx, TypeLinkCreated, link.SessionID, link.ID, "", "")
+	}
 	return link, token, err
 }
 func (s *Service) Claim(ctx context.Context, id, token string) (session.ShareLink, string, error) {
@@ -70,6 +78,9 @@ func (s *Service) Claim(ctx context.Context, id, token string) (session.ShareLin
 		return session.ShareLink{}, "", session.ErrShareConflict
 	}
 	link, err := s.repo.FindShare(ctx, id)
+	if err == nil {
+		s.publish(ctx, TypeLinkClaimed, link.SessionID, link.ID, "", "")
+	}
 	return link, guest, err
 }
 func (s *Service) Active(ctx context.Context, id string) (session.ShareLink, error) {
@@ -105,10 +116,24 @@ func (s *Service) List(ctx context.Context, id session.ID) ([]session.ShareLink,
 func (s *Service) Revoke(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.repo.RevokeShare(ctx, id, time.Now().UTC())
+	link, err := s.repo.FindShare(ctx, id)
+	if err != nil || link.RevokedAt != nil {
+		return err
+	}
+	if err = s.repo.RevokeShare(ctx, id, time.Now().UTC()); err != nil {
+		return err
+	}
+	s.publish(ctx, TypeLinkRevoked, link.SessionID, link.ID, "", "")
+	return nil
 }
 func (s *Service) Messages(ctx context.Context, id session.ID) ([]session.SharedMessage, error) {
 	return s.repo.ListSharedMessages(ctx, id)
+}
+func (s *Service) PendingMessages(ctx context.Context) ([]session.SharedMessage, error) {
+	return s.repo.ListPendingSharedMessages(ctx)
+}
+func (s *Service) Message(ctx context.Context, id string) (session.SharedMessage, error) {
+	return s.repo.FindSharedMessage(ctx, id)
 }
 
 type Upload struct {
@@ -143,6 +168,8 @@ func (s *Service) Submit(ctx context.Context, shareID, credential, body string, 
 		for _, a := range msg.Content.Attachments {
 			_ = s.attachments.DeleteStagedAttachment(context.WithoutCancel(ctx), a.ID)
 		}
+	} else {
+		s.publish(ctx, TypeMessageSubmitted, msg.SessionID, msg.ShareID, msg.ID, "")
 	}
 	return msg, err
 }
@@ -183,6 +210,7 @@ func (s *Service) Review(ctx context.Context, id string, approved bool) (session
 		return msg, session.ErrShareConflict
 	}
 	msg.Status = status
+	s.publish(ctx, TypeMessageStatusChanged, msg.SessionID, msg.ShareID, msg.ID, status)
 	return msg, nil
 }
 
@@ -203,9 +231,13 @@ func (s *Service) DispatchApproved(ctx context.Context) error {
 		seen[msg.SessionID] = true
 		if _, err = s.Active(ctx, msg.ShareID); err != nil {
 			if errors.Is(err, session.ErrShareAccess) {
-				_, err = s.repo.TransitionSharedMessage(ctx, msg.ID, msg.Status, "cancelled", 0, time.Now().UTC())
+				changed, saveErr := s.repo.TransitionSharedMessage(ctx, msg.ID, msg.Status, "cancelled", 0, time.Now().UTC())
+				err = saveErr
 				if err != nil {
 					return err
+				}
+				if changed {
+					s.publish(ctx, TypeMessageStatusChanged, msg.SessionID, msg.ShareID, msg.ID, "cancelled")
 				}
 				continue
 			}
@@ -242,6 +274,9 @@ func (s *Service) DispatchApproved(ctx context.Context) error {
 		if !ok {
 			continue
 		}
+		if msg.Status == "approved" {
+			s.publish(ctx, TypeMessageStatusChanged, msg.SessionID, msg.ShareID, msg.ID, "sending")
+		}
 		ids := make([]session.StagedAttachmentID, 0, len(msg.Content.Attachments))
 		for _, a := range msg.Content.Attachments {
 			ids = append(ids, a.ID)
@@ -254,9 +289,12 @@ func (s *Service) DispatchApproved(ctx context.Context) error {
 		if errors.Is(dispatchErr, session.ErrShareSessionBusy) {
 			status = "approved"
 		}
-		_, saveErr := s.repo.TransitionSharedMessage(context.WithoutCancel(ctx), msg.ID, "sending", status, 0, time.Now().UTC())
+		changed, saveErr := s.repo.TransitionSharedMessage(context.WithoutCancel(ctx), msg.ID, "sending", status, 0, time.Now().UTC())
 		if saveErr != nil {
 			return saveErr
+		}
+		if changed {
+			s.publish(ctx, TypeMessageStatusChanged, msg.SessionID, msg.ShareID, msg.ID, status)
 		}
 	}
 	return nil

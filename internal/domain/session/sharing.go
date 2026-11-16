@@ -63,6 +63,7 @@ type ShareRepository interface {
 	CreateSharedMessage(context.Context, SharedMessage) error
 	ListSharedMessages(context.Context, ID) ([]SharedMessage, error)
 	FindSharedMessage(context.Context, string) (SharedMessage, error)
+	ListPendingSharedMessages(context.Context) ([]SharedMessage, error)
 	ListApprovedSharedMessages(context.Context) ([]SharedMessage, error)
 	TransitionSharedMessage(context.Context, string, string, string, int64, time.Time) (bool, error)
 }
