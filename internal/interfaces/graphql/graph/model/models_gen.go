@@ -16,6 +16,45 @@ type TranscriptContent interface {
 	IsTranscriptContent()
 }
 
+type AgentProfile struct {
+	Enabled         bool                  `json:"enabled"`
+	Cron            string                `json:"cron"`
+	Model           string                `json:"model"`
+	ReasoningEffort string                `json:"reasoningEffort"`
+	Prompt          string                `json:"prompt"`
+	Status          string                `json:"status"`
+	Error           string                `json:"error"`
+	Through         *time.Time            `json:"through,omitempty"`
+	StartedAt       *time.Time            `json:"startedAt,omitempty"`
+	FinishedAt      *time.Time            `json:"finishedAt,omitempty"`
+	SessionCount    int                   `json:"sessionCount"`
+	MessageCount    int                   `json:"messageCount"`
+	Progress        *AgentProfileProgress `json:"progress"`
+	Schedule        *AgentProfileSchedule `json:"schedule"`
+}
+
+type AgentProfileConfigurationInput struct {
+	Enabled         bool   `json:"enabled"`
+	Cron            string `json:"cron"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoningEffort"`
+}
+
+type AgentProfileProgress struct {
+	Stage             string `json:"stage"`
+	Percent           int    `json:"percent"`
+	CompletedMessages int    `json:"completedMessages"`
+	TotalMessages     int    `json:"totalMessages"`
+}
+
+type AgentProfileSchedule struct {
+	Valid       bool       `json:"valid"`
+	Description string     `json:"description"`
+	Error       string     `json:"error"`
+	Timezone    string     `json:"timezone"`
+	NextRunAt   *time.Time `json:"nextRunAt,omitempty"`
+}
+
 type AppearanceSettings struct {
 	BackgroundType       AppearanceBackgroundType `json:"backgroundType"`
 	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`

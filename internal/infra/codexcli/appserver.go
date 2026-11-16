@@ -96,6 +96,9 @@ func (c *Client) start(
 	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode, workspaceWrite)
 	if !forking {
 		params["dynamicTools"] = anyCodeDynamicTools(dynamicTools...)
+		if ephemeral {
+			params["dynamicTools"] = []any{}
+		}
 	}
 	if forking {
 		params["threadId"] = strings.TrimSpace(forkFromThreadID)
@@ -116,7 +119,7 @@ func (c *Client) start(
 		}
 		threadID = strings.TrimSpace(response.Thread.ID)
 	} else if threadID == "" {
-		params["ephemeral"] = false
+		params["ephemeral"] = ephemeral
 		params["historyMode"] = "paginated"
 		var response struct {
 			Thread struct {

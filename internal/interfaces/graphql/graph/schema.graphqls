@@ -5,6 +5,8 @@ scalar Upload
 scalar Int64
 
 type Query {
+  agentProfile: AgentProfile!
+  agentProfileSchedule(cron: String!): AgentProfileSchedule!
   mcpServices(scope: MCPScopeInput!): [MCPService!]!
   codexModelOptions: [CodexModelOption!]!
   codexSlashCommands: [CodexSlashCommand!]!
@@ -90,6 +92,8 @@ input PromptFileMatchInput {
 }
 
 type Mutation {
+  configureAgentProfile(input: AgentProfileConfigurationInput!): AgentProfile!
+  analyzeAgentProfile: AgentProfile!
   saveMCPService(scope: MCPScopeInput!, name: String!, definition: JSON, enabled: Boolean): Boolean!
   deleteMCPService(scope: MCPScopeInput!, name: String!): Boolean!
   checkMCPService(scope: MCPScopeInput!, name: String!): Int!
@@ -141,6 +145,45 @@ type Mutation {
   switchTunnelMode(id: ID!, mode: String!): Boolean!
   setTunnelMode(mode: String!): String!
   closeTunnel(id: ID!): Boolean!
+}
+
+type AgentProfile {
+  enabled: Boolean!
+  cron: String!
+  model: String!
+  reasoningEffort: String!
+  prompt: String!
+  status: String!
+  error: String!
+  through: Time
+  startedAt: Time
+  finishedAt: Time
+  sessionCount: Int!
+  messageCount: Int!
+  progress: AgentProfileProgress!
+  schedule: AgentProfileSchedule!
+}
+
+type AgentProfileProgress {
+  stage: String!
+  percent: Int!
+  completedMessages: Int!
+  totalMessages: Int!
+}
+
+type AgentProfileSchedule {
+  valid: Boolean!
+  description: String!
+  error: String!
+  timezone: String!
+  nextRunAt: Time
+}
+
+input AgentProfileConfigurationInput {
+  enabled: Boolean!
+  cron: String!
+  model: String!
+  reasoningEffort: String! = ""
 }
 
 type Tunnel {

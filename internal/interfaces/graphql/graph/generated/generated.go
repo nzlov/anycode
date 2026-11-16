@@ -37,6 +37,38 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AgentProfile struct {
+		Cron            func(childComplexity int) int
+		Enabled         func(childComplexity int) int
+		Error           func(childComplexity int) int
+		FinishedAt      func(childComplexity int) int
+		MessageCount    func(childComplexity int) int
+		Model           func(childComplexity int) int
+		Progress        func(childComplexity int) int
+		Prompt          func(childComplexity int) int
+		ReasoningEffort func(childComplexity int) int
+		Schedule        func(childComplexity int) int
+		SessionCount    func(childComplexity int) int
+		StartedAt       func(childComplexity int) int
+		Status          func(childComplexity int) int
+		Through         func(childComplexity int) int
+	}
+
+	AgentProfileProgress struct {
+		CompletedMessages func(childComplexity int) int
+		Percent           func(childComplexity int) int
+		Stage             func(childComplexity int) int
+		TotalMessages     func(childComplexity int) int
+	}
+
+	AgentProfileSchedule struct {
+		Description func(childComplexity int) int
+		Error       func(childComplexity int) int
+		NextRunAt   func(childComplexity int) int
+		Timezone    func(childComplexity int) int
+		Valid       func(childComplexity int) int
+	}
+
 	AppearanceSettings struct {
 		BackgroundMask       func(childComplexity int) int
 		BackgroundType       func(childComplexity int) int
@@ -253,12 +285,14 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		ActivateWorkflowDefinition  func(childComplexity int, id string) int
+		AnalyzeAgentProfile         func(childComplexity int) int
 		AppendPrompt                func(childComplexity int, input model.AppendPromptInput) int
 		CheckMCPService             func(childComplexity int, scope model.MCPScopeInput, name string) int
 		CleanupSessions             func(childComplexity int, input model.CleanupSessionsInput) int
 		CloneProject                func(childComplexity int, input model.CloneProjectInput) int
 		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
 		CloseTunnel                 func(childComplexity int, id string) int
+		ConfigureAgentProfile       func(childComplexity int, input model.AgentProfileConfigurationInput) int
 		ContinueSessionSide         func(childComplexity int, input model.ContinueSessionSideInput) int
 		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
 		CreateQuickCommand          func(childComplexity int, input model.CreateQuickCommandInput) int
@@ -389,6 +423,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		AgentProfile            func(childComplexity int) int
+		AgentProfileSchedule    func(childComplexity int, cron string) int
 		AppearanceSettings      func(childComplexity int) int
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
@@ -926,6 +962,8 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
+	ConfigureAgentProfile(ctx context.Context, input model.AgentProfileConfigurationInput) (*model.AgentProfile, error)
+	AnalyzeAgentProfile(ctx context.Context) (*model.AgentProfile, error)
 	SaveMCPService(ctx context.Context, scope model.MCPScopeInput, name string, definition map[string]any, enabled *bool) (bool, error)
 	DeleteMCPService(ctx context.Context, scope model.MCPScopeInput, name string) (bool, error)
 	CheckMCPService(ctx context.Context, scope model.MCPScopeInput, name string) (int, error)
@@ -978,6 +1016,8 @@ type MutationResolver interface {
 	CloseTunnel(ctx context.Context, id string) (bool, error)
 }
 type QueryResolver interface {
+	AgentProfile(ctx context.Context) (*model.AgentProfile, error)
+	AgentProfileSchedule(ctx context.Context, cron string) (*model.AgentProfileSchedule, error)
 	McpServices(ctx context.Context, scope model.MCPScopeInput) ([]*model.MCPService, error)
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
 	CodexSlashCommands(ctx context.Context) ([]*model.CodexSlashCommand, error)
@@ -1034,6 +1074,147 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := newExecutionContext(nil, e, nil)
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AgentProfile.cron":
+		if e.ComplexityRoot.AgentProfile.Cron == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Cron(childComplexity), true
+	case "AgentProfile.enabled":
+		if e.ComplexityRoot.AgentProfile.Enabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Enabled(childComplexity), true
+	case "AgentProfile.error":
+		if e.ComplexityRoot.AgentProfile.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Error(childComplexity), true
+	case "AgentProfile.finishedAt":
+		if e.ComplexityRoot.AgentProfile.FinishedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.FinishedAt(childComplexity), true
+	case "AgentProfile.messageCount":
+		if e.ComplexityRoot.AgentProfile.MessageCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.MessageCount(childComplexity), true
+	case "AgentProfile.model":
+		if e.ComplexityRoot.AgentProfile.Model == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Model(childComplexity), true
+	case "AgentProfile.progress":
+		if e.ComplexityRoot.AgentProfile.Progress == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Progress(childComplexity), true
+	case "AgentProfile.prompt":
+		if e.ComplexityRoot.AgentProfile.Prompt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Prompt(childComplexity), true
+	case "AgentProfile.reasoningEffort":
+		if e.ComplexityRoot.AgentProfile.ReasoningEffort == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.ReasoningEffort(childComplexity), true
+	case "AgentProfile.schedule":
+		if e.ComplexityRoot.AgentProfile.Schedule == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Schedule(childComplexity), true
+	case "AgentProfile.sessionCount":
+		if e.ComplexityRoot.AgentProfile.SessionCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.SessionCount(childComplexity), true
+	case "AgentProfile.startedAt":
+		if e.ComplexityRoot.AgentProfile.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.StartedAt(childComplexity), true
+	case "AgentProfile.status":
+		if e.ComplexityRoot.AgentProfile.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Status(childComplexity), true
+	case "AgentProfile.through":
+		if e.ComplexityRoot.AgentProfile.Through == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfile.Through(childComplexity), true
+
+	case "AgentProfileProgress.completedMessages":
+		if e.ComplexityRoot.AgentProfileProgress.CompletedMessages == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileProgress.CompletedMessages(childComplexity), true
+	case "AgentProfileProgress.percent":
+		if e.ComplexityRoot.AgentProfileProgress.Percent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileProgress.Percent(childComplexity), true
+	case "AgentProfileProgress.stage":
+		if e.ComplexityRoot.AgentProfileProgress.Stage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileProgress.Stage(childComplexity), true
+	case "AgentProfileProgress.totalMessages":
+		if e.ComplexityRoot.AgentProfileProgress.TotalMessages == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileProgress.TotalMessages(childComplexity), true
+
+	case "AgentProfileSchedule.description":
+		if e.ComplexityRoot.AgentProfileSchedule.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileSchedule.Description(childComplexity), true
+	case "AgentProfileSchedule.error":
+		if e.ComplexityRoot.AgentProfileSchedule.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileSchedule.Error(childComplexity), true
+	case "AgentProfileSchedule.nextRunAt":
+		if e.ComplexityRoot.AgentProfileSchedule.NextRunAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileSchedule.NextRunAt(childComplexity), true
+	case "AgentProfileSchedule.timezone":
+		if e.ComplexityRoot.AgentProfileSchedule.Timezone == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileSchedule.Timezone(childComplexity), true
+	case "AgentProfileSchedule.valid":
+		if e.ComplexityRoot.AgentProfileSchedule.Valid == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentProfileSchedule.Valid(childComplexity), true
 
 	case "AppearanceSettings.backgroundMask":
 		if e.ComplexityRoot.AppearanceSettings.BackgroundMask == nil {
@@ -1820,6 +2001,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ActivateWorkflowDefinition(childComplexity, args["id"].(string)), true
+	case "Mutation.analyzeAgentProfile":
+		if e.ComplexityRoot.Mutation.AnalyzeAgentProfile == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Mutation.AnalyzeAgentProfile(childComplexity), true
 	case "Mutation.appendPrompt":
 		if e.ComplexityRoot.Mutation.AppendPrompt == nil {
 			break
@@ -1886,6 +2073,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CloseTunnel(childComplexity, args["id"].(string)), true
+	case "Mutation.configureAgentProfile":
+		if e.ComplexityRoot.Mutation.ConfigureAgentProfile == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_configureAgentProfile_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConfigureAgentProfile(childComplexity, args["input"].(model.AgentProfileConfigurationInput)), true
 	case "Mutation.continueSessionSide":
 		if e.ComplexityRoot.Mutation.ContinueSessionSide == nil {
 			break
@@ -2694,6 +2892,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PushSubscriptionRegistration.ID(childComplexity), true
 
+	case "Query.agentProfile":
+		if e.ComplexityRoot.Query.AgentProfile == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.AgentProfile(childComplexity), true
+	case "Query.agentProfileSchedule":
+		if e.ComplexityRoot.Query.AgentProfileSchedule == nil {
+			break
+		}
+
+		args, err := ec.field_Query_agentProfileSchedule_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.AgentProfileSchedule(childComplexity, args["cron"].(string)), true
 	case "Query.appearanceSettings":
 		if e.ComplexityRoot.Query.AppearanceSettings == nil {
 			break
@@ -5044,6 +5259,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputAgentProfileConfigurationInput,
 		ec.unmarshalInputAppendPromptInput,
 		ec.unmarshalInputApprovalConfigInput,
 		ec.unmarshalInputBranchDiffInput,
@@ -5203,6 +5419,8 @@ scalar Upload
 scalar Int64
 
 type Query {
+  agentProfile: AgentProfile!
+  agentProfileSchedule(cron: String!): AgentProfileSchedule!
   mcpServices(scope: MCPScopeInput!): [MCPService!]!
   codexModelOptions: [CodexModelOption!]!
   codexSlashCommands: [CodexSlashCommand!]!
@@ -5288,6 +5506,8 @@ input PromptFileMatchInput {
 }
 
 type Mutation {
+  configureAgentProfile(input: AgentProfileConfigurationInput!): AgentProfile!
+  analyzeAgentProfile: AgentProfile!
   saveMCPService(scope: MCPScopeInput!, name: String!, definition: JSON, enabled: Boolean): Boolean!
   deleteMCPService(scope: MCPScopeInput!, name: String!): Boolean!
   checkMCPService(scope: MCPScopeInput!, name: String!): Int!
@@ -5339,6 +5559,45 @@ type Mutation {
   switchTunnelMode(id: ID!, mode: String!): Boolean!
   setTunnelMode(mode: String!): String!
   closeTunnel(id: ID!): Boolean!
+}
+
+type AgentProfile {
+  enabled: Boolean!
+  cron: String!
+  model: String!
+  reasoningEffort: String!
+  prompt: String!
+  status: String!
+  error: String!
+  through: Time
+  startedAt: Time
+  finishedAt: Time
+  sessionCount: Int!
+  messageCount: Int!
+  progress: AgentProfileProgress!
+  schedule: AgentProfileSchedule!
+}
+
+type AgentProfileProgress {
+  stage: String!
+  percent: Int!
+  completedMessages: Int!
+  totalMessages: Int!
+}
+
+type AgentProfileSchedule {
+  valid: Boolean!
+  description: String!
+  error: String!
+  timezone: String!
+  nextRunAt: Time
+}
+
+input AgentProfileConfigurationInput {
+  enabled: Boolean!
+  cron: String!
+  model: String!
+  reasoningEffort: String! = ""
 }
 
 type Tunnel {
@@ -6644,6 +6903,17 @@ func (ec *executionContext) field_Mutation_closeTunnel_args(ctx context.Context,
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_configureAgentProfile_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNAgentProfileConfigurationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileConfigurationInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_continueSessionSide_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7168,6 +7438,17 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_agentProfileSchedule_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cron", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["cron"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_branchDiff_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7548,6 +7829,695 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AgentProfile_enabled(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_cron(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_cron,
+		func(ctx context.Context) (any, error) {
+			return obj.Cron, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_cron(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_model(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_reasoningEffort(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_reasoningEffort,
+		func(ctx context.Context) (any, error) {
+			return obj.ReasoningEffort, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_reasoningEffort(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_prompt(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_prompt,
+		func(ctx context.Context) (any, error) {
+			return obj.Prompt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_prompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_status(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_error(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_through(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_through,
+		func(ctx context.Context) (any, error) {
+			return obj.Through, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_through(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_startedAt(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_startedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_finishedAt(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_finishedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.FinishedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_finishedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_sessionCount(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_sessionCount,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_sessionCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_messageCount(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_messageCount,
+		func(ctx context.Context) (any, error) {
+			return obj.MessageCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_messageCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_progress(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_progress,
+		func(ctx context.Context) (any, error) {
+			return obj.Progress, nil
+		},
+		nil,
+		ec.marshalNAgentProfileProgress2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileProgress,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_progress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "stage":
+				return ec.fieldContext_AgentProfileProgress_stage(ctx, field)
+			case "percent":
+				return ec.fieldContext_AgentProfileProgress_percent(ctx, field)
+			case "completedMessages":
+				return ec.fieldContext_AgentProfileProgress_completedMessages(ctx, field)
+			case "totalMessages":
+				return ec.fieldContext_AgentProfileProgress_totalMessages(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfileProgress", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfile_schedule(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfile_schedule,
+		func(ctx context.Context) (any, error) {
+			return obj.Schedule, nil
+		},
+		nil,
+		ec.marshalNAgentProfileSchedule2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileSchedule,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfile_schedule(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "valid":
+				return ec.fieldContext_AgentProfileSchedule_valid(ctx, field)
+			case "description":
+				return ec.fieldContext_AgentProfileSchedule_description(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentProfileSchedule_error(ctx, field)
+			case "timezone":
+				return ec.fieldContext_AgentProfileSchedule_timezone(ctx, field)
+			case "nextRunAt":
+				return ec.fieldContext_AgentProfileSchedule_nextRunAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfileSchedule", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileProgress_stage(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileProgress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileProgress_stage,
+		func(ctx context.Context) (any, error) {
+			return obj.Stage, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileProgress_stage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileProgress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileProgress_percent(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileProgress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileProgress_percent,
+		func(ctx context.Context) (any, error) {
+			return obj.Percent, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileProgress_percent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileProgress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileProgress_completedMessages(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileProgress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileProgress_completedMessages,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedMessages, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileProgress_completedMessages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileProgress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileProgress_totalMessages(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileProgress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileProgress_totalMessages,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalMessages, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileProgress_totalMessages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileProgress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileSchedule_valid(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileSchedule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileSchedule_valid,
+		func(ctx context.Context) (any, error) {
+			return obj.Valid, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileSchedule_valid(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileSchedule",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileSchedule_description(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileSchedule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileSchedule_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileSchedule_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileSchedule",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileSchedule_error(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileSchedule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileSchedule_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileSchedule_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileSchedule",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileSchedule_timezone(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileSchedule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileSchedule_timezone,
+		func(ctx context.Context) (any, error) {
+			return obj.Timezone, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileSchedule_timezone(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileSchedule",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentProfileSchedule_nextRunAt(ctx context.Context, field graphql.CollectedField, obj *model.AgentProfileSchedule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentProfileSchedule_nextRunAt,
+		func(ctx context.Context) (any, error) {
+			return obj.NextRunAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentProfileSchedule_nextRunAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentProfileSchedule",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _AppearanceSettings_backgroundType(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -11274,6 +12244,136 @@ func (ec *executionContext) fieldContext_MindMapUpdateEvent_updatedAt(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_configureAgentProfile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_configureAgentProfile,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConfigureAgentProfile(ctx, fc.Args["input"].(model.AgentProfileConfigurationInput))
+		},
+		nil,
+		ec.marshalNAgentProfile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_configureAgentProfile(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_AgentProfile_enabled(ctx, field)
+			case "cron":
+				return ec.fieldContext_AgentProfile_cron(ctx, field)
+			case "model":
+				return ec.fieldContext_AgentProfile_model(ctx, field)
+			case "reasoningEffort":
+				return ec.fieldContext_AgentProfile_reasoningEffort(ctx, field)
+			case "prompt":
+				return ec.fieldContext_AgentProfile_prompt(ctx, field)
+			case "status":
+				return ec.fieldContext_AgentProfile_status(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentProfile_error(ctx, field)
+			case "through":
+				return ec.fieldContext_AgentProfile_through(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_AgentProfile_startedAt(ctx, field)
+			case "finishedAt":
+				return ec.fieldContext_AgentProfile_finishedAt(ctx, field)
+			case "sessionCount":
+				return ec.fieldContext_AgentProfile_sessionCount(ctx, field)
+			case "messageCount":
+				return ec.fieldContext_AgentProfile_messageCount(ctx, field)
+			case "progress":
+				return ec.fieldContext_AgentProfile_progress(ctx, field)
+			case "schedule":
+				return ec.fieldContext_AgentProfile_schedule(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfile", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_configureAgentProfile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_analyzeAgentProfile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_analyzeAgentProfile,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Mutation().AnalyzeAgentProfile(ctx)
+		},
+		nil,
+		ec.marshalNAgentProfile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_analyzeAgentProfile(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_AgentProfile_enabled(ctx, field)
+			case "cron":
+				return ec.fieldContext_AgentProfile_cron(ctx, field)
+			case "model":
+				return ec.fieldContext_AgentProfile_model(ctx, field)
+			case "reasoningEffort":
+				return ec.fieldContext_AgentProfile_reasoningEffort(ctx, field)
+			case "prompt":
+				return ec.fieldContext_AgentProfile_prompt(ctx, field)
+			case "status":
+				return ec.fieldContext_AgentProfile_status(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentProfile_error(ctx, field)
+			case "through":
+				return ec.fieldContext_AgentProfile_through(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_AgentProfile_startedAt(ctx, field)
+			case "finishedAt":
+				return ec.fieldContext_AgentProfile_finishedAt(ctx, field)
+			case "sessionCount":
+				return ec.fieldContext_AgentProfile_sessionCount(ctx, field)
+			case "messageCount":
+				return ec.fieldContext_AgentProfile_messageCount(ctx, field)
+			case "progress":
+				return ec.fieldContext_AgentProfile_progress(ctx, field)
+			case "schedule":
+				return ec.fieldContext_AgentProfile_schedule(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfile", field.Name)
 		},
 	}
 	return fc, nil
@@ -15757,6 +16857,118 @@ func (ec *executionContext) fieldContext_PushSubscriptionRegistration_id(_ conte
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_agentProfile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_agentProfile,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().AgentProfile(ctx)
+		},
+		nil,
+		ec.marshalNAgentProfile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_agentProfile(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_AgentProfile_enabled(ctx, field)
+			case "cron":
+				return ec.fieldContext_AgentProfile_cron(ctx, field)
+			case "model":
+				return ec.fieldContext_AgentProfile_model(ctx, field)
+			case "reasoningEffort":
+				return ec.fieldContext_AgentProfile_reasoningEffort(ctx, field)
+			case "prompt":
+				return ec.fieldContext_AgentProfile_prompt(ctx, field)
+			case "status":
+				return ec.fieldContext_AgentProfile_status(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentProfile_error(ctx, field)
+			case "through":
+				return ec.fieldContext_AgentProfile_through(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_AgentProfile_startedAt(ctx, field)
+			case "finishedAt":
+				return ec.fieldContext_AgentProfile_finishedAt(ctx, field)
+			case "sessionCount":
+				return ec.fieldContext_AgentProfile_sessionCount(ctx, field)
+			case "messageCount":
+				return ec.fieldContext_AgentProfile_messageCount(ctx, field)
+			case "progress":
+				return ec.fieldContext_AgentProfile_progress(ctx, field)
+			case "schedule":
+				return ec.fieldContext_AgentProfile_schedule(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfile", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_agentProfileSchedule(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_agentProfileSchedule,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().AgentProfileSchedule(ctx, fc.Args["cron"].(string))
+		},
+		nil,
+		ec.marshalNAgentProfileSchedule2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileSchedule,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_agentProfileSchedule(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "valid":
+				return ec.fieldContext_AgentProfileSchedule_valid(ctx, field)
+			case "description":
+				return ec.fieldContext_AgentProfileSchedule_description(ctx, field)
+			case "error":
+				return ec.fieldContext_AgentProfileSchedule_error(ctx, field)
+			case "timezone":
+				return ec.fieldContext_AgentProfileSchedule_timezone(ctx, field)
+			case "nextRunAt":
+				return ec.fieldContext_AgentProfileSchedule_nextRunAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentProfileSchedule", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_agentProfileSchedule_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -29391,6 +30603,61 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputAgentProfileConfigurationInput(ctx context.Context, obj any) (model.AgentProfileConfigurationInput, error) {
+	var it model.AgentProfileConfigurationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["reasoningEffort"]; !present {
+		asMap["reasoningEffort"] = ""
+	}
+
+	fieldsInOrder := [...]string{"enabled", "cron", "model", "reasoningEffort"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "cron":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cron"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Cron = data
+		case "model":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("model"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Model = data
+		case "reasoningEffort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reasoningEffort"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReasoningEffort = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context, obj any) (model.AppendPromptInput, error) {
 	var it model.AppendPromptInput
 	if obj == nil {
@@ -32466,6 +33733,211 @@ func (ec *executionContext) _TranscriptContent(ctx context.Context, sel ast.Sele
 
 // region    **************************** object.gotpl ****************************
 
+var agentProfileImplementors = []string{"AgentProfile"}
+
+func (ec *executionContext) _AgentProfile(ctx context.Context, sel ast.SelectionSet, obj *model.AgentProfile) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentProfileImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentProfile")
+		case "enabled":
+			out.Values[i] = ec._AgentProfile_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cron":
+			out.Values[i] = ec._AgentProfile_cron(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "model":
+			out.Values[i] = ec._AgentProfile_model(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reasoningEffort":
+			out.Values[i] = ec._AgentProfile_reasoningEffort(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prompt":
+			out.Values[i] = ec._AgentProfile_prompt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._AgentProfile_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "error":
+			out.Values[i] = ec._AgentProfile_error(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "through":
+			out.Values[i] = ec._AgentProfile_through(ctx, field, obj)
+		case "startedAt":
+			out.Values[i] = ec._AgentProfile_startedAt(ctx, field, obj)
+		case "finishedAt":
+			out.Values[i] = ec._AgentProfile_finishedAt(ctx, field, obj)
+		case "sessionCount":
+			out.Values[i] = ec._AgentProfile_sessionCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageCount":
+			out.Values[i] = ec._AgentProfile_messageCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "progress":
+			out.Values[i] = ec._AgentProfile_progress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "schedule":
+			out.Values[i] = ec._AgentProfile_schedule(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentProfileProgressImplementors = []string{"AgentProfileProgress"}
+
+func (ec *executionContext) _AgentProfileProgress(ctx context.Context, sel ast.SelectionSet, obj *model.AgentProfileProgress) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentProfileProgressImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentProfileProgress")
+		case "stage":
+			out.Values[i] = ec._AgentProfileProgress_stage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "percent":
+			out.Values[i] = ec._AgentProfileProgress_percent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "completedMessages":
+			out.Values[i] = ec._AgentProfileProgress_completedMessages(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalMessages":
+			out.Values[i] = ec._AgentProfileProgress_totalMessages(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentProfileScheduleImplementors = []string{"AgentProfileSchedule"}
+
+func (ec *executionContext) _AgentProfileSchedule(ctx context.Context, sel ast.SelectionSet, obj *model.AgentProfileSchedule) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentProfileScheduleImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentProfileSchedule")
+		case "valid":
+			out.Values[i] = ec._AgentProfileSchedule_valid(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._AgentProfileSchedule_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "error":
+			out.Values[i] = ec._AgentProfileSchedule_error(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timezone":
+			out.Values[i] = ec._AgentProfileSchedule_timezone(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nextRunAt":
+			out.Values[i] = ec._AgentProfileSchedule_nextRunAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var appearanceSettingsImplementors = []string{"AppearanceSettings"}
 
 func (ec *executionContext) _AppearanceSettings(ctx context.Context, sel ast.SelectionSet, obj *model.AppearanceSettings) graphql.Marshaler {
@@ -34095,6 +35567,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "configureAgentProfile":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_configureAgentProfile(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "analyzeAgentProfile":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_analyzeAgentProfile(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "saveMCPService":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_saveMCPService(ctx, field)
@@ -35052,6 +36538,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
+		case "agentProfile":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_agentProfile(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "agentProfileSchedule":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_agentProfileSchedule(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "mcpServices":
 			field := field
 
@@ -39583,6 +41113,49 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
+
+func (ec *executionContext) marshalNAgentProfile2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfile(ctx context.Context, sel ast.SelectionSet, v model.AgentProfile) graphql.Marshaler {
+	return ec._AgentProfile(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentProfile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfile(ctx context.Context, sel ast.SelectionSet, v *model.AgentProfile) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentProfile(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAgentProfileConfigurationInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileConfigurationInput(ctx context.Context, v any) (model.AgentProfileConfigurationInput, error) {
+	res, err := ec.unmarshalInputAgentProfileConfigurationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAgentProfileProgress2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileProgress(ctx context.Context, sel ast.SelectionSet, v *model.AgentProfileProgress) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentProfileProgress(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentProfileSchedule2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileSchedule(ctx context.Context, sel ast.SelectionSet, v model.AgentProfileSchedule) graphql.Marshaler {
+	return ec._AgentProfileSchedule(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentProfileSchedule2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAgentProfileSchedule(ctx context.Context, sel ast.SelectionSet, v *model.AgentProfileSchedule) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentProfileSchedule(ctx, sel, v)
+}
 
 func (ec *executionContext) unmarshalNAppearanceBackgroundType2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceBackgroundType(ctx context.Context, v any) (model.AppearanceBackgroundType, error) {
 	var res model.AppearanceBackgroundType

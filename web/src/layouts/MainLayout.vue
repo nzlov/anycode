@@ -118,6 +118,10 @@
                 </q-item-section>
                 <q-item-section>全局设置</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="agentProfileDialogOpen = true">
+                <q-item-section avatar><q-icon name="psychology" /></q-item-section>
+                <q-item-section>规范画像</q-item-section>
+              </q-item>
               <q-separator />
               <q-item-label header>主题模式</q-item-label>
               <q-item
@@ -196,6 +200,7 @@
     </q-page-container>
 
     <ShareMessageNotifications v-if="applicationReady" />
+    <AgentProfileDialog v-if="applicationReady" v-model="agentProfileDialogOpen" />
 
     <GlobalSettingsDialog
       v-if="applicationReady && !$q.screen.lt.sm"
@@ -288,6 +293,7 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
+import AgentProfileDialog from '@/components/AgentProfileDialog.vue';
 import ShareMessageNotifications from '@/components/ShareMessageNotifications.vue';
 import MarkdownContent from '@/components/MarkdownContent.vue';
 import { provideGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
@@ -304,6 +310,7 @@ import { provideAnnotationDraftInjector } from '@/services/annotationDraftInject
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const settingsDialogOpen = ref(false);
+const agentProfileDialogOpen = ref(false);
 // GLUE: carry only invalidation semantics so route pages re-query the canonical settings.
 // Remove this when general settings changes have a backend subscription.
 provideGeneralSettingsInvalidation();

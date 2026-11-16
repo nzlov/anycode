@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AgentProfile is the predicate function for entagentprofile builders.
+type AgentProfile func(*sql.Selector)
+
 // DailyStatistic is the predicate function for dailystatistic builders.
 type DailyStatistic func(*sql.Selector)
 

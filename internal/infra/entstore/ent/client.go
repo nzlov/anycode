@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	entagentprofile "github.com/nzlov/anycode/internal/infra/entstore/ent/agentprofile"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/dailystatistic"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mcpentry"
@@ -48,6 +49,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// AgentProfile is the client for interacting with the AgentProfile builders.
+	AgentProfile *AgentProfileClient
 	// DailyStatistic is the client for interacting with the DailyStatistic builders.
 	DailyStatistic *DailyStatisticClient
 	// EventRecord is the client for interacting with the EventRecord builders.
@@ -113,6 +116,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.AgentProfile = NewAgentProfileClient(c.config)
 	c.DailyStatistic = NewDailyStatisticClient(c.config)
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MCPEntry = NewMCPEntryClient(c.config)
@@ -232,6 +236,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                       ctx,
 		config:                    cfg,
+		AgentProfile:              NewAgentProfileClient(cfg),
 		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
 		MCPEntry:                  NewMCPEntryClient(cfg),
@@ -278,6 +283,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                       ctx,
 		config:                    cfg,
+		AgentProfile:              NewAgentProfileClient(cfg),
 		DailyStatistic:            NewDailyStatisticClient(cfg),
 		EventRecord:               NewEventRecordClient(cfg),
 		MCPEntry:                  NewMCPEntryClient(cfg),
@@ -311,7 +317,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		DailyStatistic.
+//		AgentProfile.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -334,13 +340,13 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord, c.MindMapEdge,
-		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
-		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
-		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
-		c.QuickCommand, c.Session, c.SessionShare, c.SessionSide, c.SessionSideEvent,
-		c.SharedMessage, c.StagedAttachment, c.SystemConfiguration,
-		c.WorkflowDefinition,
+		c.AgentProfile, c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord,
+		c.MindMapEdge, c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask,
+		c.NodeRun, c.NotificationCheckpoint, c.NotificationConfiguration,
+		c.NotificationDelivery, c.ProcessRun, c.Project, c.PromptAppend,
+		c.PushSubscription, c.QuestionRequest, c.QuickCommand, c.Session,
+		c.SessionShare, c.SessionSide, c.SessionSideEvent, c.SharedMessage,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -350,13 +356,13 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord, c.MindMapEdge,
-		c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask, c.NodeRun,
-		c.NotificationCheckpoint, c.NotificationConfiguration, c.NotificationDelivery,
-		c.ProcessRun, c.Project, c.PromptAppend, c.PushSubscription, c.QuestionRequest,
-		c.QuickCommand, c.Session, c.SessionShare, c.SessionSide, c.SessionSideEvent,
-		c.SharedMessage, c.StagedAttachment, c.SystemConfiguration,
-		c.WorkflowDefinition,
+		c.AgentProfile, c.DailyStatistic, c.EventRecord, c.MCPEntry, c.MergeRecord,
+		c.MindMapEdge, c.MindMapGraph, c.MindMapNode, c.MindMapOverlay, c.MindMapTask,
+		c.NodeRun, c.NotificationCheckpoint, c.NotificationConfiguration,
+		c.NotificationDelivery, c.ProcessRun, c.Project, c.PromptAppend,
+		c.PushSubscription, c.QuestionRequest, c.QuickCommand, c.Session,
+		c.SessionShare, c.SessionSide, c.SessionSideEvent, c.SharedMessage,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -365,6 +371,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *AgentProfileMutation:
+		return c.AgentProfile.mutate(ctx, m)
 	case *DailyStatisticMutation:
 		return c.DailyStatistic.mutate(ctx, m)
 	case *EventRecordMutation:
@@ -421,6 +429,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// AgentProfileClient is a client for the AgentProfile schema.
+type AgentProfileClient struct {
+	config
+}
+
+// NewAgentProfileClient returns a client for the AgentProfile from the given config.
+func NewAgentProfileClient(c config) *AgentProfileClient {
+	return &AgentProfileClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `entagentprofile.Hooks(f(g(h())))`.
+func (c *AgentProfileClient) Use(hooks ...Hook) {
+	c.hooks.AgentProfile = append(c.hooks.AgentProfile, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `entagentprofile.Intercept(f(g(h())))`.
+func (c *AgentProfileClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AgentProfile = append(c.inters.AgentProfile, interceptors...)
+}
+
+// Create returns a builder for creating a AgentProfile entity.
+func (c *AgentProfileClient) Create() *AgentProfileCreate {
+	mutation := newAgentProfileMutation(c.config, OpCreate)
+	return &AgentProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AgentProfile entities.
+func (c *AgentProfileClient) CreateBulk(builders ...*AgentProfileCreate) *AgentProfileCreateBulk {
+	return &AgentProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AgentProfileClient) MapCreateBulk(slice any, setFunc func(*AgentProfileCreate, int)) *AgentProfileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AgentProfileCreateBulk{err: fmt.Errorf("calling to AgentProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AgentProfileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AgentProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AgentProfile.
+func (c *AgentProfileClient) Update() *AgentProfileUpdate {
+	mutation := newAgentProfileMutation(c.config, OpUpdate)
+	return &AgentProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AgentProfileClient) UpdateOne(_m *AgentProfile) *AgentProfileUpdateOne {
+	mutation := newAgentProfileMutation(c.config, OpUpdateOne, withAgentProfile(_m))
+	return &AgentProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AgentProfileClient) UpdateOneID(id string) *AgentProfileUpdateOne {
+	mutation := newAgentProfileMutation(c.config, OpUpdateOne, withAgentProfileID(id))
+	return &AgentProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AgentProfile.
+func (c *AgentProfileClient) Delete() *AgentProfileDelete {
+	mutation := newAgentProfileMutation(c.config, OpDelete)
+	return &AgentProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AgentProfileClient) DeleteOne(_m *AgentProfile) *AgentProfileDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AgentProfileClient) DeleteOneID(id string) *AgentProfileDeleteOne {
+	builder := c.Delete().Where(entagentprofile.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AgentProfileDeleteOne{builder}
+}
+
+// Query returns a query builder for AgentProfile.
+func (c *AgentProfileClient) Query() *AgentProfileQuery {
+	return &AgentProfileQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAgentProfile},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AgentProfile entity by its id.
+func (c *AgentProfileClient) Get(ctx context.Context, id string) (*AgentProfile, error) {
+	return c.Query().Where(entagentprofile.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AgentProfileClient) GetX(ctx context.Context, id string) *AgentProfile {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AgentProfileClient) Hooks() []Hook {
+	return c.hooks.AgentProfile
+}
+
+// Interceptors returns the client interceptors.
+func (c *AgentProfileClient) Interceptors() []Interceptor {
+	return c.inters.AgentProfile
+}
+
+func (c *AgentProfileClient) mutate(ctx context.Context, m *AgentProfileMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AgentProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AgentProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AgentProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AgentProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AgentProfile mutation op: %q", m.Op())
 	}
 }
 
@@ -4018,19 +4159,21 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge, MindMapGraph,
-		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
-		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
-		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
-		SessionShare, SessionSide, SessionSideEvent, SharedMessage, StagedAttachment,
-		SystemConfiguration, WorkflowDefinition []ent.Hook
+		AgentProfile, DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge,
+		MindMapGraph, MindMapNode, MindMapOverlay, MindMapTask, NodeRun,
+		NotificationCheckpoint, NotificationConfiguration, NotificationDelivery,
+		ProcessRun, Project, PromptAppend, PushSubscription, QuestionRequest,
+		QuickCommand, Session, SessionShare, SessionSide, SessionSideEvent,
+		SharedMessage, StagedAttachment, SystemConfiguration,
+		WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge, MindMapGraph,
-		MindMapNode, MindMapOverlay, MindMapTask, NodeRun, NotificationCheckpoint,
-		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
-		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
-		SessionShare, SessionSide, SessionSideEvent, SharedMessage, StagedAttachment,
-		SystemConfiguration, WorkflowDefinition []ent.Interceptor
+		AgentProfile, DailyStatistic, EventRecord, MCPEntry, MergeRecord, MindMapEdge,
+		MindMapGraph, MindMapNode, MindMapOverlay, MindMapTask, NodeRun,
+		NotificationCheckpoint, NotificationConfiguration, NotificationDelivery,
+		ProcessRun, Project, PromptAppend, PushSubscription, QuestionRequest,
+		QuickCommand, Session, SessionShare, SessionSide, SessionSideEvent,
+		SharedMessage, StagedAttachment, SystemConfiguration,
+		WorkflowDefinition []ent.Interceptor
 	}
 )

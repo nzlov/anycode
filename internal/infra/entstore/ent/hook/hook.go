@@ -9,6 +9,18 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
+// The AgentProfileFunc type is an adapter to allow the use of ordinary
+// function as AgentProfile mutator.
+type AgentProfileFunc func(context.Context, *ent.AgentProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AgentProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AgentProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AgentProfileMutation", m)
+}
+
 // The DailyStatisticFunc type is an adapter to allow the use of ordinary
 // function as DailyStatistic mutator.
 type DailyStatisticFunc func(context.Context, *ent.DailyStatisticMutation) (ent.Value, error)

@@ -26,6 +26,7 @@ import (
 	statisticsapp "github.com/nzlov/anycode/internal/application/statistics"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
+	agentprofiledomain "github.com/nzlov/anycode/internal/domain/agentprofile"
 	mcpdomain "github.com/nzlov/anycode/internal/domain/mcp"
 	mindmapdomain "github.com/nzlov/anycode/internal/domain/mindmap"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
@@ -38,6 +39,30 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
+
+// ConfigureAgentProfile is the resolver for the configureAgentProfile field.
+func (r *mutationResolver) ConfigureAgentProfile(ctx context.Context, input model.AgentProfileConfigurationInput) (*model.AgentProfile, error) {
+	if r.UseCases.AgentProfile == nil {
+		return nil, missingUseCase("agentProfile")
+	}
+	result, err := r.UseCases.AgentProfile.Configure(ctx, agentprofiledomain.Configuration{Enabled: input.Enabled, Cron: input.Cron, Model: input.Model, ReasoningEffort: input.ReasoningEffort})
+	if err != nil {
+		return nil, err
+	}
+	return toAgentProfile(result), nil
+}
+
+// AnalyzeAgentProfile is the resolver for the analyzeAgentProfile field.
+func (r *mutationResolver) AnalyzeAgentProfile(ctx context.Context) (*model.AgentProfile, error) {
+	if r.UseCases.AgentProfile == nil {
+		return nil, missingUseCase("agentProfile")
+	}
+	result, err := r.UseCases.AgentProfile.Analyze(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return toAgentProfile(result), nil
+}
 
 // SaveMCPService is the resolver for the saveMCPService field.
 func (r *mutationResolver) SaveMCPService(ctx context.Context, scope model.MCPScopeInput, name string, definition map[string]any, enabled *bool) (bool, error) {
@@ -783,6 +808,26 @@ func (r *mutationResolver) CloseTunnel(ctx context.Context, id string) (bool, er
 		return false, err
 	}
 	return true, nil
+}
+
+// AgentProfile is the resolver for the agentProfile field.
+func (r *queryResolver) AgentProfile(ctx context.Context) (*model.AgentProfile, error) {
+	if r.UseCases.AgentProfile == nil {
+		return nil, missingUseCase("agentProfile")
+	}
+	result, err := r.UseCases.AgentProfile.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return toAgentProfile(result), nil
+}
+
+// AgentProfileSchedule is the resolver for the agentProfileSchedule field.
+func (r *queryResolver) AgentProfileSchedule(ctx context.Context, cron string) (*model.AgentProfileSchedule, error) {
+	if r.UseCases.AgentProfile == nil {
+		return nil, missingUseCase("agentProfile")
+	}
+	return toProfileSchedule(r.UseCases.AgentProfile.Preview(cron)), nil
 }
 
 // McpServices is the resolver for the mcpServices field.

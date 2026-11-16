@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 
+	agentprofileapp "github.com/nzlov/anycode/internal/application/agentprofile"
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
@@ -32,6 +33,7 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type UseCases struct {
+	AgentProfile     *agentprofileapp.Service
 	MCP              *mcpapp.Service
 	Auth             authapp.UseCase
 	Projects         projectapp.UseCase

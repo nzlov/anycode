@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	agentprofileapp "github.com/nzlov/anycode/internal/application/agentprofile"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	codextoolapp "github.com/nzlov/anycode/internal/application/codextool"
@@ -182,6 +183,7 @@ type wiredApplication struct {
 	codex          *codexcli.Client
 	terminal       terminaldomain.Runtime
 	mindMaps       *mindmapapp.Queue
+	agentProfile   *agentprofileapp.Service
 	workspaceFiles workspacefileapp.UseCase
 }
 
@@ -194,6 +196,9 @@ func (a *wiredApplication) Close() {
 	}
 	if a.mindMaps != nil {
 		a.mindMaps.Close()
+	}
+	if a.agentProfile != nil {
+		a.agentProfile.Close()
 	}
 	if closer, ok := a.useCases.Tunnels.(interface{ CloseAll(context.Context) error }); ok {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -257,7 +262,13 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	mindMapQueue := mindmapapp.NewQueue(store.MindMaps(), store, store.Sessions(), store.Projects(), settings, processes, codex)
 	mindMapService := mindmapapp.New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
 	mindMapService.SetQueueScheduler(mindMapQueue.Schedule)
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithPromptFileReader(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithSessionSides(store.SessionSides()), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithStatistics(store.Statistics()), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	agentProfileService := agentprofileapp.New(store.AgentProfiles(), codex, codex, capabilities.Models)
+	if err := agentProfileService.Initialize(context.Background()); err != nil {
+		_ = tunnelRuntime.CloseAll(context.Background())
+		_ = codex.Close()
+		return nil, fmt.Errorf("initialize agent profile: %w", err)
+	}
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithPromptFileReader(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithSessionSides(store.SessionSides()), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithStatistics(store.Statistics()), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithMindMapSettings(settings), sessionapp.WithAgentProfile(agentProfileService), sessionapp.WithMindMaps(store.MindMaps(), mindMapQueue.Schedule), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
 	mcpRuntime := mcpinfra.New()
 	mcpService := mcpapp.New(store.MCP(), mcpRuntime, store.Projects(), store.Sessions())
 	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithMCP(mcpService), codextoolapp.WithTunnels(tunnelService), codextoolapp.WithMindMaps(mindMapService)))
@@ -272,6 +283,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		return nil, fmt.Errorf("initialize web push notifications: %w", err)
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
+	agentProfileService.Start()
 	projectGit := gitcli.New("")
 	// GLUE: saving a global Codex setting crosses the setting, session, and process-runtime boundaries;
 	// remove this callback when application-level setting changes use a shared command bus.
@@ -284,6 +296,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		return restartErr
 	}
 	useCases := graph.UseCases{
+		AgentProfile:     agentProfileService,
 		MCP:              mcpService,
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), projectGit, projectapp.WithMindMapSettings(settings), projectapp.WithRepositoryCloner(projectGit)),
 		MindMaps:         mindMapService,
@@ -307,7 +320,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		CodexModels:  capabilities.Models,
 	}
 	return &wiredApplication{
-		tunnels: http.HandlerFunc(tunnelRuntime.ServeLocalHTTP), mcp: mcpRuntime, useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, workspaceFiles: workspaceFileService}, nil
+		tunnels: http.HandlerFunc(tunnelRuntime.ServeLocalHTTP), mcp: mcpRuntime, useCases: useCases, codex: codex, terminal: terminalRuntime, mindMaps: mindMapQueue, agentProfile: agentProfileService, workspaceFiles: workspaceFileService}, nil
 }
 
 func httpPort(addr string) int {

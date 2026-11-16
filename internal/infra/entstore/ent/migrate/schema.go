@@ -8,6 +8,18 @@ import (
 )
 
 var (
+	// AgentProfilesColumns holds the columns for the "agent_profiles" table.
+	AgentProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "configuration", Type: field.TypeJSON},
+		{Name: "analysis", Type: field.TypeJSON},
+	}
+	// AgentProfilesTable holds the schema information for the "agent_profiles" table.
+	AgentProfilesTable = &schema.Table{
+		Name:       "agent_profiles",
+		Columns:    AgentProfilesColumns,
+		PrimaryKey: []*schema.Column{AgentProfilesColumns[0]},
+	}
 	// DailyStatisticsColumns holds the columns for the "daily_statistics" table.
 	DailyStatisticsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -445,6 +457,11 @@ var (
 		PrimaryKey: []*schema.Column{PromptAppendsColumns[0]},
 		Indexes: []*schema.Index{
 			{
+				Name:    "promptappend_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{PromptAppendsColumns[10], PromptAppendsColumns[0]},
+			},
+			{
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[10]},
@@ -844,6 +861,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AgentProfilesTable,
 		DailyStatisticsTable,
 		EventRecordsTable,
 		McpEntriesTable,

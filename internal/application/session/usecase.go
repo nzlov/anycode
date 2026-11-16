@@ -360,6 +360,7 @@ type Service struct {
 	concurrencyLimits       concurrencyLimitProvider
 	agentWritableRoots      agentWritableRootsProvider
 	mindMapSettings         settingdomain.MindMapConfigurationProvider
+	agentProfile            agentProfileProvider
 	mindMaps                mindmapdomain.Repository
 	mindMapQueueScheduler   func()
 	initializationScheduler func(*Service, domain.ID, bool)
@@ -389,6 +390,10 @@ type codexEventPublisher interface {
 
 type sessionDiffCounter interface {
 	CountSessionChangedFiles(ctx context.Context, sessionID domain.ID) (int, error)
+}
+
+type agentProfileProvider interface {
+	Instructions(context.Context) (string, error)
 }
 
 type concurrencyLimitProvider interface {
@@ -564,6 +569,10 @@ func WithMindMapSettings(provider settingdomain.MindMapConfigurationProvider) Op
 	return func(s *Service) {
 		s.mindMapSettings = provider
 	}
+}
+
+func WithAgentProfile(provider agentProfileProvider) Option {
+	return func(s *Service) { s.agentProfile = provider }
 }
 
 func WithMindMaps(repo mindmapdomain.Repository, schedule func()) Option {
@@ -4116,6 +4125,13 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	developerInstructions := joinPromptParts(anyCodeDeveloperInstructions(session, artifactDir), mindMapGuidance)
+	if s.agentProfile != nil {
+		guidance, err := s.agentProfile.Instructions(ctx)
+		if err != nil {
+			return processdomain.CodexHandle{}, fmt.Errorf("get agent profile: %w", err)
+		}
+		developerInstructions = joinPromptParts(developerInstructions, guidance)
+	}
 	turnFiles := appendUniqueSessionFiles(nil, options.promptFiles...)
 	turnMentions := appendUniquePromptMentions(nil, options.promptMentions...)
 	if options.resumeCodexSessionID != "" {

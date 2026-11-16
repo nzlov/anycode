@@ -31,6 +31,7 @@ func (PromptAppend) Fields() []ent.Field {
 
 func (PromptAppend) Indexes() []ent.Index {
 	return []ent.Index{
+		index.Fields("created_at", "id"),
 		index.Fields("session_id", "created_at"),
 		index.Fields("session_id", "status", "created_at"),
 	}
