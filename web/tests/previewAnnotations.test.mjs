@@ -93,9 +93,12 @@ test('text files and code diffs use selected-text highlights and comments', () =
   assert.match(annotator, /label="批注选中内容"/);
   assert.match(diffViewer, /<PreviewAnnotator[\s\S]*mode="text"/);
   assert.match(filePreview, /<PreviewAnnotator[\s\S]*mode="text"/);
-  assert.match(filePreview, /data-annotation-text[\s\S]*?data-annotation-line="1"/);
   assert.match(
-    diffViewer,
+    readSource('../src/components/MarkdownContent.vue'),
+    /data-annotation-text[\s\S]*?data-annotation-line="1"/,
+  );
+  assert.match(
+    readSource('../src/components/CodeContent.vue'),
     /:data-annotation-line="line\.newLine \?\? line\.oldLine \?\? undefined"/,
   );
   assert.match(annotator, /sourceTextRange\(range\)/);

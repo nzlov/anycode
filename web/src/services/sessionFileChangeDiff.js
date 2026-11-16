@@ -49,6 +49,7 @@ export function fileDiffFromUnifiedDiff(path, status, unifiedDiff) {
     lines: hunk.lines,
   }));
   return {
+    unifiedDiff,
     file: { path, status, additions, deletions },
     hunks: normalizedHunks,
     lines: normalizedHunks.flatMap((hunk) => hunk.lines),

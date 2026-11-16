@@ -72,12 +72,21 @@
         <div v-else-if="loading" class="session-file-preview__state">
           <q-spinner color="primary" size="32px" />
         </div>
-        <pre
+        <MarkdownContent
+          v-else-if="contentLanguage(file.filename) === 'markdown'"
+          :key="file.id"
+          :text="text"
+          :initial-source="annotationReadOnly"
+          class="session-file-preview__document"
+        />
+        <CodeContent
           v-else
-          class="session-file-preview__text"
-          data-annotation-text
-          data-annotation-line="1"
-          >{{ text }}</pre>
+          :key="file.id"
+          :text="text"
+          :language="contentLanguage(file.filename)"
+          :initial-source="annotationReadOnly"
+          class="session-file-preview__document"
+        />
       </PreviewAnnotator>
       <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
       <q-spinner v-else-if="loading" color="primary" size="32px" />
@@ -135,6 +144,9 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
+import MarkdownContent from '@/components/MarkdownContent.vue';
+import CodeContent from '@/components/CodeContent.vue';
+import { contentLanguage } from '@/services/contentPreview';
 import type { PreviewAnnotation } from '@/services/previewAnnotations';
 import { loadImagePreview } from '@/services/imagePreview';
 import { requestSessionFilePreviewURL, type SessionFilePreviewData } from '@/services/sessionFiles';
@@ -546,12 +558,12 @@ onBeforeUnmount(() => {
   min-height: 68vh;
 }
 
-.session-file-preview__text {
+.session-file-preview__document {
   width: 100%;
   margin: 0;
   overflow: auto;
   color: var(--ac-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  padding: 12px;
 }
 </style>

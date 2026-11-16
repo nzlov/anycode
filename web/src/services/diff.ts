@@ -38,6 +38,7 @@ export interface DiffHunk {
 }
 
 export interface FileDiff {
+  unifiedDiff?: string;
   file: DiffFile;
   hunks: DiffHunk[];
   lines: DiffLine[];

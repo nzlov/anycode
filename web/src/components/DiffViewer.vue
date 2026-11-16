@@ -67,49 +67,11 @@
         :enabled="!displayAnnotation"
         :display-annotations="displayAnnotation?.marks ?? []"
       >
-        <q-card-section class="diff-code">
-          <template
-            v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
-            :key="`${file.path}:${hunk.id}`"
-          >
-            <div v-if="hunk.canExpandBefore" class="diff-expand-row">
-              <q-btn
-                flat
-                dense
-                no-caps
-                icon="expand_less"
-                label="向上展开 20 行"
-                @click="$emit('expand', file.path, 'before')"
-              />
-            </div>
-            <div
-              v-for="line in hunk.lines"
-              :key="`${file.path}:${hunk.id}:${line.id}`"
-              class="diff-line"
-              :class="lineClass(line.kind)"
-            >
-              <span class="line-number">{{ line.oldLine ?? '' }}</span>
-              <span class="line-number">{{ line.newLine ?? '' }}</span>
-              <pre
-                :data-annotation-text="
-                  line.oldLine !== null || line.newLine !== null ? '' : undefined
-                "
-                :data-annotation-line="line.newLine ?? line.oldLine ?? undefined"
-                :data-annotation-revision="line.newLine !== null ? 'new' : 'old'"
-                >{{ line.content }}</pre>
-            </div>
-            <div v-if="hunk.canExpandAfter" class="diff-expand-row">
-              <q-btn
-                flat
-                dense
-                no-caps
-                icon="expand_more"
-                label="向下展开 20 行"
-                @click="$emit('expand', file.path, 'after')"
-              />
-            </div>
-          </template>
-        </q-card-section>
+        <DiffTextContent
+          :file-diff="fileDiffFor(file.path)!"
+          :initial-source="Boolean(displayAnnotation)"
+          @expand="$emit('expand', file.path, $event)"
+        />
       </PreviewAnnotator>
     </q-card>
   </div>
@@ -119,8 +81,9 @@
 import { computed } from 'vue';
 
 import DiffMediaPreview from '@/components/DiffMediaPreview.vue';
+import DiffTextContent from '@/components/DiffTextContent.vue';
 import PreviewAnnotator from '@/components/PreviewAnnotator.vue';
-import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
+import type { DiffFile, FileDiff } from '@/services/diff';
 import type { DiffMediaPreviewTarget } from '@/services/diffMediaModel';
 import type { PreviewAnnotationAttachment } from '@/services/previewAnnotations';
 
@@ -193,15 +156,6 @@ function fileColor(status: DiffFile['status']) {
   if (status === 'renamed') return 'warning';
   return 'primary';
 }
-
-function lineClass(kind: DiffLineKind) {
-  return {
-    'line-add': kind === 'add',
-    'line-delete': kind === 'delete',
-    'line-header': kind === 'header',
-    'line-context': kind === 'context',
-  };
-}
 </script>
 
 <style scoped>
@@ -262,69 +216,6 @@ function lineClass(kind: DiffLineKind) {
   word-break: break-word;
 }
 
-.diff-code {
-  overflow-x: auto;
-  padding: 0;
-  border-radius: 0 0 var(--ac-radius) var(--ac-radius);
-  background: var(--ac-diff-bg);
-}
-
-.diff-media {
-  padding: 16px;
-}
-
-.diff-line {
-  display: grid;
-  grid-template-columns: 56px 56px minmax(max-content, 1fr);
-  min-width: max-content;
-  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.diff-line pre {
-  margin: 0;
-  padding: 4px 16px;
-  white-space: pre;
-}
-
-.line-number {
-  padding: 4px 8px;
-  border-right: 1px solid var(--ac-border);
-  color: var(--ac-diff-gutter);
-  text-align: right;
-  user-select: none;
-}
-
-.line-context {
-  color: var(--ac-diff-context);
-}
-
-.line-add {
-  color: var(--ac-diff-added-text);
-  background: var(--ac-diff-added-bg);
-}
-
-.line-delete {
-  color: var(--ac-diff-removed-text);
-  background: var(--ac-diff-removed-bg);
-}
-
-.line-header,
-.diff-expand-row {
-  color: var(--ac-diff-hunk-text);
-  background: var(--ac-diff-hunk-bg);
-}
-
-.diff-expand-row {
-  min-width: max-content;
-  padding: 4px 112px;
-}
-
-.diff-expand-row :deep(.q-btn) {
-  color: var(--ac-diff-hunk-text);
-}
-
 @container (max-width: 840px) {
   .diff-file-header {
     flex-wrap: wrap;
@@ -334,17 +225,6 @@ function lineClass(kind: DiffLineKind) {
     flex: 0 0 100%;
     justify-content: flex-end;
     margin-left: auto;
-  }
-}
-
-@media (max-width: 720px) {
-  .diff-line {
-    grid-template-columns: 44px 44px minmax(max-content, 1fr);
-    font-size: 11px;
-  }
-
-  .diff-expand-row {
-    padding-left: 88px;
   }
 }
 </style>

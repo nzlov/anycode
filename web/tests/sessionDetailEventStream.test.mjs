@@ -101,24 +101,18 @@ test('session text messages fold runtime context without parsing developer instr
   assert.doesNotMatch(pageSource, /workflow-prompt/);
 });
 
-test('markdown messages expose a hover action that toggles their raw source', () => {
+test('markdown messages use the shared preview and source controls with the original message', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionTextMessage.vue', import.meta.url),
     'utf8',
   );
-
-  assert.match(componentSource, /v-if="canToggleRaw && !showRaw"/);
-  assert.match(
-    componentSource,
-    /<pre v-else-if="canToggleRaw"[^>]*>\{\{ content\.text \}\}<\/pre>/,
+  const markdownSource = readFileSync(
+    new URL('../src/components/MarkdownContent.vue', import.meta.url),
+    'utf8',
   );
-  assert.match(componentSource, /:aria-pressed="showRaw"/);
-  assert.match(componentSource, /@click="showRaw = !showRaw"/);
-  assert.match(
-    componentSource,
-    /\.text-message:hover \.text-message__raw-toggle,[\s\S]*\.text-message:focus-within \.text-message__raw-toggle/,
-  );
-  assert.match(componentSource, /@media \(hover: none\), \(pointer: coarse\)/);
+  assert.match(componentSource, /<MarkdownContent[^>]*:source-text="content.text"/);
+  assert.match(markdownSource, /<ContentViewToggle v-model="view"/);
+  assert.match(markdownSource, /sourceText \?\? text/);
 });
 
 test('session detail reconciles current state after starting subscriptions', () => {

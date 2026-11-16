@@ -1,5 +1,16 @@
 <template>
-  <div ref="contentElement" class="markdown-content" @click="openResource" v-html="html" />
+  <div class="markdown-content">
+    <div v-if="toggleable" class="markdown-content__toolbar">
+      <ContentViewToggle v-model="view" />
+    </div>
+    <pre
+      v-if="view === 'source'"
+      class="markdown-content__source"
+      data-annotation-text
+      data-annotation-line="1"
+      >{{ sourceText ?? text }}</pre>
+    <div v-else ref="contentElement" @click="openResource" v-html="html" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -7,13 +18,23 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { Dark } from 'quasar';
 import { computed, nextTick, ref, watch } from 'vue';
+import ContentViewToggle from '@/components/ContentViewToggle.vue';
 
 import {
   parseSessionEventResourceReference,
   useSessionEventResourceOpener,
 } from '@/services/sessionEventResources';
 
-const props = defineProps<{ text: string }>();
+const props = withDefaults(
+  defineProps<{
+    text: string;
+    sourceText?: string;
+    toggleable?: boolean;
+    initialSource?: boolean;
+  }>(),
+  { toggleable: true, initialSource: false },
+);
+const view = ref<'preview' | 'source'>(props.initialSource ? 'source' : 'preview');
 const resourceOpener = useSessionEventResourceOpener();
 const contentElement = ref<HTMLElement>();
 
@@ -93,7 +114,7 @@ const html = computed(() => {
 });
 
 watch(
-  [html, () => Dark.isActive],
+  [html, () => Dark.isActive, view],
   async ([currentHtml], [previousHtml], onCleanup) => {
     let cancelled = false;
     onCleanup(() => {
@@ -220,6 +241,22 @@ function openResource(event: MouseEvent) {
   font-size: 14px;
   line-height: 1.72;
   overflow-wrap: anywhere;
+}
+
+.markdown-content__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+.markdown-content__source {
+  margin: 0;
+  max-width: 100%;
+  font:
+    12px/1.7 'Fira Code',
+    'JetBrains Mono',
+    monospace;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 
 .markdown-content :deep(p),
