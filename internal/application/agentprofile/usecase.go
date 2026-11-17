@@ -310,7 +310,7 @@ func (s *Service) analyzeBatch(ctx context.Context, previous, batch, model, reas
 	if err := report("analyzing"); err != nil {
 		return "", err
 	}
-	result, err := s.analyzer.AnalyzeProfile(ctx, previous, "新增追加描述（先依据明确反馈分析，仅在无法理解纠正对象时请求上下文）：\n"+batch, model, reasoningEffort)
+	result, err := s.analyzer.AnalyzeProfile(ctx, previous, "新增追加描述（先依据明确反馈分析，仅在缺失上下文会实质影响纠错判定、适用范围或替代关系时请求上下文）：\n"+batch, model, reasoningEffort)
 	if err != nil {
 		return "", err
 	}
@@ -341,7 +341,7 @@ func (s *Service) analyzeBatch(ctx context.Context, previous, batch, model, reas
 		if err := report("refining"); err != nil {
 			return "", err
 		}
-		result, err = s.analyzer.AnalyzeProfile(ctx, previous, "所需上下文已提供，不再请求上下文；证据不足的要求跳过。\n新增追加描述：\n"+batch+extra.String(), model, reasoningEffort)
+		result, err = s.analyzer.AnalyzeProfile(ctx, previous, "所需上下文已提供，不再请求上下文；仅依据已确认的证据合并，无法确认的判断跳过，保留已有有效要求。\n新增追加描述：\n"+batch+extra.String(), model, reasoningEffort)
 		if err != nil {
 			return "", err
 		}
