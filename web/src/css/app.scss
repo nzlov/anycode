@@ -383,6 +383,57 @@ a {
   align-items: stretch;
 }
 
+.overview-card-drag-handle {
+  flex: 0 0 auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.overview-card-drag-handle:focus-visible {
+  outline: 2px solid var(--q-primary);
+  outline-offset: -2px;
+}
+
+.overview-card-order-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.overview-horizontal-section--dragging,
+.overview-horizontal-section--dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.overview-horizontal-session-track--dragging {
+  opacity: 0.5;
+}
+
+.overview-horizontal-session-track--drop-before::before,
+.overview-horizontal-session-track--drop-after::after {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--q-primary);
+  content: '';
+  pointer-events: none;
+}
+
+.overview-horizontal-session-track--drop-before::before {
+  left: 0;
+}
+
+.overview-horizontal-session-track--drop-after::after {
+  right: 9px;
+}
+
 .overview-horizontal-empty {
   display: flex;
   height: 100%;

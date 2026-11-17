@@ -29,6 +29,19 @@
             </div>
           </div>
           <div class="overview-horizontal-conversation__badges">
+            <q-btn
+              v-if="reorderable"
+              flat
+              round
+              dense
+              class="app-icon-btn overview-card-drag-handle"
+              icon="drag_indicator"
+              aria-label="拖动调整卡片位置"
+              aria-description="拖动调整位置，也可按左右方向键移动；Escape 取消拖动"
+              data-card-drag-handle
+            >
+              <q-tooltip>拖动调整位置，也可按 ← → 移动</q-tooltip>
+            </q-btn>
             <SessionPriorityControl
               v-if="!shareId"
               :priority="card.priority"
@@ -160,6 +173,7 @@ const props = withDefaults(
     closeLoading?: boolean;
     mindMapRealtime?: boolean;
     mindMapUpdated?: boolean;
+    reorderable?: boolean;
   }>(),
   { shareId: '', tunnels: () => [] },
 );

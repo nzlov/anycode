@@ -12,6 +12,19 @@
         </div>
       </div>
       <div class="overview-horizontal-terminal__actions">
+        <q-btn
+          v-if="reorderable"
+          flat
+          round
+          dense
+          class="app-icon-btn overview-card-drag-handle"
+          icon="drag_indicator"
+          aria-label="拖动调整卡片位置"
+          aria-description="拖动调整位置，也可按左右方向键移动；Escape 取消拖动"
+          data-card-drag-handle
+        >
+          <q-tooltip>拖动调整位置，也可按 ← → 移动</q-tooltip>
+        </q-btn>
         <SessionTunnelButton :tunnels="tunnels" />
         <SessionPriorityControl
           :priority="card.priority"
@@ -107,6 +120,7 @@ const props = defineProps<{
   priorityLoading?: boolean;
   closeLoading?: boolean;
   terminalResizePaused?: boolean;
+  reorderable?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -161,9 +175,11 @@ async function stopTerminal() {
   min-width: 0;
   min-height: 72px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  row-gap: 8px;
   padding: 10px 10px 10px 14px;
   border-bottom: 1px solid var(--ac-border);
   background: var(--ac-surface-raised);
@@ -172,6 +188,7 @@ async function stopTerminal() {
 .overview-horizontal-terminal__identity {
   display: grid;
   min-width: 0;
+  flex: 1 1 120px;
   gap: 6px;
 }
 
@@ -205,7 +222,10 @@ async function stopTerminal() {
 }
 
 .overview-horizontal-terminal__actions {
-  flex: 0 0 auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .overview-horizontal-terminal__detail {

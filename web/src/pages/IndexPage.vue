@@ -40,13 +40,28 @@
 
     <section
       v-if="isHorizontalView && visibleLatestCards.length > 0"
+      ref="horizontalSectionRef"
       class="overview-horizontal-section"
+      :class="{ 'overview-horizontal-section--dragging': draggedCardId }"
       aria-label="横向会话详情"
+      @pointerdown="beginCardDrag"
+      @pointermove="continueCardDrag"
+      @pointerup="finishCardDrag"
+      @pointercancel="cancelCardDrag"
+      @lostpointercapture="cancelCardDrag"
+      @keydown="onCardOrderKeydown"
     >
       <div class="overview-horizontal-track">
         <OverviewHorizontalSession
           v-for="card in horizontalCards"
           :key="card.id"
+          :class="{
+            'overview-horizontal-session-track--dragging': draggedCardId === card.id,
+            'overview-horizontal-session-track--drop-before':
+              cardDropTarget?.id === card.id && cardDropTarget.side === 'before',
+            'overview-horizontal-session-track--drop-after':
+              cardDropTarget?.id === card.id && cardDropTarget.side === 'after',
+          }"
           :card="card"
           :tunnels="tunnelsForSession(card.id)"
           :width="sessionColumnWidth(card.id)"
@@ -63,6 +78,9 @@
           @merge-close="closeCard(card, true)"
         />
       </div>
+      <span class="overview-card-order-announcement" aria-live="polite">{{
+        cardOrderAnnouncement
+      }}</span>
     </section>
 
     <section v-else-if="!isHorizontalView" class="overview-card-section">
@@ -490,6 +508,7 @@ import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
+import { useHorizontalCardOrder } from '@/composables/useHorizontalCardOrder';
 import { useProjects } from '@/composables/useProjects';
 import { closeSessionWithConfirmation } from '@/composables/useConfirmedSessionClose';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
@@ -603,8 +622,23 @@ const projectChips = computed(() => {
 const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
 );
+const {
+  sectionRef: horizontalSectionRef,
+  orderedCards: orderedHorizontalCards,
+  draggedId: draggedCardId,
+  dropTarget: cardDropTarget,
+  announcement: cardOrderAnnouncement,
+  beginDrag: beginCardDrag,
+  continueDrag: continueCardDrag,
+  finishDrag: finishCardDrag,
+  cancelDrag: cancelCardDrag,
+  onKeydown: onCardOrderKeydown,
+} = useHorizontalCardOrder(
+  computed(() => overviewCardGroups.value.horizontalCards),
+  isHorizontalView,
+);
 const horizontalCards = computed(() =>
-  overviewCardGroups.value.horizontalCards.filter(
+  orderedHorizontalCards.value.filter(
     (card: SessionCard) => !hiddenProjectIds.value.has(card.projectId),
   ),
 );

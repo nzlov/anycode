@@ -1,5 +1,5 @@
 <template>
-  <div class="overview-horizontal-session-track">
+  <div class="overview-horizontal-session-track" :data-session-id="card.id">
     <div
       class="overview-horizontal-session"
       :class="`overview-horizontal-session--${sessionLayout}`"
@@ -12,6 +12,7 @@
         :priority-loading="priorityLoading"
         :close-loading="closeLoading"
         :terminal-resize-paused="resizing"
+        reorderable
         @set-priority="emit('set-priority', $event)"
         @close="emit('close')"
       />
@@ -24,6 +25,7 @@
         :close-loading="closeLoading"
         :mind-map-realtime="mindMapRealtime"
         :mind-map-updated="mindMapUpdated"
+        reorderable
         @set-priority="emit('set-priority', $event)"
         @terminal-opened="emit('terminal-opened', $event)"
         @forked="emit('forked', $event)"
