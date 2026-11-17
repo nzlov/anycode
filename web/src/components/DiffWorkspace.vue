@@ -3,7 +3,13 @@
     <!-- GLUE: standalone Diff owns these controls; the target only moves them into the app layout. -->
     <Teleport defer :to="toolbarTarget || 'body'" :disabled="!toolbarTarget">
       <div
-        v-if="toolbarTitle || showFileNavigation || workspaceMode === 'all' || showRefresh"
+        v-if="
+          toolbarTitle ||
+          showFileNavigation ||
+          workspaceMode === 'all' ||
+          showRefresh ||
+          $slots['toolbar-actions']
+        "
         class="diff-workspace__toolbar"
         :class="{ 'diff-workspace__toolbar--header': toolbarTarget }"
       >
@@ -27,6 +33,7 @@
           color="primary"
           :label="`已加载 ${visibleDiffs.length}/${allFilePaths.length}`"
         />
+        <slot name="toolbar-actions" />
         <template v-if="workspaceMode === 'all'">
           <q-btn
             v-if="allFilesLoading !== 'lazy'"
@@ -204,7 +211,9 @@
                 >
                   <q-tooltip>打开会话详情</q-tooltip>
                 </q-btn>
-                <span class="file-path">{{ filePathWithoutPrefix(file.path) }}</span>
+                <span class="file-path" :title="file.path">{{
+                  filePathWithoutPrefix(file.path)
+                }}</span>
               </template>
             </template>
           </DiffViewer>

@@ -2,7 +2,9 @@
   <q-dialog v-model="open">
     <q-card class="app-content-dialog share-manager">
       <q-card-section class="row no-wrap items-center q-gutter-sm">
-        <div class="text-subtitle1 text-weight-bold ellipsis">会话分享与审核</div>
+        <div class="text-subtitle1 text-weight-bold ellipsis">
+          {{ sessionId ? '会话分享与审核' : '分享与审核' }}
+        </div>
         <q-space />
         <q-btn
           flat
@@ -19,6 +21,7 @@
       <q-separator />
       <q-card-section>
         <q-btn
+          v-if="sessionId"
           color="primary"
           unelevated
           icon="add_link"
@@ -43,6 +46,14 @@
             <q-item v-for="share in shares" :key="share.id" class="share-row">
               <q-item-section avatar top><q-icon name="link" color="primary" /></q-item-section>
               <q-item-section class="share-main">
+                <q-item-label v-if="!sessionId">
+                  <router-link
+                    :to="{ name: 'session-detail', params: { id: share.sessionId } }"
+                    @click="open = false"
+                  >
+                    会话 {{ share.sessionId }}
+                  </router-link>
+                </q-item-label>
                 <q-item-label class="share-id">{{ share.id }}</q-item-label>
                 <q-item-label>
                   <q-badge
@@ -99,6 +110,7 @@
             :key="message.id"
             :message="message"
             :busy="busy"
+            :show-session="!sessionId"
             @review="review"
             @error="showError"
           />
@@ -114,6 +126,8 @@ import { useSharingUpdates } from '@/composables/useSharingUpdates';
 import ShareMessageReviewCard from '@/components/ShareMessageReviewCard.vue';
 import {
   createSessionShare,
+  listActiveSessionShares,
+  listPendingShareMessages,
   listSessionShares,
   listShareMessages,
   revokeSessionShare,
@@ -123,8 +137,8 @@ import {
   type ShareMessage,
   type SharingUpdate,
 } from '@/services/sharing';
-const props = defineProps<{ sessionId: string }>();
-const emit = defineEmits<{ pending: [count: number] }>();
+const props = defineProps<{ sessionId?: string }>();
+const emit = defineEmits<{ pending: [count: number]; 'active-count': [count: number] }>();
 const open = defineModel<boolean>({ default: false });
 const shares = ref<SessionShare[]>([]);
 const messages = ref<ShareMessage[]>([]);
@@ -135,6 +149,10 @@ const error = ref('');
 const tab = ref('links');
 const pending = computed(() => messages.value.filter((m) => m.status === 'pending').length);
 watch(pending, (value) => emit('pending', value));
+watch(
+  () => shares.value.filter((share) => !share.revokedAt).length,
+  (count) => emit('active-count', count),
+);
 let generation = 0;
 let stopped = true;
 let refreshPromise: Promise<void> | undefined;
@@ -142,7 +160,7 @@ let reloadLinks = false;
 let reloadMessages = false;
 let linksVersion = 0;
 let messagesVersion = 0;
-const updates = useSharingUpdates(() => props.sessionId, {
+const updates = useSharingUpdates(() => props.sessionId || null, {
   onData: handleUpdate,
   onError: showError,
   onReset: resetRequests,
@@ -150,7 +168,10 @@ const updates = useSharingUpdates(() => props.sessionId, {
 function showError(e: unknown) {
   error.value = e instanceof Error ? e.message : '操作失败';
 }
-function refresh(links = open.value, requests = true): Promise<void> {
+function refresh(
+  links = !props.sessionId || open.value,
+  requests = !!props.sessionId || open.value,
+): Promise<void> {
   if (stopped) return Promise.resolve();
   reloadLinks ||= links;
   reloadMessages ||= requests;
@@ -166,8 +187,16 @@ function refresh(links = open.value, requests = true): Promise<void> {
       reloadLinks = reloadMessages = false;
       try {
         const [links, requests] = await Promise.all([
-          fetchLinks ? listSessionShares(props.sessionId) : null,
-          fetchMessages ? listShareMessages(props.sessionId) : null,
+          fetchLinks
+            ? props.sessionId
+              ? listSessionShares(props.sessionId)
+              : listActiveSessionShares()
+            : null,
+          fetchMessages
+            ? props.sessionId
+              ? listShareMessages(props.sessionId)
+              : listPendingShareMessages()
+            : null,
         ]);
         if (request !== generation) return;
         if (links && linkVersion === linksVersion) shares.value = links;
@@ -187,7 +216,7 @@ function refresh(links = open.value, requests = true): Promise<void> {
   return refreshPromise;
 }
 function handleUpdate(update: SharingUpdate) {
-  if (update.sessionId !== props.sessionId) return;
+  if (props.sessionId && update.sessionId !== props.sessionId) return;
   switch (update.eventType) {
     case 'sharing.ready':
       void refresh();
@@ -200,21 +229,25 @@ function handleUpdate(update: SharingUpdate) {
       if (share && update.eventType === 'sharing.link_claimed') {
         share.claimedAt = update.occurredAt;
       } else if (share && update.eventType === 'sharing.link_revoked') {
-        share.revokedAt = update.occurredAt;
-      } else if (open.value) {
+        if (props.sessionId) share.revokedAt = update.occurredAt;
+        else shares.value = shares.value.filter((item) => item.id !== update.shareId);
+      } else if (!props.sessionId || open.value) {
         void refresh(true, false);
       }
       break;
     }
     case 'sharing.message_submitted':
       messagesVersion++;
-      void refresh(false);
+      if (props.sessionId || open.value) void refresh(false);
       break;
     case 'sharing.message_status_changed': {
       messagesVersion++;
       const message = messages.value.find((item) => item.id === update.messageId);
-      if (message && update.status) message.status = update.status;
-      else void refresh(false);
+      if (message && update.status) {
+        if (!props.sessionId && update.status !== 'pending') {
+          messages.value = messages.value.filter((item) => item.id !== update.messageId);
+        } else message.status = update.status;
+      } else if (props.sessionId || open.value) void refresh(false);
       break;
     }
   }
@@ -235,6 +268,7 @@ function resetRequests() {
   loading.value = false;
 }
 async function create() {
+  if (!props.sessionId) return;
   creating.value = true;
   try {
     const link = await createSessionShare(props.sessionId);

@@ -58,6 +58,7 @@ type ShareRepository interface {
 	CreateShare(context.Context, ShareLink) error
 	FindShare(context.Context, string) (ShareLink, error)
 	ListShares(context.Context, ID) ([]ShareLink, error)
+	ListActiveShares(context.Context) ([]ShareLink, error)
 	ClaimShare(context.Context, string, string, string, time.Time) (bool, error)
 	RevokeShare(context.Context, string, time.Time) error
 	CreateSharedMessage(context.Context, SharedMessage) error

@@ -40,6 +40,14 @@ func (r *ShareRepository) ListShares(ctx context.Context, id session.ID) ([]sess
 	}
 	return result, err
 }
+func (r *ShareRepository) ListActiveShares(ctx context.Context) ([]session.ShareLink, error) {
+	rows, err := r.client.SessionShare.Query().Where(sessionshare.RevokedAtIsNil()).Order(ent.Desc(sessionshare.FieldCreatedAt), ent.Asc(sessionshare.FieldID)).All(ctx)
+	result := make([]session.ShareLink, 0, len(rows))
+	for _, v := range rows {
+		result = append(result, shareLink(v))
+	}
+	return result, err
+}
 func (r *ShareRepository) ClaimShare(ctx context.Context, id, tokenHash, guestHash string, now time.Time) (bool, error) {
 	n, err := r.client.SessionShare.Update().Where(sessionshare.ID(id), sessionshare.TokenHash(tokenHash), sessionshare.ClaimedAtIsNil(), sessionshare.RevokedAtIsNil()).SetGuestHash(guestHash).SetClaimedAt(now).SetTokenHash("").Save(ctx)
 	return n == 1, err

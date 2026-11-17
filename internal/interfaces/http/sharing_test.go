@@ -29,6 +29,61 @@ type sharedSessions struct {
 	reads, stops int
 }
 
+func TestActiveSharesListIsOwnerOnlyAndExcludesRevokedLinks(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(dir, "db"), DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Sessions().Create(ctx, session.Session{ID: "allowed", ProjectID: "p", Mode: session.ModeChat, Status: session.StatusStopped}); err != nil {
+		t.Fatal(err)
+	}
+	shares := sharing.New(store.Shares(), store.Sessions(), &sharedSessions{}, nil, nil, nil)
+	h := NewHandler(config.Config{AccessKey: "owner"}, WithGraphQLUseCases(graph.UseCases{Sharing: shares}))
+	list := func(key string, wantStatus, wantCount int) {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/api/session-shares", nil)
+		r.Header.Set("Authorization", "Bearer "+key)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != wantStatus {
+			t.Fatalf("active shares: %d %s", w.Code, w.Body.String())
+		}
+		if wantStatus != http.StatusOK {
+			return
+		}
+		var links []session.ShareLink
+		if err := json.Unmarshal(w.Body.Bytes(), &links); err != nil || links == nil || len(links) != wantCount {
+			t.Fatalf("active shares = %s, error = %v", w.Body.String(), err)
+		}
+		if w.Header().Get("Cache-Control") != "private, no-store" || strings.Contains(w.Body.String(), "Hash") {
+			t.Fatalf("unsafe share response: %s", w.Body.String())
+		}
+	}
+	list("owner", http.StatusOK, 0)
+	link, token, err := shares.Create(ctx, "allowed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list("owner", http.StatusOK, 1)
+	_, guest, err := shares.Claim(ctx, link.ID, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list("", http.StatusUnauthorized, 0)
+	list(guest, http.StatusUnauthorized, 0)
+	list("owner", http.StatusOK, 1)
+	if err := shares.Revoke(ctx, link.ID); err != nil {
+		t.Fatal(err)
+	}
+	list("owner", http.StatusOK, 0)
+}
+
 func TestSharingChangesAreDistributedOverAuthenticatedWebSocket(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

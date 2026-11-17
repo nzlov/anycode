@@ -609,26 +609,29 @@
               </q-tab-panel>
 
               <q-tab-panel v-if="session?.projectIsGit" name="changes" class="detail-diff-panel">
-                <q-btn
-                  v-if="!shareId"
-                  class="full-width q-mb-md app-command-btn"
-                  outline
-                  color="primary"
-                  icon="open_in_new"
-                  label="完整 Diff"
-                  no-caps
-                  :to="allDiffRoute"
-                />
                 <DiffWorkspace
                   v-model="detailDiffWorkspaceState"
                   :target="detailDiffTarget"
                   :show-file-navigation="false"
                   all-files-loading="lazy"
                   :refresh-key="diffUpdateVersion"
-                />
+                >
+                  <template v-if="!shareId" #toolbar-actions>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      icon="open_in_new"
+                      aria-label="完整 Diff"
+                      :to="allDiffRoute"
+                    >
+                      <q-tooltip>完整 Diff</q-tooltip>
+                    </q-btn>
+                  </template>
+                </DiffWorkspace>
               </q-tab-panel>
 
-              <q-tab-panel name="artifacts">
+              <q-tab-panel name="artifacts" class="detail-artifacts-panel">
                 <SessionArtifactsPanel
                   :session-id="sessionId"
                   :refresh-key="artifactRefreshKey"
@@ -2129,6 +2132,12 @@ function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor |
 .detail-diff-panel :deep(.diff-workspace) {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.detail-artifacts-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .detail-composer {

@@ -67,7 +67,7 @@
     </q-banner>
 
     <div class="artifact-layout">
-      <q-list bordered separator class="artifact-list" :class="{ scroll: inlinePreviewActive }">
+      <q-list bordered separator class="artifact-list scroll">
         <q-infinite-scroll :disable="loading || !hasMore" :offset="200" @load="loadNext">
           <q-item v-if="loading && files.length === 0">
             <q-item-section avatar><q-spinner color="primary" size="24px" /></q-item-section>
@@ -562,29 +562,25 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .artifact-panel {
-  display: grid;
+  display: flex;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .artifact-panel {
   container-type: inline-size;
 }
 
-.artifact-panel--inline-enabled {
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-}
-
 .artifact-layout {
+  display: grid;
   min-width: 0;
-}
-
-.artifact-panel--inline-enabled .artifact-layout {
   min-height: 0;
   flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .artifact-preview-header,
@@ -598,6 +594,7 @@ onBeforeUnmount(() => {
 .artifact-toolbar {
   display: grid;
   min-width: 0;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) repeat(3, minmax(112px, 160px)) 40px;
   align-items: center;
   gap: 8px;
@@ -634,6 +631,9 @@ onBeforeUnmount(() => {
 }
 
 .artifact-list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   color: var(--ac-text);
   background: var(--ac-surface);
 }
@@ -704,12 +704,6 @@ onBeforeUnmount(() => {
     grid-template-rows: minmax(0, 1fr);
     gap: 16px;
     overflow: hidden;
-  }
-
-  .artifact-panel--inline-enabled .artifact-list {
-    min-height: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
   }
 
   .artifact-inline-preview :deep(.session-file-preview) {

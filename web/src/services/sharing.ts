@@ -101,6 +101,7 @@ export async function sharingRequest<T>(
 }
 export const listSessionShares = (id: string) =>
   sharingRequest<SessionShare[]>(`/api/sessions/${id}/shares`);
+export const listActiveSessionShares = () => sharingRequest<SessionShare[]>('/api/session-shares');
 export const listShareMessages = (id: string) =>
   sharingRequest<ShareMessage[]>(`/api/sessions/${id}/share-messages`);
 export const listPendingShareMessages = () =>

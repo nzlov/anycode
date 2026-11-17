@@ -8,7 +8,7 @@
       class="diff-file-card"
       :class="{ 'diff-file-card--headerless': !showFileHeaders }"
     >
-      <q-card-section v-if="showFileHeaders" class="diff-file-header">
+      <q-card-section v-if="showFileHeaders" ref="fileHeaders" class="diff-file-header">
         <div
           class="file-title"
           :class="{ 'file-title--collapsible': collapsible }"
@@ -26,10 +26,10 @@
           />
           <q-icon :name="fileIcon(file.status)" :color="fileColor(file.status)" />
           <slot name="file-title" :file="file">
-            <span>{{ file.path }}</span>
+            <span :title="file.path">{{ file.path }}</span>
           </slot>
         </div>
-        <div class="diff-file-meta row items-center q-gutter-sm" @click.stop @keydown.stop>
+        <div class="diff-file-meta row no-wrap items-center q-gutter-sm" @click.stop @keydown.stop>
           <q-badge outline color="positive" :label="`+${file.additions}`" />
           <q-badge outline color="negative" :label="`-${file.deletions}`" />
           <q-badge outline :color="fileColor(file.status)" :label="file.status" />
@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watchPostEffect } from 'vue';
 
 import DiffMediaPreview from '@/components/DiffMediaPreview.vue';
 import DiffTextContent from '@/components/DiffTextContent.vue';
@@ -115,6 +115,21 @@ const emit = defineEmits<{
   expand: [filePath: string, direction: 'before' | 'after'];
   'toggle-collapse': [filePath: string];
 }>();
+
+const fileHeaders = ref<{ $el: HTMLElement }[]>([]);
+watchPostEffect((onCleanup) => {
+  // Header height varies by view; keep annotation tools below the filename row.
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      entry.target.parentElement?.style.setProperty(
+        '--diff-file-header-height',
+        `${entry.borderBoxSize[0]?.blockSize ?? entry.target.getBoundingClientRect().height}px`,
+      );
+    }
+  });
+  for (const header of fileHeaders.value) observer.observe(header.$el);
+  onCleanup(() => observer.disconnect());
+});
 
 const visibleFiles = computed(() =>
   props.files.length > 0 ? props.files : props.fileDiffs.map((fileDiff) => fileDiff.file),
@@ -186,11 +201,15 @@ function fileColor(status: DiffFile['status']) {
   top: 0;
   z-index: 1;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
   background: var(--ac-surface);
+}
+
+.diff-file-card :deep(.preview-annotator__toolbar) {
+  top: calc(var(--session-event-sticky-header-height, 0px) + var(--diff-file-header-height, 0px));
 }
 
 .file-title {
@@ -211,20 +230,15 @@ function fileColor(status: DiffFile['status']) {
   outline-offset: 3px;
 }
 
-.file-title span {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.file-title span,
+.file-title :deep(.file-path) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@container (max-width: 840px) {
-  .diff-file-header {
-    flex-wrap: wrap;
-  }
-
-  .diff-file-meta {
-    flex: 0 0 100%;
-    justify-content: flex-end;
-    margin-left: auto;
-  }
+.diff-file-meta {
+  flex: 0 0 auto;
 }
 </style>

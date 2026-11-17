@@ -129,7 +129,8 @@ test('preview dialogs keep their close action available with annotation tools', 
     assert.match(source, /supportsPreviewAnnotations/);
   }
   assert.match(detail, /<q-card-section class="event-resource-dialog__header">/);
-  assert.doesNotMatch(detail, /#toolbar-(?:leading|actions)/);
+  const resourceDialog = detail.slice(detail.indexOf('v-model="eventResourceDialogOpen"'), detail.indexOf('</q-dialog>', detail.indexOf('v-model="eventResourceDialogOpen"')));
+  assert.doesNotMatch(resourceDialog, /#toolbar-(?:leading|actions)/);
   assert.match(filePreview, /v-if="file\?\.previewKind === 'image'"/);
   assert.doesNotMatch(filePreview, /previewKind === 'image' && imageURL/);
   assert.match(annotator, /\.preview-annotator__toolbar\s*{[^}]*position:\s*sticky/s);

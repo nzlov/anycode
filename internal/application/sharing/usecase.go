@@ -113,6 +113,9 @@ func (s *Service) Authorize(ctx context.Context, id, credential string) (session
 func (s *Service) List(ctx context.Context, id session.ID) ([]session.ShareLink, error) {
 	return s.repo.ListShares(ctx, id)
 }
+func (s *Service) ListActive(ctx context.Context) ([]session.ShareLink, error) {
+	return s.repo.ListActiveShares(ctx)
+}
 func (s *Service) Revoke(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

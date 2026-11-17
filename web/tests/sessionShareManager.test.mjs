@@ -33,15 +33,15 @@ class AnyCodeGraphQLError extends Error {
   }
 }
 
-function setup(overrides = {}) {
-  const props = reactive({ sessionId: 'session-1' });
+function setup(overrides = {}, sessionId = 'session-1') {
+  const props = reactive({ sessionId });
   const open = ref(false);
   const subscriptions = [];
   const timers = new Map();
   const watchers = [];
   const unmount = [];
   const mounted = [];
-  const calls = { links: [], messages: [], pending: [], unsubscribed: 0 };
+  const calls = { links: [], messages: [], pending: [], 'active-count': [], activeLinks: 0, globalMessages: 0, unsubscribed: 0 };
   let timerID = 0;
   const setTimer = (callback) => {
     timers.set(++timerID, callback);
@@ -59,6 +59,14 @@ function setup(overrides = {}) {
     listShareMessages: async (id) => {
       calls.messages.push(id);
       return [{ id: 'message-1', status: 'pending' }];
+    },
+    listActiveSessionShares: async () => {
+      calls.activeLinks++;
+      return [{ id: 'link-1', sessionId: 'session-1', claimedAt: null, revokedAt: null }];
+    },
+    listPendingShareMessages: async () => {
+      calls.globalMessages++;
+      return [{ id: 'global-message', status: 'pending' }];
     },
     ...overrides,
     subscribeSharingUpdates: (sessionId, handlers) => {
@@ -271,5 +279,49 @@ test('local mutations use subscription notifications instead of querying both li
   await flush();
   assert.equal(s.calls.links.length, links + 1);
   assert.equal(s.calls.messages.length, messages);
+  s.unmount();
+});
+
+
+test('global sharing loads active links while closed and removes the last revoked link', async () => {
+  const s = setup({}, null);
+  assert.equal(s.subscriptions[0].sessionId, null);
+  s.send('sharing.ready', { sessionId: null });
+  await flush();
+  assert.equal(s.calls.activeLinks, 1);
+  assert.equal(s.calls.globalMessages, 0);
+  assert.equal(s.calls['active-count'].at(-1), 1);
+  s.send('sharing.link_claimed', { sessionId: 'session-1', shareId: 'link-1', occurredAt: 'claimed' });
+  await flush();
+  assert.equal(s.shares.value[0].claimedAt, 'claimed');
+  assert.equal(s.calls.activeLinks, 1);
+  s.send('sharing.link_revoked', { sessionId: 'session-1', shareId: 'link-1', occurredAt: 'revoked' });
+  await flush();
+  assert.equal(s.shares.value.length, 0);
+  assert.equal(s.calls['active-count'].at(-1), 0);
+  s.send('sharing.link_created', { sessionId: 'session-2', shareId: 'link-2' });
+  await flush();
+  assert.equal(s.calls.activeLinks, 2);
+  assert.equal(s.calls['active-count'].at(-1), 1);
+  s.open.value = true;
+  await flush();
+  assert.equal(s.calls.globalMessages, 1);
+  s.send('sharing.message_status_changed', { sessionId: 'session-1', messageId: 'global-message', status: 'approved' });
+  await flush();
+  assert.equal(s.messages.value.length, 0);
+  s.unmount();
+});
+
+test('revocation during a global link query cannot restore an obsolete toolbar count', async () => {
+  const oldLinks = deferred();
+  let queries = 0;
+  const s = setup({ listActiveSessionShares: async () => ++queries === 1 ? oldLinks.promise : [] }, null);
+  s.send('sharing.ready', { sessionId: null });
+  s.send('sharing.link_revoked', { sessionId: 'session-1', shareId: 'link-1', occurredAt: 'revoked' });
+  oldLinks.resolve([{ id: 'link-1', revokedAt: null }]);
+  await flush();
+  assert.equal(queries, 2);
+  assert.equal(s.shares.value.length, 0);
+  assert.ok(!s.calls['active-count'].includes(1));
   s.unmount();
 });

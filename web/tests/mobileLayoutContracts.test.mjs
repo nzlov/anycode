@@ -217,7 +217,7 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
   assert.match(diffViewerSource, /\.diff-file-card\s*{[^}]*container-type:\s*inline-size/s);
   assert.match(
     diffViewerSource,
-    /@container \(max-width:\s*840px\)[\s\S]*?\.diff-file-header\s*{[^}]*flex-wrap:\s*wrap[\s\S]*?\.diff-file-meta\s*{[^}]*flex:\s*0\s+0\s+100%[^}]*justify-content:\s*flex-end/s,
+    /\.diff-file-meta\s*{[^}]*flex:\s*0\s+0\s+auto/s,
   );
   assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*98px\)/);
   assert.match(detailSource, /:show-file-navigation="false"/);

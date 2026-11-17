@@ -75,7 +75,7 @@
           <q-tooltip>项目管理</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="$route.name === 'overview'"
+          v-if="$route.name === 'overview' && runningTunnelCount > 0"
           flat
           round
           dense
@@ -88,6 +88,19 @@
             runningTunnelCount
           }}</q-badge>
           <q-tooltip>隧道</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="$route.name === 'overview' && activeShareCount > 0"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="share"
+          aria-label="分享"
+          @click="shareDialogOpen = true"
+        >
+          <q-badge floating rounded color="negative">{{ activeShareCount }}</q-badge>
+          <q-tooltip>分享</q-tooltip>
         </q-btn>
         <q-btn
           v-if="$route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth"
@@ -207,6 +220,11 @@
       v-model="settingsDialogOpen"
     />
     <TunnelManagerDialog v-if="applicationReady && !$q.screen.lt.sm" v-model="tunnelDialogOpen" />
+    <SessionShareManager
+      v-if="applicationReady"
+      v-model="shareDialogOpen"
+      @active-count="activeShareCount = $event"
+    />
 
     <q-dialog v-if="availableRelease" v-model="updateDialogOpen">
       <q-card class="update-dialog app-content-dialog">
@@ -299,6 +317,7 @@ import MarkdownContent from '@/components/MarkdownContent.vue';
 import { provideGeneralSettingsInvalidation } from '@/composables/useGeneralSettingsInvalidation';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import TunnelManagerDialog from '@/components/TunnelManagerDialog.vue';
+import SessionShareManager from '@/components/SessionShareManager.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
@@ -315,6 +334,8 @@ const agentProfileDialogOpen = ref(false);
 // Remove this when general settings changes have a backend subscription.
 provideGeneralSettingsInvalidation();
 const tunnelDialogOpen = ref(false);
+const shareDialogOpen = ref(false);
+const activeShareCount = ref(0);
 const logoutDialogOpen = ref(false);
 const updateDialogOpen = ref(false);
 const currentVersion = ref('dev');

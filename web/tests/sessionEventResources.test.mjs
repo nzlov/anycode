@@ -170,7 +170,8 @@ test('event file and diff previews keep a centered title bar above preview tools
     detail,
     /event-resource-dialog__title[\s\S]*?event-resource-dialog__header-action[\s\S]*?icon="download"[\s\S]*?icon="close"/,
   );
-  assert.doesNotMatch(detail, /#toolbar-(?:leading|actions)/);
+  const resourceDialog = detail.slice(detail.indexOf('v-model="eventResourceDialogOpen"'), detail.indexOf('</q-dialog>', detail.indexOf('v-model="eventResourceDialogOpen"')));
+  assert.doesNotMatch(resourceDialog, /#toolbar-(?:leading|actions)/);
   assert.match(
     artifactEvent,
     /#toolbar-actions>[\s\S]*?:class="\{ 'artifact-event-preview__close': \$q\.screen\.lt\.md \}"[\s\S]*?icon="close"/,
@@ -258,6 +259,6 @@ test('event diff dialog moves single-file metadata into its outer title', () => 
   assert.match(detail, /:show-file-headers="false"/);
   assert.match(workspace, /:show-file-headers="showFileHeaders"/);
   assert.match(workspace, /showFileHeaders:\s*true/);
-  assert.match(viewer, /v-if="showFileHeaders" class="diff-file-header"/);
+  assert.match(viewer, /v-if="showFileHeaders" ref="fileHeaders" class="diff-file-header"/);
   assert.match(viewer, /showFileHeaders:\s*true/);
 });

@@ -508,5 +508,5 @@ test('overview cards open the full artifact panel from a subscribed count', () =
     overviewSource,
     /openArtifactDialog[\s\S]*!isDesktopOverview\.value[\s\S]*name: 'session-artifacts'/,
   );
-  assert.match(stylesSource, /\.overview-artifact-dialog__body\s*{[^}]*overflow:\s*auto/s);
+  assert.match(stylesSource, /\.overview-artifact-dialog__body\s*{[^}]*overflow:\s*hidden/s);
 });

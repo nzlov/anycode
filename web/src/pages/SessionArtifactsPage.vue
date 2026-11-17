@@ -21,3 +21,22 @@ import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 const route = useRoute();
 const sessionId = computed(() => String(route.params.id ?? ''));
 </script>
+
+<style scoped>
+.surface-page {
+  height: calc(100dvh - 50px);
+  min-height: 0 !important;
+  overflow: hidden;
+}
+.surface-page__card {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+.surface-page__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

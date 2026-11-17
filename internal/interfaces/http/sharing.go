@@ -71,6 +71,14 @@ func registerSharingRoutes(mux *http.ServeMux, accessKey string, opts handlerOpt
 		}
 		shareJSON(w, v)
 	})
+	admin("GET /api/session-shares", func(w http.ResponseWriter, r *http.Request) {
+		v, err := s.ListActive(r.Context())
+		if err != nil {
+			shareError(w, err)
+			return
+		}
+		shareJSON(w, v)
+	})
 	admin("DELETE /api/session-shares/{shareID}", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.Revoke(r.Context(), r.PathValue("shareID")); err != nil {
 			shareError(w, err)
